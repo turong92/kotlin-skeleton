@@ -24,6 +24,13 @@ class OAuthIdTokenInvalidException(providerId: String, val reason: String) : OAu
     message = "OAuth ID token rejected",
 )
 
+/** 앱이 준 액세스 토큰을 제공자가 거절했거나 다른 앱의 토큰이다 (카카오 `app_id` 불일치). [reason] 은 운영자 로그용, 응답에는 나가지 않는다 */
+class OAuthAccessTokenInvalidException(providerId: String, val reason: String) : OAuthInvalidAuthorizationCodeException(
+    providerId = providerId,
+    errorCode = AuthSocialErrorCode.ACCESS_TOKEN_INVALID,
+    message = "OAuth access token rejected",
+)
+
 /** PKCE 가 필요한데 검증기가 없거나 모양이 틀렸다 — 제공자를 부르기 **전에** 끊는다 (한 번 쓰는 인가 코드를 태우지 않는다) */
 class OAuthPkceException(providerId: String) : ApplicationException(
     errorCode = AuthSocialErrorCode.PKCE_FAILED,

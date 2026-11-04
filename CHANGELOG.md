@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 앱 소셜 로그인 - 토큰 교환 (2026-11-04)
 
 - **패키지 이동(깨지는 변경)**: `IdTokenVerifier` · `JwksCache` · `IdTokenRejected` 가 `auth-social-oidc` 의 `dev.sumin.skeleton.auth.social.oidc` 에서 `auth-social` 의 `dev.sumin.skeleton.auth.social.idtoken` 으로 옮겨 갔다(구글 · 애플 모듈이 oidc 모듈을 끌어오지 않게). 앱이 이 클래스를 직접 import 했다면 패키지만 바꾼다. 바뀐 점: `iss` 를 집합으로 받고(`issuer: () -> String?` → `issuers: () -> Set<String>?`), `nonce` 비교를 함수(`nonceMatches`, 기본은 같은 문자열)로 받는다. `auth-social-oidc` 의 동작은 그대로다.
+- **앱 SDK 토큰 로그인(코어)**: `POST /api/v1/auth/social/{provider}/token`(공개 경로, OpenAPI) - 제공자가 받는 토큰 하나(`idToken` | `accessToken`)와 `nonce` 원문 · `displayName` 으로 인가 코드 로그인과 같은 `AuthTokenResponse` 를 받는다. 필드 누락 · 엇갈림 `400 COMMON.VALIDATION_FAILED`, 입구 없는 제공자 `404`, ID 토큰 거절 `401 AUTH.SOCIAL_ID_TOKEN_INVALID`, 액세스 토큰 거절 · 다른 앱의 토큰 **`401 AUTH.SOCIAL_ACCESS_TOKEN_INVALID`(새 코드)**. `GET /auth/methods` 의 소셜 항목에 `nativeToken`(`id_token` | `access_token` | null). `OAuthProvider` 에 `nativeToken`(기본 null) · `verifyNativeToken`(기본 404) 가 더해지고, `OAuthCredential`(`Code` | `Native`) · `provider.resolveProfile(credential)` · `provider.nativeCredential(…)` 로 로그인의 "제공자 호출 → 예외 갈래"가 한 곳에 모인다. 제공자별 검증(google · apple · kakao · naver)은 다음 조각이다 - 이 변경만으로는 어느 제공자도 토큰 입구가 열리지 않는다.
 - 시험 대역: oidc 시험의 `FakeIdp`(JDK `HttpServer`)가 `auth-social` 의 `testFixtures`(`dev.sumin.skeleton.auth.social.testing`)로 옮겨 갔고, `stub(path)` 로 임의 경로의 가짜 응답을 세울 수 있다.
 
 ### 앱 인앱결제 - App Store · Google Play (2026-11-04)

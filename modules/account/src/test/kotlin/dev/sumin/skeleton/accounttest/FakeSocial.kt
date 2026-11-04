@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.accounttest
 
+import dev.sumin.skeleton.auth.social.oauth.NativeTokenKind
+import dev.sumin.skeleton.auth.social.oauth.OAuthIdTokenInvalidException
 import dev.sumin.skeleton.auth.social.oauth.OAuthInvalidAuthorizationCodeException
+import dev.sumin.skeleton.auth.social.oauth.OAuthNativeToken
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.auth.social.oauth.OAuthUserProfile
 import org.springframework.boot.test.context.TestConfiguration
@@ -8,6 +11,12 @@ import org.springframework.context.annotation.Bean
 
 /** 코드 → 프로필 표로 답하는 가짜 제공자 `fakeidp` — 네트워크 없이 소셜 흐름을 돌린다 */
 class FakeOAuthProvider(override val providerId: String = "fakeidp") : OAuthProvider {
+    /** `fakeidp` 만 앱 토큰 입구가 있다 (`fakeidp2` 는 없다) – `t-<x>` 토큰은 `c-<x>` 코드와 같은 사용자(같은 sub)다 */
+    override val nativeToken: NativeTokenKind? = if (providerId == "fakeidp") NativeTokenKind.ID_TOKEN else null
+
+    override fun verifyNativeToken(token: OAuthNativeToken): OAuthUserProfile =
+        if (token.token.startsWith("t-")) fetchProfile("c-" + token.token.removePrefix("t-"), null) else throw OAuthIdTokenInvalidException(providerId, "test token is not t-<x>")
+
     override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile = when (authorizationCode) {
         "c-new" -> OAuthUserProfile(providerId, "sub-new", "social-new@example.com", "social-new@example.com", "Social New", emailVerified = true)
         "c-unverified" -> OAuthUserProfile(providerId, "sub-unverified", "victim@example.com", "victim@example.com", "Mallory", emailVerified = false)

@@ -16,6 +16,14 @@
 `OAuthUserProfile.avatarUrl` 은 제공자가 준 https 사진 주소다 — `account` 는 아직 저장하지 않는다.
 토큰 엔드포인트 오류의 갈래(코드 틀림 401 · 검증기 틀림 400 · 우리 client 설정 거부 502 · 한도 · 장애 502)는 `OAuthTokenErrors`.
 
+## 앱 SDK 토큰 (`POST /auth/social/{provider}/token`)
+
+앱의 네이티브 로그인 SDK 는 인가 코드 대신 토큰을 준다. 제공자 모듈이 `OAuthProvider.nativeToken`(`NativeTokenKind.ID_TOKEN` | `ACCESS_TOKEN`, 기본 null = 입구 없음)과 `verifyNativeToken(OAuthNativeToken)` 을 구현하면 이 경로가 열리고 `GET /auth/methods` 의 `nativeToken` 이 `id_token` | `access_token` 이 된다. 입구가 없는 제공자(`x` · `oidc`)는 404 다.
+- 요청 필드(`idToken` | `accessToken` 중 제공자가 받는 하나, `nonce` 원문, `displayName`) 검사는 `OAuthProvider.nativeCredential(…)` 한 곳이다 — 제공자를 부르기 전에 `400 COMMON.VALIDATION_FAILED` / `AUTH.SOCIAL_NONCE_FAILED`. `account` 의 연결 · 다시 인증도 이 함수를 쓴다.
+- 제공자 호출 뒤의 예외 갈래는 `OAuthProvider.resolveProfile(OAuthCredential)` 한 곳이다(`Code` | `Native`): 증명이 틀린 답(`OAuthInvalidAuthorizationCodeException` — 하위 `OAuthIdTokenInvalidException` 401 `AUTH.SOCIAL_ID_TOKEN_INVALID`, `OAuthAccessTokenInvalidException` 401 `AUTH.SOCIAL_ACCESS_TOKEN_INVALID`)은 그대로, 나머지는 `502 AUTH_SOCIAL.PROVIDER_GATEWAY_ERROR`.
+- ID 토큰 검증은 `dev.sumin.skeleton.auth.social.idtoken.IdTokenVerifier` · `JwksCache`(허용 알고리즘 목록 · `iss` 집합 · nonce 비교 함수). 토큰 · `OAuthNativeToken` · 요청 DTO 의 `toString` 은 값을 가린다.
+- 시험은 `testFixtures` 의 `FakeIdp`(JWKS · RSA/EC 서명 · 임의 경로 `stub`)로 한다 — 실제 제공자는 부르지 않는다.
+
 ## 프로젝트 여럿 ([multi-project](../multi-project.md))
 
 `skeleton.projects` 가 있으면 제공자 모듈은 앱 전체 빈 대신 `OAuthProviderSource` 를 내고, `OAuthProviderRegistry` 가 프로젝트마다 제공자를 한 번 만들어 보관한다(시작 때 서비스 중인 프로젝트마다 만들어 보고, 잘못된 설정은 기동 실패 — 메시지에 프로젝트 id).

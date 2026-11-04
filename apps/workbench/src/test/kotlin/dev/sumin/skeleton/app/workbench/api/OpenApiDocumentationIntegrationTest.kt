@@ -95,6 +95,13 @@ class OpenApiDocumentationIntegrationTest {
             (socialLoginProperties["value"] as Map<*, *>)["\$ref"],
         )
 
+        val socialTokenProperties = properties(responseSchema(docs, "/api/v1/auth/social/{provider}/token", "post", "200"))
+        assertEquals(
+            "#/components/schemas/AuthTokenResponse",
+            (socialTokenProperties["value"] as Map<*, *>)["\$ref"],
+        )
+        assertEquals("#/components/schemas/OAuthSocialTokenRequest", JsonPath.read<String>(docs, "\$.paths['/api/v1/auth/social/{provider}/token'].post.requestBody.content['application/json'].schema['\$ref']"))
+
         val createdItemEnvelope = responseSchema(docs, "/api/v1/examples/items", "post", "201")
         val createdItemProperties = properties(createdItemEnvelope)
         assertTrue(createdItemProperties.containsKey("value"))

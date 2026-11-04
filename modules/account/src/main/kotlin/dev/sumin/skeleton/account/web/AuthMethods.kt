@@ -28,6 +28,8 @@ data class SocialMethodView(
     val nonce: String = "UNSUPPORTED",
     /** 인가 URL 을 만드는 데 필요한 제공자 쪽 값. 모르는 제공자는 null (프론트가 자기 설정을 쓴다) */
     val authorize: SocialAuthorizeView? = null,
+    /** `id_token` | `access_token` | null – 앱의 네이티브 SDK 토큰으로 `POST /auth/social/{provider}/token` 에 로그인할 수 있는 제공자만 값이 있다 (앱은 null 이 아닌 제공자의 단추만 보인다). 보낼 필드: id_token → `idToken`, access_token → `accessToken` */
+    val nativeToken: String? = null,
 )
 
 data class SocialAuthorizeView(val url: String, val scopes: List<String>, val params: Map<String, String>)

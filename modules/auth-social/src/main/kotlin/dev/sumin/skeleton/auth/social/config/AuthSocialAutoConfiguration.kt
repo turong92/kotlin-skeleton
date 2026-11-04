@@ -4,6 +4,7 @@ import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.social.api.OAuthSocialAuthController
 import dev.sumin.skeleton.auth.social.api.OAuthSocialLoginRequest
+import dev.sumin.skeleton.auth.social.api.OAuthSocialTokenRequest
 import dev.sumin.skeleton.auth.social.oauth.InMemoryOAuthAccountLinkRepository
 import dev.sumin.skeleton.auth.social.oauth.LinkedAccountOnlyOAuthAccountProvisioningPolicy
 import dev.sumin.skeleton.auth.social.oauth.OAuthAccountLink
@@ -77,6 +78,23 @@ class AuthSocialAutoConfiguration {
         loginService: OAuthSocialLoginService,
     ): OAuthSocialAuthController =
         OAuthSocialAuthController(loginService)
+
+    /** 앱의 네이티브 SDK 토큰으로 로그인 — 인가 코드 경로와 따로 둔 빈이라 앱이 하나만 갈아 끼울 수 있다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["oauthSocialTokenRoutes"])
+    fun oauthSocialTokenRoutes(
+        controller: OAuthSocialAuthController,
+    ): RouterFunction<ServerResponse> =
+        route(POST("/api/v1/auth/social/{provider}/token")) { request ->
+            val tokenRequest = request.body(OAuthSocialTokenRequest::class.java)
+            val response = controller.loginWithToken(
+                provider = request.pathVariable("provider"),
+                request = tokenRequest,
+            )
+            ServerResponse.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Response.ok(response))
+        }
 
     @Bean
     @ConditionalOnMissingBean(name = ["oauthSocialAuthRoutes"])

@@ -71,6 +71,7 @@ class AccountSocialWebAutoConfiguration {
                     redirectUri = it.publicRedirectUri ?: p?.redirectUri,
                     pkce = it.pkce.name,
                     nonce = it.nonce.name,
+                    nativeToken = it.nativeToken?.wire,
                     authorize = it.authorize?.let { a -> dev.sumin.skeleton.account.web.SocialAuthorizeView(a.url, a.scopes, a.params) },
                 )
             }

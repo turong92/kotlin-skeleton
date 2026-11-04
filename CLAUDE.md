@@ -245,6 +245,7 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
   - Optional provider modules: `modules/auth-social-google`, `modules/auth-social-kakao`, `modules/auth-social-naver`
   - Endpoint: `POST /api/v1/auth/social/{provider}/login`
   - Frontend obtains provider authorization code; backend exchanges code through enabled provider
+  - Native apps: `POST /api/v1/auth/social/{provider}/token` takes the SDK token instead (`idToken` or `accessToken`, per `nativeToken` in `GET /auth/methods`)
   - Add only the provider module the app needs; `apps/api` (the starter) carries none, only `apps/workbench` carries all
   - `provider + providerUserId` maps to internal `accountId`
   - JWT response shape is the same as password login

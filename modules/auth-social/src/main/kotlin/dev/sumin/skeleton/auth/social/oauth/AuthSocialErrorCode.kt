@@ -51,6 +51,12 @@ enum class AuthSocialErrorCode(
         title = "OAuth ID token rejected",
         defaultDetail = "The provider's ID token failed validation",
     ),
+    ACCESS_TOKEN_INVALID(
+        code = "AUTH.SOCIAL_ACCESS_TOKEN_INVALID",
+        status = HttpStatus.UNAUTHORIZED,
+        title = "OAuth access token rejected",
+        defaultDetail = "The provider rejected the access token, or it was issued to another app",
+    ),
     LINKED_ACCOUNT_NOT_FOUND(
         code = "AUTH_SOCIAL.LINKED_ACCOUNT_NOT_FOUND",
         status = HttpStatus.CONFLICT,

@@ -95,7 +95,7 @@ class WriteGateCensusTest {
             "DELETE /api/v1/auth/sessions", "DELETE /api/v1/auth/sessions/{id}", "POST /api/v1/auth/login", "POST /api/v1/auth/logout",
             "POST /api/v1/auth/magic-link/redeem", "POST /api/v1/auth/magic-link/request",
             "POST /api/v1/auth/mfa/disable", "POST /api/v1/auth/mfa/recovery-codes", "POST /api/v1/auth/mfa/totp/enrollment", "POST /api/v1/auth/mfa/totp/enrollment/confirm", "POST /api/v1/auth/mfa/verify",   // 2단계 인증(auth-mfa) - 이메일이 없어도 켠다
-            "POST /api/v1/auth/refresh", "POST /api/v1/auth/social/{provider}/login",
+            "POST /api/v1/auth/refresh", "POST /api/v1/auth/social/{provider}/login", "POST /api/v1/auth/social/{provider}/token",
             "POST /api/v1/auth/verify-email", "POST /api/v1/auth/web-handoff/redeem", "POST /api/v1/legal/consents", "POST /api/v1/legal/consents/{type}/withdraw",
         )
 

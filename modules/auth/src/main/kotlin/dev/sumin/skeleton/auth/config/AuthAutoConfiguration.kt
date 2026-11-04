@@ -137,6 +137,7 @@ class AuthAutoConfiguration {
         PublicEndpointContributor { registry ->
             registry.add("POST", "/api/v1/auth/login")
             registry.add("POST", "/api/v1/auth/social/*/login")
+            registry.add("POST", "/api/v1/auth/social/*/token")
         }
 
     @Bean

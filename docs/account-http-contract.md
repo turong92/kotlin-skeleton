@@ -443,6 +443,7 @@ Audience: the frontend agent. Providers added with this addendum: `line`, `x` (a
   "redirectUri": "https://app.example.com/auth/callback"|null,   // the server's configured one; the frontend may use its own, but it MUST be byte-identical in the authorize URL and in `redirectUri` of the login request
   "pkce":  "REQUIRED" | "SUPPORTED" | "UNSUPPORTED",
   "nonce": "REQUIRED" | "SUPPORTED" | "UNSUPPORTED",
+  "nativeToken": "id_token" | "access_token" | null,   // see G: the token an app SDK hands over; null = no native entrance, hide the app button
   "authorize": { "url": "https://access.line.me/oauth2/v2.1/authorize", "scopes": ["openid","profile","email"], "params": { "response_type": "code" } } | null
 } ]
 ```
@@ -477,6 +478,7 @@ Rules (server-enforced, evaluated by the target provider's mode, BEFORE the prov
 | `AUTH.SOCIAL_PKCE_FAILED` | 400 | see C |
 | `AUTH.SOCIAL_NONCE_FAILED` | 400 | see C |
 | `AUTH.SOCIAL_ID_TOKEN_INVALID` | 401 | an OpenID Connect provider's ID token failed validation (signature, `iss`, `aud`, `exp`, `nonce`). Via `socialReauth` it is `400 ACCOUNT.REAUTH_FAILED` like any rejected proof. The reason is in the server log only |
+| `AUTH.SOCIAL_ACCESS_TOKEN_INVALID` | 401 | see G: the provider refused an app's access token, or it was issued to another app. Via `socialReauth` it is `400 ACCOUNT.REAUTH_FAILED`. The reason is in the server log only |
 Unchanged: `401 AUTH_SOCIAL.INVALID_AUTHORIZATION_CODE` (provider refused the code: wrong, expired, used twice), `404 AUTH_SOCIAL.PROVIDER_NOT_FOUND` (not enabled), `502 AUTH_SOCIAL.PROVIDER_GATEWAY_ERROR` (provider down / rate limited / our client credentials rejected).
 
 ### E. Address-less accounts (LINE, X, and any provider whose email is missing or not vouched for)
@@ -486,3 +488,12 @@ Unchanged: `401 AUTH_SOCIAL.INVALID_AUTHORIZATION_CODE` (provider refused the co
 
 ### F. Frontend checklist
 `GET /auth/methods` -> per provider build the URL (B) -> callback: check `state` -> `POST .../login` with `{authorizationCode, redirectUri, codeVerifier, nonce}` (omit what the provider does not use) -> on `400 AUTH.SOCIAL_PKCE_FAILED` / `AUTH.SOCIAL_NONCE_FAILED` fix the request (it is a client bug, nothing was spent) -> `401 AUTH_SOCIAL.INVALID_AUTHORIZATION_CODE` / `AUTH.SOCIAL_ID_TOKEN_INVALID`: restart the consent. Remove the stored `state` / `codeVerifier` / `nonce` after the first use.
+
+### G. App SDK tokens — `POST /api/v1/auth/social/{provider}/token` (public)
+For a native app: the provider SDK returns a token instead of an authorization code. `GET /auth/methods` `social[].nativeToken` says which: `"id_token"` (send `idToken`) or `"access_token"` (send `accessToken`); `null` means this provider has no native entrance, so the app hides its button.
+```
+{ "idToken": "…" | "accessToken": "…", "nonce": "raw value the app made", "displayName": "…" }
+```
+- Send **exactly one** token field, the one the provider takes. A missing field, or the other field, or both -> `400 COMMON.VALIDATION_FAILED` (`errors[].field` names it). `nonce`: the raw value (8-256 printable ASCII); a malformed one, or a missing one when the provider requires it, is `400 AUTH.SOCIAL_NONCE_FAILED`. `displayName` is for providers that leave the name out of the token (Apple) and only suggests a nickname for a **new** account.
+- `200` is the same `AuthTokenResponse` as `/login`. Linking, sign-up and merge rules are the same as the code flow, so the same provider user is the same account by code or by token.
+- Errors: `401 AUTH.SOCIAL_ID_TOKEN_INVALID` (ID token signature / `iss` / `aud` / `exp` / `nonce` failed), `401 AUTH.SOCIAL_ACCESS_TOKEN_INVALID` (access token refused or another app's), `404 AUTH_SOCIAL.PROVIDER_NOT_FOUND` (provider off, or no native entrance), `502 AUTH_SOCIAL.PROVIDER_GATEWAY_ERROR` (JWKS / provider API down). Tokens are never written to logs or error bodies.

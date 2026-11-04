@@ -66,11 +66,31 @@ interface OAuthProvider {
     /** PKCE · nonce 를 아는 제공자는 이것을 구현한다. 기본은 옛 두 인자 메서드 (검증기 · nonce 를 쓰지 않는다) */
     fun fetchProfile(exchange: OAuthCodeExchange): OAuthUserProfile =
         fetchProfile(exchange.authorizationCode, exchange.redirectUri)
+
+    /**
+     * 앱의 네이티브 SDK 가 준 토큰을 받는 입구 — 받는 토큰 종류. null 이면 이 제공자는 토큰 입구가 없다 (`POST /auth/social/{provider}/token` 이 404, `GET /auth/methods` 의 `nativeToken` 이 null).
+     * 설정이 모자라 입구를 못 여는 제공자(예: 카카오 `app-id` 가 비어 있음)도 null 을 돌려준다
+     */
+    val nativeToken: NativeTokenKind? get() = null
+
+    /**
+     * [nativeToken] 이 null 이 아닌 제공자가 구현한다: 토큰을 검증해 프로필을 만든다. 검증 실패는 [OAuthIdTokenInvalidException] (ID 토큰) / [OAuthAccessTokenInvalidException] (액세스 토큰) 으로,
+     * 제공자 · JWKS 장애는 그냥 예외로 던진다 ([resolveProfile] 이 502 로 바꾼다). 토큰 · 비밀은 예외 메시지 · 로그에 넣지 않는다
+     */
+    fun verifyNativeToken(token: OAuthNativeToken): OAuthUserProfile = throw OAuthProviderNotFoundException(providerId)
 }
 
 private val VERIFIER_FORMAT = Regex("^[A-Za-z0-9\\-._~]{43,128}$") // RFC 7636 §4.1
 private val STATE_FORMAT = Regex("^[\\x21-\\x7E]{1,512}$")
 private val NONCE_FORMAT = Regex("^[\\x21-\\x7E]{8,256}$")
+
+/** 요청의 nonce 를 이 제공자의 정책에 맞춰 검사한다 — 모양이 틀리거나 REQUIRED 인데 없으면 [OAuthNonceException]. 빈 문자열은 없는 것으로 본다 */
+internal fun OAuthProvider.checkedNonce(nonce: String?): String? {
+    val n = nonce?.takeIf { it.isNotEmpty() }
+    if (n != null && !NONCE_FORMAT.matches(n)) throw OAuthNonceException(providerId)
+    if (this.nonce == NonceMode.REQUIRED && n == null) throw OAuthNonceException(providerId)
+    return n
+}
 
 /**
  * 요청의 검증기 · nonce 를 이 제공자의 정책에 맞춰 검사해 제공자에 넘길 입력을 만든다. 제공자를 부르기 **전**에 불러야 한다 —
@@ -86,9 +106,7 @@ fun OAuthProvider.codeExchange(
     val verifier = codeVerifier?.takeIf { it.isNotEmpty() }
     if (verifier != null && !VERIFIER_FORMAT.matches(verifier)) throw OAuthPkceException(providerId)
     if (pkce == PkceMode.REQUIRED && verifier == null) throw OAuthPkceException(providerId)
-    val n = nonce?.takeIf { it.isNotEmpty() }
-    if (n != null && !NONCE_FORMAT.matches(n)) throw OAuthNonceException(providerId)
-    if (this.nonce == NonceMode.REQUIRED && n == null) throw OAuthNonceException(providerId)
+    val n = checkedNonce(nonce)
     return OAuthCodeExchange(
         authorizationCode = authorizationCode,
         redirectUri = redirectUri,

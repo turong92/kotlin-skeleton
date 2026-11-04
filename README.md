@@ -312,6 +312,7 @@ Setting `skeleton.env=stage|prod` (env `SKELETON_ENV`, opt-in — see [docs/depl
 `modules/auth-social` is an optional social-login extension for `modules/auth`.
 
 - `POST /api/v1/auth/social/{provider}/login` exchanges a frontend-provided authorization code through an enabled provider.
+- `POST /api/v1/auth/social/{provider}/token` takes the token a native app SDK returned (`idToken` or `accessToken`, see `nativeToken` in `GET /api/v1/auth/methods`) for providers that have a native entrance.
 - The `value` response payload is the same as password login: bearer token, expiration, and `CurrentPrincipal`.
 - Provider identity maps to an internal account through `OAuthAccountLinkRepository`.
 - Roles always come from `AuthAccountRepository`, not provider profile data.

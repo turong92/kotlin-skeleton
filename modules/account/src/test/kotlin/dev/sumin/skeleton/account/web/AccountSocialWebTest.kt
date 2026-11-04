@@ -66,6 +66,32 @@ class AccountSocialWebTest {
     }
 
     @Test
+    fun `the methods listing tells which providers take a native app token`() {
+        mvc.perform(get("/api/v1/auth/methods")).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.social[?(@.provider=='fakeidp')].nativeToken").value("id_token"))
+            .andExpect(jsonPath("$.value.social[?(@.provider=='fakeidp2')].nativeToken").value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.nullValue())))
+    }
+
+    private fun token(provider: String, body: String) = mvc.perform(post("/api/v1/auth/social/$provider/token").contentType(MediaType.APPLICATION_JSON).content(body))
+
+    @Test
+    fun `an app token signs in to the same account as the code of the same provider user, and it is a public path`() {
+        val byCode = social("c-new").andExpect(status().isOk).andReturn()
+        val byToken = token("fakeidp", """{"idToken":"t-new"}""").andExpect(status().isOk).andReturn()   // Authorization 머리글 없이 열려 있다
+        assertEquals(JsonPath.read<String>(byCode.response.contentAsString, "$.value.principal.accountId"), JsonPath.read<String>(byToken.response.contentAsString, "$.value.principal.accountId"))
+    }
+
+    @Test
+    fun `the app token route answers the card of errors - 400 for fields, 401 for a rejected token, 404 for no entrance`() {
+        token("fakeidp", """{}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        token("fakeidp", """{"accessToken":"t-new"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        token("fakeidp", """{"idToken":"t-new","accessToken":"t-new"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        token("fakeidp", """{"idToken":"garbage"}""").andExpect(status().isUnauthorized).andExpect(jsonPath("$.code").value("AUTH.SOCIAL_ID_TOKEN_INVALID"))
+        token("fakeidp2", """{"idToken":"t-new"}""").andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("AUTH_SOCIAL.PROVIDER_NOT_FOUND"))
+        token("nobody", """{"idToken":"t-new"}""").andExpect(status().isNotFound)
+    }
+
+    @Test
     fun `a first social sign-in creates an account and the next one finds it`() {
         val first = social("c-new").andExpect(status().isOk).andReturn()
         val second = social("c-new").andExpect(status().isOk).andReturn()
