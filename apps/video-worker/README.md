@@ -35,7 +35,7 @@ heartbeat(30초)가 임대를 늘리고 진행률(0..99)을 싣는다. 임대를
 
 ## ffmpeg 격리 (바꾸면 보안 회귀)
 
-믿지 못하는 올린 파일은 디스크로 내려받아 `-protocol_whitelist file,pipe` · `-format_whitelist mov,mp4,m4a,3gp,3g2,mj2` · `-f mov` 강제 · `-codec_whitelist`(영상 h264 · hevc / 소리 aac · mp3 · alac · ac3 · eac3 · opus · pcm_* / 표지 mjpeg · png / 자막 mov_text)로만 읽는다 — ffmpeg 6.1.1 에 고쳐진 패키지가 없는 CVE-2025-59734(SANM) · CVE-2024-32228 완화. 만든 조각을 다시 읽을 때는 `-f hls` · `h264,hevc,aac` 만. 목록은 `Plans.kt` 의 `Allowed` 한 곳이고, 늘릴 때는 `Probe.rejection` 도 같이 본다. 회귀 시험: `FfmpegIntegrationTest` · `JobGuardTest` · `PlansTest`.
+믿지 못하는 올린 파일은 디스크로 내려받아 `-protocol_whitelist file,pipe` · `-format_whitelist mov,mp4,m4a,3gp,3g2,mj2` · `-f mov` 강제 · `-codec_whitelist`(영상 h264 · hevc / 소리 aac · mp3 · alac · ac3 · eac3 · opus · pcm_* / 표지 mjpeg · png / 자막 mov_text · cc_dec(c608) · webvtt · subrip · srt — 산출물에는 안 싣는다)로만 읽는다 — ffmpeg 6.1.1 에 고쳐진 패키지가 없는 CVE-2025-59734(SANM) · CVE-2024-32228 완화. 만든 조각을 다시 읽을 때는 `-f hls` · `h264,hevc,aac` 만. 목록은 `Plans.kt` 의 `Allowed` 한 곳이고, 늘릴 때는 `Probe.rejection` 도 같이 본다. 회귀 시험: `FfmpegIntegrationTest` · `JobGuardTest` · `PlansTest`.
 이미지는 비루트(uid 10001) · 읽기 전용 루트 파일시스템 · 임시 폴더 `/work` 만 쓰는 것을 전제로 한다. 실행 쪽이 `--cap-drop ALL` · `--pids-limit` · 메모리 한도 · `/work` 마운트를 정한다(compose 예는 견본 조각).
 
 ## 시험 · 이미지
