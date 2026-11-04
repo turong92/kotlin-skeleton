@@ -81,6 +81,12 @@ class WriteGateCensusTest {
             "POST /api/v1/push/devices/{installationId}/test",
             "PUT /api/v1/push/preferences/{type}",
             "POST /api/v1/storage/presign-download",
+            // 영상 변환 일꾼의 내부 경로(video): 사람 계정이 아니라 일꾼 토큰(Bearer)으로 지킨다 - 토큰이 없으면 401 VIDEO_WORKER.UNAUTHORIZED 이고 이메일 · 아이디 게이트와 무관하다
+            "POST /api/internal/video/claim",
+            "POST /api/internal/video/jobs/{jobId}/heartbeat",
+            "POST /api/internal/video/jobs/{jobId}/upload-urls",
+            "POST /api/internal/video/jobs/{jobId}/complete",
+            "POST /api/internal/video/jobs/{jobId}/fail",
         )
 
         /** `/api/v1/auth/` · `/api/v1/legal/` 아래는 접두사로 열려 있다 (`GatePathRule.BUILT_IN`: 로그인 · 로그아웃 · 세션 · 약관 동의) — 그 아래에 실제로 있는 변경 경로를 이름으로 고정한다 */

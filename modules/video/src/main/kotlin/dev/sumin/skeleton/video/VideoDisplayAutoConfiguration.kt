@@ -10,7 +10,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Configuration
 
 /**
  * 움직이는 GIF · WebP 표시본 변환 - `video` 와 `storage-image` 가 **둘 다** 켜졌을 때만 서고, 한쪽만 켜면 서로를 모른 채 지금처럼 동작한다(모듈 기본값은 꺼짐 그대로).
@@ -22,27 +21,23 @@ import org.springframework.context.annotation.Configuration
     afterName = ["dev.sumin.skeleton.video.jdbc.VideoJdbcAutoConfiguration", "dev.sumin.skeleton.storage.image.StorageImageAutoConfiguration"],
 )
 @ConditionalOnProperty(prefix = "skeleton.video", name = ["enabled"], havingValue = "true")
+@ConditionalOnClass(AnimatedDisplays::class)   // `storage-image` 가 클래스패스에 없으면 이 클래스는 읽히지도 않는다
+@ConditionalOnBean(VideoPorts::class, AnimatedDisplays::class, DisplayJobStore::class)
 class VideoDisplayAutoConfiguration {
-    /** 중첩이라 `storage-image` 가 클래스패스에 없으면 이 안의 타입은 읽히지도 않는다 */
-    @Configuration(proxyBeanMethods = false)
-    @ConditionalOnClass(AnimatedDisplays::class)
-    @ConditionalOnBean(AnimatedDisplays::class, DisplayJobStore::class)
-    class Wiring {
-        @Bean
-        @ConditionalOnMissingBean
-        fun videoDisplayTarget(displays: AnimatedDisplays): DisplayTarget = object : DisplayTarget {
-            override fun folder(keyHash: String) = displays.folder(keyHash)
-            override fun copyExtension(keyHash: String) = displays.copyExtension(keyHash)
-            override fun use(keyHash: String, ext: String) = displays.use(keyHash, ext)
-        }
-
-        @Bean
-        @ConditionalOnMissingBean
-        fun videoDisplayJobs(props: VideoProperties, store: DisplayJobStore, target: DisplayTarget, storage: PresignedStorage, time: TimeProvider): VideoDisplayJobs =
-            VideoDisplayJobs(props, store, target, storage, time)
-
-        @Bean
-        @ConditionalOnMissingBean(AnimatedDisplayConverter::class)
-        fun videoAnimatedDisplayConverter(jobs: VideoDisplayJobs): AnimatedDisplayConverter = AnimatedDisplayConverter { keyHash, objectKey -> jobs.enqueue(keyHash, objectKey) }
+    @Bean
+    @ConditionalOnMissingBean
+    fun videoDisplayTarget(displays: AnimatedDisplays): DisplayTarget = object : DisplayTarget {
+        override fun folder(keyHash: String) = displays.folder(keyHash)
+        override fun copyExtension(keyHash: String) = displays.copyExtension(keyHash)
+        override fun use(keyHash: String, ext: String) = displays.use(keyHash, ext)
     }
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun videoDisplayJobs(props: VideoProperties, store: DisplayJobStore, target: DisplayTarget, storage: PresignedStorage, time: TimeProvider): VideoDisplayJobs =
+        VideoDisplayJobs(props, store, target, storage, time)
+
+    @Bean
+    @ConditionalOnMissingBean(AnimatedDisplayConverter::class)
+    fun videoAnimatedDisplayConverter(jobs: VideoDisplayJobs): AnimatedDisplayConverter = AnimatedDisplayConverter { keyHash, objectKey -> jobs.enqueue(keyHash, objectKey) }
 }

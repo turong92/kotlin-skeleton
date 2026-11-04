@@ -8,6 +8,12 @@ import dev.sumin.skeleton.booking.NewBookingPool
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import dev.sumin.skeleton.review.ReviewPurchases
 import dev.sumin.skeleton.review.ReviewTarget
+import dev.sumin.skeleton.video.PlayableResult
+import dev.sumin.skeleton.video.TrackStatus
+import dev.sumin.skeleton.video.VideoKeys
+import dev.sumin.skeleton.video.VideoLane
+import dev.sumin.skeleton.video.VideoPlaybackTokens
+import dev.sumin.skeleton.video.VideoStore
 import java.lang.reflect.GenericArrayType
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
@@ -58,6 +64,9 @@ class LoginIdLeakIntegrationTest {
 
         /** 자기 순번표(헤더)가 있어야만 답하는 GET — 남의 표는 403 이라 토큰만 든 독자는 2xx 를 못 받는다. 답은 부른 사람 자신의 순번뿐이다 */
         val TICKET_GATED = setOf("/api/v1/waiting-rooms/{id}/status")
+
+        /** 시험이 만든 재생 가능 영상의 원본 재생 목록 폴더 (`o-<해시 16자>`) */
+        const val VIDEO_ORIG_FOLDER = "o-0123456789abcdef"
     }
 
     @Autowired lateinit var mvc: MockMvc
@@ -66,6 +75,11 @@ class LoginIdLeakIntegrationTest {
     @Autowired lateinit var context: ApplicationContext
     @Autowired lateinit var purchases: ReviewPurchases
     @Autowired lateinit var bookingPools: BookingPools
+    @Autowired lateinit var jdbc: org.springframework.jdbc.core.simple.JdbcClient
+    @Autowired lateinit var storage: dev.sumin.skeleton.app.sample.notes.FakePresignedStorage
+    @Autowired lateinit var videoStore: VideoStore
+    @Autowired lateinit var videoKeys: VideoKeys
+    @Autowired lateinit var videoTokens: VideoPlaybackTokens
 
     private val http by lazy { LeakHttp(mvc) }
     private val w by lazy { LeakWorld(http, registry) }
@@ -97,6 +111,28 @@ class LoginIdLeakIntegrationTest {
         }
     }
 
+    private class Videos(val uploading: String, val playback: Playback)
+    private class Playback(val id: String, val token: String)
+
+    /** Y 가 영상 둘을 올린다 - 하나는 올리는 중으로 두고, 하나는 일꾼이 마친 것처럼 재생 가능으로 만들어 재생 목록을 저장소에 둔다 */
+    private val video: Videos by lazy {
+        fun start() = http.post("/api/v1/videos", w.yToken, """{"bytes":6000000,"contentType":"video/mp4","purpose":"note","visibility":"PRIVATE"}""", record = false).ok().read<String>("$.value.id")
+        val uploading = start()
+        val playable = start()
+        jdbc.sql("update videos set status = 'QUEUED' where id = :id").param("id", playable).update()
+        val at = java.time.Instant.now()
+        videoStore.claimNext(VideoLane.REMUX, "leak-worker", at.plusSeconds(600), "b".repeat(32), at)
+        val folder = videoKeys.folder(videoStore.find(playable)!!)
+        val result = PlayableResult(
+            origKey = "$folder$VIDEO_ORIG_FOLDER/index.m3u8", origBytes = 100, origSha256 = "0".repeat(64), srcContainer = "mov,mp4", srcCodec = "avc1", srcCodecString = "avc1.640028",
+            srcWidth = 640, srcHeight = 360, srcRotation = 0, srcDurationMs = 3000, srcFps = 30.0, srcBitrate = 1_000_000, srcAudioCodec = "aac",
+            posterKey = null, posterWidth = null, posterHeight = null, compat = TrackStatus.SKIPPED, ladder = TrackStatus.SKIPPED,
+        )
+        check(videoStore.markPlayable(playable, "leak-worker", result, at)) { "the fake worker could not finish the video" }
+        storage.objects[result.origKey] = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:3\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:3.0,\ns00001.m4s\n#EXT-X-ENDLIST\n".toByteArray()
+        Videos(uploading, Playback(playable, videoTokens.issue(playable, java.time.Duration.ofHours(1)).value))
+    }
+
     /** 경로 변수 → 여정에서 얻은 값들. `{id}` 는 경로마다 뜻이 달라 접두사로 가른다 */
     private val candidates: Map<String, List<String>> by lazy {
         val eventId = http.get("/api/v1/notifications?size=100", w.yToken, record = false).ok().read<List<String>>("$.values[*].eventId").first()
@@ -110,6 +146,10 @@ class LoginIdLeakIntegrationTest {
             "key" to listOf("app.board-posts", "app.board-reactions", "coupon.top-used"),   // 대시보드 순위 하나 (/api/v1/admin/dashboard/rankings/{key}) - 견본 앱에 실제로 붙은 앱 통계 순위
             "slug" to listOf(workspace.second),   // 팀 주소로 풀기 (/api/v1/workspaces/by-slug/{slug})
             "accountId" to listOf(w.xAcc, w.yAcc),   // 운영자의 포인트 잔액 조회 (/api/v1/admin/points/{accountId})
+            // 비공개 영상 재생 (/api/v1/videos/play/{token}/{folder}/{file}) - 변환이 끝난 영상 하나의 출입증 · 재생 목록 위치
+            "token" to listOf(video.playback.token),
+            "folder" to listOf(VIDEO_ORIG_FOLDER),
+            "file" to listOf("index.m3u8"),
         )
     }
 
@@ -120,6 +160,7 @@ class LoginIdLeakIntegrationTest {
             "/api/v1/notes/" to listOf(createNote(w.yToken, "Y note ${w.nonce}"), createNote(w.xToken, "X note ${w.nonce}")),
             "/api/v1/workspaces/" to listOf(workspace.first),
             "/api/v1/admin/workspaces/" to listOf(workspace.first),
+            "/api/v1/videos/" to listOf(video.uploading, video.playback.id),   // Y 의 영상 둘 - 올리는 중(조각 목록 /api/v1/videos/{id}/parts)과 변환이 끝난 것(조회 /api/v1/videos/{id})
             "/api/v1/author-profiles/" to listOf(w.yProfile.id, w.a.id, w.b.id),
             "/api/v1/admin/accounts/" to listOf(w.xAcc, w.yAcc),
             "/api/v1/admin/mfa/accounts/" to listOf(w.xAcc, w.yAcc),   // 운영자의 2단계 상태 보기 (/api/v1/admin/mfa/accounts/{id})

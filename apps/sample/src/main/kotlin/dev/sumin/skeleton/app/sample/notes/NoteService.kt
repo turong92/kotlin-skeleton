@@ -8,6 +8,7 @@ import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.ObjectStorage
 import dev.sumin.skeleton.video.VideoLibrary
+import dev.sumin.skeleton.video.VideoNotFoundException
 import dev.sumin.skeleton.video.VideoUploads
 import dev.sumin.skeleton.workspace.WorkspaceErrorCode
 import dev.sumin.skeleton.workspace.WorkspaceException
@@ -49,8 +50,8 @@ class NoteService(
     private val json: ObjectMapper,
     private val signals: ObjectProvider<CampaignSignals>,
     private val search: ObjectProvider<SearchIndexer>,
-    private val videos: VideoUploads,
-    private val videoLibrary: VideoLibrary,
+    private val videos: ObjectProvider<VideoUploads>,      // 객체 저장소(storage-s3 의 bucket)가 없으면 영상 모듈이 통째로 빠진다 - 노트는 영상 없이 돈다
+    private val videoLibrary: ObjectProvider<VideoLibrary>,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -89,7 +90,7 @@ class NoteService(
         val current = find(scope, id)
         if (scope.workspace != null && (request.attachmentKey != null || request.videoId != null)) throw TeamNoteAttachmentException()
         // 영상은 내 영상만 붙인다(남의 · 없는 영상은 404 VIDEO.NOT_FOUND). 팀 노트의 영상은 건드리지 않는다
-        if (scope.workspace == null && request.videoId != null && request.videoId != current.videoId) videos.get(scope.caller, request.videoId)
+        if (scope.workspace == null && request.videoId != null && request.videoId != current.videoId) (videos.getIfAvailable() ?: throw VideoNotFoundException()).get(scope.caller, request.videoId)
         val videoId = if (scope.workspace != null) current.videoId else request.videoId
         // 팀 노트의 첨부는 건드리지 않는다(다른 멤버가 칸을 비워도 쓴 사람의 파일이 지워지지 않게)
         val key = if (scope.workspace != null) current.attachmentKey else request.attachmentKey
@@ -158,8 +159,9 @@ class NoteService(
 
     /** 떨어졌거나 노트와 함께 지워진 영상도 커밋 뒤에 지운다(되돌릴 수 없는 일이라 롤백되면 그대로여야 한다). 이미 없거나 실패해도 노트 변경은 되돌리지 않는다 */
     private fun discardVideoAfterCommit(videoId: String) {
+        val library = videoLibrary.getIfAvailable() ?: return
         val delete = {
-            runCatching { videoLibrary.delete(videoId, "NOTE_CHANGED") }.onFailure { log.warn("note video cleanup failed: {}", videoId, it) }
+            runCatching { library.delete(videoId, "NOTE_CHANGED") }.onFailure { log.warn("note video cleanup failed: {}", videoId, it) }
         }
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {

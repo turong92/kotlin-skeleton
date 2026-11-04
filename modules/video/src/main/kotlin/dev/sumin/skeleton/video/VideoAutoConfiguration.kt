@@ -11,6 +11,7 @@ import dev.sumin.skeleton.storage.StorageKeyOwnership
 import dev.sumin.skeleton.storage.StorageProperties
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -28,12 +29,13 @@ class VideoPorts(
 
 /**
  * 올리기 서비스 · 일꾼 일 · 청소 · 기본 정책(올린 계정만) · 기본 용량(늘 허용). **기본 꺼짐** — `skeleton.video.enabled=true` 로 켠다.
- * 켰는데 저장소 포트([VideoStore] · [VideoWorkerStore] · [VideoFollowUps] · [VideoTransactions] — `video-jdbc` 가 낸다)나 객체 저장소([PresignedStorage])가 없으면 기동 실패,
- * 영상 키 구역이 업로드 · 공개 구역과 겹쳐도 기동 실패다.
+ * 켰는데 저장소 포트([VideoStore] · [VideoWorkerStore] · [VideoFollowUps] · [VideoTransactions] — `video-jdbc` 가 낸다)가 없으면 기동 실패,
+ * 객체 저장소([PresignedStorage])가 없으면(`storage-s3.bucket` 을 안 준 환경) 기동 실패가 아니라 영상 모듈이 통째로 빠진다(storage-image 와 같다). 영상 키 구역이 업로드 · 공개 구역과 겹쳐도 기동 실패다.
  */
-@AutoConfiguration(afterName = ["dev.sumin.skeleton.video.jdbc.VideoJdbcAutoConfiguration"])
+@AutoConfiguration(afterName = ["dev.sumin.skeleton.video.jdbc.VideoJdbcAutoConfiguration", "dev.sumin.skeleton.storage.s3.S3StorageAutoConfiguration"])
 @EnableConfigurationProperties(VideoProperties::class)
 @ConditionalOnProperty(prefix = "skeleton.video", name = ["enabled"], havingValue = "true")
+@ConditionalOnBean(PresignedStorage::class)
 class VideoAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(VideoAccessPolicy::class)
@@ -62,7 +64,7 @@ class VideoAutoConfiguration {
     ): VideoPorts = VideoPorts(
         store = stores.getIfAvailable() ?: error("skeleton.video.enabled=true needs a VideoStore bean (add modules:video-jdbc)"),
         workerStore = workerStores.getIfAvailable() ?: error("skeleton.video.enabled=true needs a VideoWorkerStore bean (add modules:video-jdbc)"),
-        storage = storage.getIfAvailable() ?: error("skeleton.video.enabled=true needs a PresignedStorage bean (add modules:storage-s3)"),
+        storage = storage.getObject(),
         followUps = followUps.getIfAvailable() ?: error("skeleton.video.enabled=true needs a VideoFollowUps bean (add modules:video-jdbc and modules:job-queue-jdbc)"),
         tx = transactions.getIfAvailable() ?: error("skeleton.video.enabled=true needs a VideoTransactions bean (add modules:video-jdbc)"),
     )

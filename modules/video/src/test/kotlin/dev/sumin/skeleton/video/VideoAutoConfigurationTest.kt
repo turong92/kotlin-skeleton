@@ -27,6 +27,18 @@ class VideoAutoConfigurationTest {
     }
 
     @Test
+    fun `enabled without an object store stays off instead of stopping the start`() {
+        ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(VideoAutoConfiguration::class.java))
+            .withBean(TimeProvider::class.java, { TimeProvider.systemUtc() })
+            .withPropertyValues("skeleton.video.enabled=true")
+            .run { ctx ->
+                assertNull(ctx.startupFailure)
+                assertTrue(ctx.getBeansOfType(VideoUploads::class.java).isEmpty())
+            }
+    }
+
+    @Test
     fun `enabled without a VideoStore stops the start and names the module that brings one`() {
         runner.withPropertyValues("skeleton.video.enabled=true").withBean(VideoWorkerStore::class.java, { FakeVideoWorkerStore() }).run { ctx ->
             assertTrue(messages(ctx.startupFailure).any { "VideoStore" in it && "video-jdbc" in it }, messages(ctx.startupFailure).toString())

@@ -19,7 +19,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner
 class CloudRunAutoConfigurationTest {
     private val account = TestServiceAccount()
     private val runner = ApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(CloudRunAutoConfiguration::class.java))
+        .withConfiguration(AutoConfigurations.of(CloudRunAutoConfiguration::class.java, CloudRunAlertAutoConfiguration::class.java))
         .withBean(TimeProvider::class.java, { TimeProvider.systemUtc() })
         .withBean(VideoWakeRuns::class.java, { InMemoryWakeRuns() })
 

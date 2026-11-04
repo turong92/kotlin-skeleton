@@ -71,4 +71,7 @@ open class FakePresignedStorage : PresignedStorage {
     override fun completeMultipartUpload(request: CompleteMultipartUploadRequest) = CompletedMultipartUpload(request.key, request.uploadId, "etag")
 
     override fun abortMultipartUpload(request: AbortMultipartUploadRequest) = Unit
+
+    /** 올린 조각이 아직 없다 - 이어 올리기 목록을 묻는 시험을 위해 */
+    override fun listParts(request: dev.sumin.skeleton.storage.ListUploadedPartsRequest): List<dev.sumin.skeleton.storage.UploadedPart> = emptyList()
 }
