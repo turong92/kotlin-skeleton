@@ -251,12 +251,15 @@ class PaymentStorePurchases(
     private fun restore(tx: PaymentLedgerTx, lifecycle: SubscriptionLifecycle, provider: String, accountId: String, purchase: StorePurchase, existing: PaymentSubscription): Attempt {
         val other = Attempt(StoreRecordResult(StoreRecordOutcome.OWNED_BY_ANOTHER_ACCOUNT))
         if (existing.accountId != accountId) return other
+        // 끝난 줄에 웹훅이 먼저 넣은 이 결제의 주문(`SUBSCRIPTION_STALE_CHARGE`)이 있으면 그것을 먼저 잠근다(주문 → 구독 순서)
+        val pushedFirst = if (existing.status == SubscriptionStatus.ENDED) tx.findOrderByProviderPayment(provider, purchase.providerPaymentId)?.takeIf { adoptable(it, existing) }?.let { tx.lockOrder(it.id) } else null
         val locked = checkNotNull(tx.lockSubscription(existing.id)) { "the subscription line disappeared" }
         val result = { outcome: StoreRecordOutcome, orderId: String? -> StoreRecordResult(outcome, orderId = orderId, subscriptionId = locked.id) }
         if (locked.status == SubscriptionStatus.ENDED) {
             // 만료 뒤 다시 구독한 사람 - 애플은 같은 구독 그룹이면 같은 originalTransactionId 라 같은 줄로 온다. 스토어가 지금 활성이고 새 기간의 결제가 있으면 줄을 되살린다
-            if (!revivable(locked, purchase) || tx.findOrderByProviderPayment(provider, purchase.providerPaymentId) != null) return Attempt(result(StoreRecordOutcome.SUBSCRIPTION_ENDED, null))
-            return revive(tx, lifecycle, accountId, purchase, locked)
+            val adopted = pushedFirst?.takeIf { adoptable(it, locked) }
+            if (!revivable(locked, purchase) || (adopted == null && tx.findOrderByProviderPayment(provider, purchase.providerPaymentId) != null)) return Attempt(result(StoreRecordOutcome.SUBSCRIPTION_ENDED, null))
+            return revive(tx, lifecycle, accountId, purchase, locked, adopted)
         }
         // 자리가 막혀 켜지 못한 줄 - 돈은 이미 장부에 있고 켜는 길은 운영자의 몫이다
         if (locked.status == SubscriptionStatus.PENDING) return Attempt(result(StoreRecordOutcome.ALREADY_SUBSCRIBED, tx.findOrderByProviderPayment(provider, purchase.providerPaymentId)?.id))
@@ -281,6 +284,10 @@ class PaymentStorePurchases(
         return if (recorded != null) Attempt(result(StoreRecordOutcome.RECORDED, recorded.id), granted = recorded.id) else Attempt(result(StoreRecordOutcome.ALREADY_RECORDED, tx.findOrderByProviderPayment(provider, purchase.providerPaymentId)?.id))
     }
 
+    /** 웹훅이 이 끝난 줄에 먼저 넣어 둔 「확인 필요」 주문인가 - 되살리기가 받아 쓸 수 있다. */
+    private fun adoptable(order: PaymentOrder, line: PaymentSubscription): Boolean =
+        order.originRef == line.id && order.accountId == line.accountId && order.status == PaymentOrderStatus.PAID && order.reviewReason == PaymentReviewReason.SUBSCRIPTION_STALE_CHARGE
+
     /** 끝난 줄을 되살릴 수 있는가 - 스토어가 지금 활성이고, 끝난 이유가 환불 · 회수나 탈퇴가 아니다(그건 스토어가 활성이라 해도 되살리지 않는다). */
     private fun revivable(ended: PaymentSubscription, purchase: StorePurchase): Boolean =
         purchase.subscriptionStatus.let { it == null || it == PushedSubscriptionStatus.ACTIVE || it == PushedSubscriptionStatus.CANCELING } &&
@@ -290,12 +297,19 @@ class PaymentStorePurchases(
      * 끝난 줄을 새 기간으로 되살린다 - 새 기간 주문을 넣고 줄을 `ACTIVE` 로(전이표에 없는 길이라 줄을 직접 고친다). 이 계정에 다른 살아 있는 구독이 있으면 되살리지 않고
      * 돈만 장부에 남긴다(첫 구독의 자리 충돌과 같다).
      */
-    private fun revive(tx: PaymentLedgerTx, lifecycle: SubscriptionLifecycle, accountId: String, purchase: StorePurchase, ended: PaymentSubscription): Attempt {
+    private fun revive(tx: PaymentLedgerTx, lifecycle: SubscriptionLifecycle, accountId: String, purchase: StorePurchase, ended: PaymentSubscription, adopted: PaymentOrder?): Attempt {
         val result = { outcome: StoreRecordOutcome, orderId: String? -> StoreRecordResult(outcome, orderId = orderId, subscriptionId = ended.id) }
         val seatTaken = store.findLiveSubscription(accountId) != null
-        val order = paidOrder(lifecycle, ended, purchase, lifecycle.plans()?.find(ended.planCode)).let { if (seatTaken) it.copy(reviewReason = PaymentReviewReason.SUBSCRIPTION_SEAT_TAKEN) else it }
-        if (!tx.insertOrderIfAbsent(order)) return Attempt(result(StoreRecordOutcome.ALREADY_RECORDED, null))
-        tx.appendEvent(writer.event(order.id, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = STORE, to = PaymentOrderStatus.PAID))
+        // 웹훅이 이 결제를 먼저 끝난 줄에 「확인 필요」 주문으로 넣어 두었다면 새 주문을 넣지 않고 그 주문의 표시를 풀어 쓴다 - 자리가 막혔으면 표시를 그대로 둔다(운영자가 환불)
+        if (adopted != null && seatTaken) return Attempt(result(StoreRecordOutcome.ALREADY_SUBSCRIBED, adopted.id))
+        val order = adopted
+            ?: paidOrder(lifecycle, ended, purchase, lifecycle.plans()?.find(ended.planCode)).let { if (seatTaken) it.copy(reviewReason = PaymentReviewReason.SUBSCRIPTION_SEAT_TAKEN) else it }
+        if (adopted != null) {
+            writer.touch(tx, adopted, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, null, "STORE_RESUBSCRIBED") { it.copy(reviewReason = null) }
+        } else {
+            if (!tx.insertOrderIfAbsent(order)) return Attempt(result(StoreRecordOutcome.ALREADY_RECORDED, null))
+            tx.appendEvent(writer.event(order.id, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = STORE, to = PaymentOrderStatus.PAID))
+        }
         if (seatTaken) {
             tx.appendEvent(writer.event(order.id, PaymentEventType.REVIEW_FLAGGED, PaymentActor.PROVIDER, providerCode = PaymentReviewReason.SUBSCRIPTION_SEAT_TAKEN.name, from = order.status, to = order.status))
             review.flagged(order.id, PaymentReviewReason.SUBSCRIPTION_SEAT_TAKEN)

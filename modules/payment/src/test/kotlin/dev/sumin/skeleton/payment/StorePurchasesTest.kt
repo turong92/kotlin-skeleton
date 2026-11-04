@@ -273,6 +273,31 @@ class StorePurchasesTest {
     }
 
     @Test
+    fun `the store's resubscribe push arriving before the app's confirmation does not lock the paying subscriber out`() {
+        val first = record(subscription(), basic)
+        record(subscription(status = PushedSubscriptionStatus.ENDED), basic)
+        val nextEnd = Instant.parse("2027-01-04T10:00:00Z")
+        val push = PushedPayment(
+            eventId = "evt_resub", occurredAt = monthLater, providerPaymentId = "txn_2", total = PaymentAmount(3_900, "KRW"), tax = null, paidAt = monthLater,
+            providerSubscriptionId = "orig_1", periodStart = monthLater, periodEnd = nextEnd, mode = PaymentMode.LIVE,
+        )
+        kit.deliver(gateway.delivery(push), provider = gateway.providerId)
+        kit.runWebhooks()
+        val stale = checkNotNull(kit.store.findOrderByProviderPayment("appstore", "txn_2"))
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_STALE_CHARGE, stale.reviewReason, "the push alone cannot revive an ended line")
+
+        val confirmed = record(subscription(txn = "txn_2", start = monthLater, end = nextEnd), basic)
+
+        assertEquals(StoreRecordOutcome.RECORDED, confirmed.outcome)
+        assertEquals(stale.id, confirmed.orderId, "the order the push already wrote is the one that gets granted")
+        assertNull(kit.order(stale.id).reviewReason)
+        assertEquals(SubscriptionStatus.ACTIVE, checkNotNull(kit.store.findSubscription(checkNotNull(first.subscriptionId))).status)
+        kit.runTasks()
+        assertEquals(2, kit.listener.paid.size)
+        assertEquals(2, orders().size)
+    }
+
+    @Test
     fun `a subscription ended by a refund stays ended even when the store says it is active again`() {
         val first = record(subscription(), basic)
         kit.store.inTransaction { tx ->
