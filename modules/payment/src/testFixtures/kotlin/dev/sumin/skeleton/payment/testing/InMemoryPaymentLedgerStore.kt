@@ -256,6 +256,9 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
         private val pendingWebhooks = LinkedHashMap<Long, PaymentWebhookEvent>()
         private val pendingSubscriptions = LinkedHashMap<String, PaymentSubscription>()
         private var ownedSubscriptionId: String? = null
+
+        /** 잠근 구독이 이미 있는 트랜잭션이 더 넣은 구독(스토어 구독의 교체: 옛 줄을 끝내며 새 줄을 넣는다) - 바꿀 수는 있지만 잠그는 구독은 여전히 하나다. */
+        private val insertedSubscriptionIds = LinkedHashSet<String>()
         private var ownedWebhookId: Long? = null
         private val ownedOrderIds = LinkedHashSet<String>()
         private val heldLocks = ArrayList<ReentrantLock>()
@@ -426,7 +429,6 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
         }
 
         override fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean {
-            check(ownedSubscriptionId == null) { "one subscription per transaction: already holds $ownedSubscriptionId" }
             subscription.dedupeKey?.let { key ->
                 acquire(keyLocks.computeIfAbsent("subscription-dedupe|$key") { ReentrantLock() })
                 if (pendingSubscriptions.values.any { it.dedupeKey == key } || findSubscriptionByDedupeKey(key) != null) return false
@@ -435,12 +437,12 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
             if (subscriptionView(subscription.id) != null) return false
             checkActiveKey(subscription)
             pendingSubscriptions[subscription.id] = subscription
-            ownedSubscriptionId = subscription.id
+            if (ownedSubscriptionId == null) ownedSubscriptionId = subscription.id else insertedSubscriptionIds += subscription.id
             return true
         }
 
         override fun updateSubscription(subscription: PaymentSubscription) {
-            check(subscription.id == ownedSubscriptionId) { "the subscription must be locked in this transaction before it is updated" }
+            check(subscription.id == ownedSubscriptionId || subscription.id in insertedSubscriptionIds) { "the subscription must be locked in this transaction before it is updated" }
             checkActiveKey(subscription)
             checkProviderId(subscription)
             pendingSubscriptions[subscription.id] = subscription

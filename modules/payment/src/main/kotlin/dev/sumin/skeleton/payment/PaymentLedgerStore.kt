@@ -235,7 +235,10 @@ interface PaymentLedgerTx {
     /** 구독 줄을 `select … for update` 로 잡고 지금의 값을 돌려준다(없으면 null). 잠금은 이 트랜잭션이 끝날 때까지 간다. */
     fun lockSubscription(id: String): PaymentSubscription?
 
-    /** 새 구독 줄을 넣는다. 같은 id 나 같은 [PaymentSubscription.dedupeKey] 가 이미 있으면 넣지 않고 false(같은 요청의 재전송). 넣은 줄은 이 트랜잭션이 잠근 것으로 본다. */
+    /**
+     * 새 구독 줄을 넣는다. 같은 id 나 같은 [PaymentSubscription.dedupeKey] 가 이미 있으면 넣지 않고 false(같은 요청의 재전송). 넣은 줄은 이 트랜잭션이 잠근 것으로 본다.
+     * 이미 구독 하나를 잠근 트랜잭션도 새 줄을 넣을 수 있다(스토어 구독의 교체: 옛 줄을 끝내며 새 줄을 넣는다) - 넣은 줄도 바꿀 수 있지만, 잠그는 구독은 여전히 하나다.
+     */
     fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean
 
     /** 이 트랜잭션에서 보이는 구독의 할인(없으면 null) - 구독을 잠근(또는 넣은) 트랜잭션에서 읽는다. */

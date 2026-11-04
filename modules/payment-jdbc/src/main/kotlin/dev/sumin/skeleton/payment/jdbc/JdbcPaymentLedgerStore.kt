@@ -373,6 +373,9 @@ class JdbcPaymentLedgerStore(
         /** 이 트랜잭션이 잠갔거나 넣은 구독 — 하나뿐이다. 락 순서는 주문 → 구독. */
         private var ownedSubscriptionId: String? = null
 
+        /** 잠근 구독이 이미 있는 트랜잭션이 더 넣은 구독(스토어 구독의 교체: 옛 줄을 끝내며 새 줄을 넣는다) - 바꿀 수는 있지만 잠그는 구독은 여전히 하나다. */
+        private val insertedSubscriptionIds = mutableSetOf<String>()
+
         override fun lockOrder(id: String): PaymentOrder? {
             if (id == ownedOrderId) return readLocked(id)
             check(ownedOrderId == null) { "one order per transaction: already holds $ownedOrderId" }
@@ -518,17 +521,16 @@ class JdbcPaymentLedgerStore(
         }
 
         override fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean {
-            check(ownedSubscriptionId == null) { "one subscription per transaction: already holds ${ownedSubscriptionId}" }
             jdbc.update(insertSubscriptionSql, subscriptionRows.params(subscription))
             // 갱신 행 수로는 못 가른다(MySQL) · 같은 요청 키의 다른 줄이 이겼으면 이 id 의 줄은 없다 — 이 id 의 줄이 있고 고객 키(무작위 128비트)가 우리 것이면 우리가 넣었다
             val owner = jdbc.queryForList("select customer_key from payment_subscriptions where id = :id", mapOf("id" to subscription.id), String::class.java).firstOrNull()
             val inserted = owner != null && owner == subscription.customerKey
-            if (inserted) ownedSubscriptionId = subscription.id
+            if (inserted) { if (ownedSubscriptionId == null) ownedSubscriptionId = subscription.id else insertedSubscriptionIds += subscription.id }
             return inserted
         }
 
         override fun updateSubscription(subscription: PaymentSubscription) {
-            check(subscription.id == ownedSubscriptionId) { "the subscription must be locked in this transaction before it is updated" }
+            check(subscription.id == ownedSubscriptionId || subscription.id in insertedSubscriptionIds) { "the subscription must be locked in this transaction before it is updated" }
             try {
                 jdbc.update("update payment_subscriptions set ${subscriptionRows.updateAssignments} where id = :id", subscriptionRows.params(subscription))
             } catch (e: DuplicateKeyException) {

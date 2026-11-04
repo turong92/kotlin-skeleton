@@ -993,6 +993,23 @@ abstract class PaymentLedgerStoreContract {
     }
 
     @Test
+    fun `a transaction that holds one subscription lock can also insert a new subscription and change both - the replacement of a store subscription`() {
+        val store = newStore()
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub1) }
+        store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(sub1.id)).copy(activeKey = "acc_1")) }
+
+        store.inTransaction { tx ->
+            tx.updateSubscription(checkNotNull(tx.lockSubscription(sub1.id)).copy(status = SubscriptionStatus.ENDED, activeKey = null))
+            assertTrue(tx.insertSubscriptionIfAbsent(sub2))
+            tx.updateSubscription(sub2.copy(activeKey = "acc_1", status = SubscriptionStatus.ACTIVE))
+        }
+
+        assertEquals(SubscriptionStatus.ENDED, store.findSubscription(sub1.id)?.status)
+        assertEquals(sub2.id, store.findLiveSubscription("acc_1")?.id)
+        assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.lockSubscription(sub1.id); tx.insertSubscriptionIfAbsent(sub2.copy(id = id32("sub_", 9), dedupeKey = null)); tx.lockSubscription(sub2.id) } }
+    }
+
+    @Test
     fun `the latest subscription skips one that was only created, and the subscription orders are the paid attempts newest first`() {
         val store = newStore()
         store.inTransaction { it.insertSubscriptionIfAbsent(sub1.copy(createdAt = PaymentTestOrders.T0)) }
