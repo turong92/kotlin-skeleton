@@ -92,20 +92,24 @@ data class ResetPasswordRequest(
     override fun toString() = "ResetPasswordRequest(token=<redacted>, newPassword=<redacted>)"
 }
 
-/** 이메일이 없는 계정의 다시 인증 — 이미 연결된 제공자의 **새** 인가 코드 */
+/** 이메일이 없는 계정의 다시 인증 — 이미 연결된 제공자의 **새** 인가 코드 · 앱 토큰 */
 data class SocialReauthRequest(
     @field:NotBlank @field:Size(max = 64) val provider: String?,
-    @field:NotBlank @field:Size(max = 2048) val authorizationCode: String?,
+    /** 인가 코드, 앱 SDK 의 [idToken], [accessToken] 중 정확히 하나 (`GET /auth/methods` 의 `nativeToken` 이 제공자가 받는 종류) */
+    @field:Size(max = 2048) val authorizationCode: String? = null,
     @field:Size(max = 2048) val redirectUri: String? = null,
     /** PKCE(S256) 검증기와 인가 요청의 nonce — 제공자의 `pkce` · `nonce` (`GET /auth/methods`) 가 요구할 때 */
     @field:Size(max = 256) val codeVerifier: String? = null,
     @field:Size(max = 256) val nonce: String? = null,
     /** 콜백이 받은 OAuth `state` — Naver 처럼 토큰 요청에 요구하는 제공자에게만 전달된다 */
     @field:Size(max = 512) val state: String? = null,
+    /** 앱 SDK 의 토큰 — 인가 코드 대신 (정확히 하나) */
+    @field:Size(max = 4096) val idToken: String? = null,
+    @field:Size(max = 4096) val accessToken: String? = null,
 ) {
-    override fun toString() = "SocialReauthRequest(provider=$provider, authorizationCode=<redacted>, codeVerifier=<redacted>)"
+    override fun toString() = "SocialReauthRequest(provider=$provider, <credentials redacted>)"
 
-    fun toReauth() = dev.sumin.skeleton.account.SocialReauth(provider!!, authorizationCode!!, redirectUri, codeVerifier, nonce, state)
+    fun toReauth() = dev.sumin.skeleton.account.SocialReauth(provider!!, authorizationCode, redirectUri, codeVerifier, nonce, state, idToken, accessToken)
 }
 
 /** 다시 인증 증거 묶음 — 계정이 가진 것에 맞는 하나: 비밀번호 · 메일로 받은 6자리 코드 · (이메일 없는 계정) 소셜 코드 */

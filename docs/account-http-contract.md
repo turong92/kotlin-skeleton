@@ -4,6 +4,14 @@ Status: **FINAL-7** (= FINAL-6 + the "FINAL-7 change list" below: the private lo
 Audience: the frontend agent (react-skeleton `@skeleton/auth` additions). Backend modules: `account`, `account-jdbc`,
 `auth-session`, `auth-session-jdbc`, `auth-magic-link` (+ extensions of `auth`, `auth-social`).
 
+## Native app tokens for linking and `socialReauth` (additive; the authorization-code fields keep working)
+
+`POST /account/identities/social/{provider}` and every `socialReauth` object (email change, link, unlink, delete, `discard`, `contact-email`) take **exactly one** of `authorizationCode`, `idToken`, `accessToken` — the token an app's native SDK returns (`GET /auth/methods` → `nativeToken`: `"id_token"` for Google/Apple, `"access_token"` for Kakao/Naver). `nonce` (raw value, 8–256 chars) goes with it when the provider requires or accepts one (Apple requires it, Google compares it only if sent). `redirectUri`, `codeVerifier`, `state` are ignored with a token.
+
+- Zero fields, or more than one, or the field the provider does not take (e.g. `accessToken` for Google): `400 COMMON.VALIDATION_FAILED` (`errors[].field` names the field). Provider without a token entrance (or disabled): `404 AUTH_SOCIAL.PROVIDER_NOT_FOUND`. Bad nonce shape: `400 AUTH.SOCIAL_NONCE_FAILED`. All of these are answered before the re-authentication proof is spent.
+- A rejected token: in `socialReauth` it is `400 ACCOUNT.REAUTH_FAILED` like a refused code (also a token of ANOTHER account's provider identity); in the link call it is `401 AUTH.SOCIAL_ID_TOKEN_INVALID` / `401 AUTH.SOCIAL_ACCESS_TOKEN_INVALID`. Provider / JWKS outage: the existing `502 AUTH_SOCIAL.PROVIDER_GATEWAY_ERROR`.
+- Everything else is unchanged: re-authentication order and `400 ACCOUNT.REAUTH_FAILED`, `409 ACCOUNT.IDENTITY_TAKEN` (a token of a provider account that belongs to another account never attaches to yours), `409 ACCOUNT.IDENTITY_EXISTS`, `409 ACCOUNT.LAST_SIGN_IN_METHOD`.
+
 ## FINAL-7 change list — login ID (private) and "email on write" (additive; both are app choices, off in the module defaults)
 
 Every row below exists only when the app runs `skeleton.account.login-id.enabled=true` (L rows) or `skeleton.account.email.required=true` + `required-when=WRITE` (E rows). With neither, FINAL-6 is the whole contract (docs/accounts.md "로그인 아이디", "이메일 필수"). The last column names the test class (and, where a class holds several lines, the test) that pins the row; `modules/account` unless a path is given.

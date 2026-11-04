@@ -5,10 +5,26 @@ import dev.sumin.skeleton.account.challenge.ChallengePurposes
 import dev.sumin.skeleton.account.challenge.CodeCheck
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.MailKind
+import dev.sumin.skeleton.common.FieldValidationException
 
-/** 이메일이 없는 계정의 다시 인증 — **지금 새로 받은** 인가 코드 하나. 이미 이 계정에 연결된 제공자의 것이어야 한다 */
-data class SocialReauth(val provider: String, val authorizationCode: String, val redirectUri: String? = null, val codeVerifier: String? = null, val nonce: String? = null, val state: String? = null) {
-    override fun toString() = "SocialReauth(provider=$provider, authorizationCode=<redacted>, codeVerifier=<redacted>)"
+/**
+ * 이메일이 없는 계정의 다시 인증 — **지금 새로 받은** 증거 하나: 인가 코드, 또는 앱 SDK 의 [idToken] · [accessToken] (+[nonce]). 셋 중 정확히 하나여야 하고(아니면 400),
+ * 이미 이 계정에 연결된 제공자의 것이어야 한다
+ */
+data class SocialReauth(
+    val provider: String, val authorizationCode: String? = null, val redirectUri: String? = null, val codeVerifier: String? = null, val nonce: String? = null, val state: String? = null,
+    val idToken: String? = null, val accessToken: String? = null,
+) {
+    init { requireOneSocialProof(authorizationCode, idToken, accessToken) }
+
+    override fun toString() = "SocialReauth(provider=$provider, <credentials redacted>)"
+}
+
+/** 소셜 증거 필드는 인가 코드 · ID 토큰 · 액세스 토큰 중 **정확히 하나** — 없거나 둘 이상이면 `400 COMMON.VALIDATION_FAILED` */
+fun requireOneSocialProof(authorizationCode: String?, idToken: String?, accessToken: String?) {
+    val sent = listOf("authorizationCode" to authorizationCode, "idToken" to idToken, "accessToken" to accessToken).filter { !it.second.isNullOrBlank() }.map { it.first }
+    if (sent.isEmpty()) throw FieldValidationException("authorizationCode", "Required", "send exactly one of authorizationCode, idToken, accessToken")
+    if (sent.size > 1) throw FieldValidationException(sent[1], "NotAllowed", "send exactly one of authorizationCode, idToken, accessToken")
 }
 
 /** 소셜 다시 인증을 확인하는 고리 — `auth-social` 이 있을 때 [dev.sumin.skeleton.account.social.AccountSocialAutoConfiguration] 이 내놓는다 */

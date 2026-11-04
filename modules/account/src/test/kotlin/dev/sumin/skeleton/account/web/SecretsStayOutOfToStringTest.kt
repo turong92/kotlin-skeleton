@@ -41,6 +41,9 @@ class SecretsStayOutOfToStringTest {
         assertHidden(dev.sumin.skeleton.account.LoginIdAvailability(secret, false, "TAKEN"))
         assertHidden(SignUpResponse("VERIFICATION_SENT", secret))
         assertHidden(LinkSocialRequest(secret, null, secret, secret, SocialReauthRequest("kakao", secret)))
+        assertHidden(LinkSocialRequest(null, idToken = secret, accessToken = secret))
+        assertHidden(SocialReauthRequest("kakao", null, idToken = secret, accessToken = secret))
+        assertHidden(dev.sumin.skeleton.account.SocialReauth("kakao", null, idToken = secret))
     }
 
     @Test

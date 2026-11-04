@@ -4,6 +4,7 @@ import dev.sumin.skeleton.account.AccountCore
 import dev.sumin.skeleton.account.AccountErrorCode
 import dev.sumin.skeleton.account.AccountException
 import dev.sumin.skeleton.account.Reauth
+import dev.sumin.skeleton.account.requireOneSocialProof
 import dev.sumin.skeleton.account.ReauthInput
 import dev.sumin.skeleton.account.abuse.RateLimitedException
 import dev.sumin.skeleton.account.AccountProperties
@@ -14,12 +15,14 @@ import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.account.signin.SignInProof
 import dev.sumin.skeleton.auth.social.oauth.OAuthAccountLinkRepository
 import dev.sumin.skeleton.auth.social.oauth.OAuthAccountProvisioningPolicy
-import dev.sumin.skeleton.auth.social.oauth.OAuthInvalidAuthorizationCodeException
-import dev.sumin.skeleton.auth.social.oauth.OAuthProviderGatewayException
+import dev.sumin.skeleton.auth.social.oauth.OAuthCredential
+import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.auth.social.oauth.OAuthProviderNotFoundException
 import dev.sumin.skeleton.auth.social.oauth.OAuthProviderRegistry
 import dev.sumin.skeleton.auth.social.oauth.OAuthUserProfile
 import dev.sumin.skeleton.auth.social.oauth.codeExchange
+import dev.sumin.skeleton.auth.social.oauth.nativeCredential
+import dev.sumin.skeleton.auth.social.oauth.resolveProfile
 
 /** 소셜 제공자 하나 = 로그인 수단 하나. 코드는 제공자 id(`google` · `kakao` …), 주체는 제공자의 사용자 id (화면에 내보내지 않는다) */
 class SocialSignInMethod(override val code: String) : SignInMethod
@@ -44,6 +47,18 @@ class AccountOAuthProvisioningPolicy(private val signIn: AccountSignInService, p
         )?.accountId
 }
 
+/**
+ * 연결 · 다시 인증 요청의 증거(인가 코드 · ID 토큰 · 액세스 토큰 중 정확히 하나)를 이 제공자의 규칙에 맞춰 검사해 [OAuthCredential] 로 만든다.
+ * 제공자를 부르기 **전**(다시 인증 증거를 쓰기 전)에 불러야 한다 — 틀리면 400(필드 · PKCE · nonce) 또는 404(토큰 입구 없음)이고 아무것도 쓰이지 않는다
+ */
+internal fun OAuthProvider.credentialOf(
+    authorizationCode: String?, redirectUri: String?, codeVerifier: String?, nonce: String?, state: String?, idToken: String?, accessToken: String?,
+): OAuthCredential {
+    requireOneSocialProof(authorizationCode, idToken, accessToken)
+    return if (!authorizationCode.isNullOrBlank()) OAuthCredential.Code(codeExchange(authorizationCode, redirectUri, codeVerifier, nonce, state))
+    else nativeCredential(idToken, accessToken, nonce, null)
+}
+
 /** 로그인한 계정이 제공자 계정을 자기 로그인 수단으로 붙인다 — 코드 교환은 로그인과 같은 제공자 클라이언트를 쓴다 */
 class SocialLinkService(private val registry: OAuthProviderRegistry, private val identities: IdentityService, private val core: AccountCore) {
     private val reauth = Reauth(core)
@@ -52,10 +67,10 @@ class SocialLinkService(private val registry: OAuthProviderRegistry, private val
      * 연결은 **다시 인증**이 필요하다 (현재 비밀번호, 없으면 메일로 받은 6자리 코드, 주소가 없으면 소셜 인가 코드) — 프론트가 OAuth `state` 를 확인하지 않아도
      * 공격자의 인가 코드가 피해자 계정에 붙는 일(로그인 CSRF)이 비밀번호 · 메일함 없이는 일어나지 않게 서버가 막는 쪽이다.
      */
-    fun link(accountId: String, providerId: String, authorizationCode: String, redirectUri: String?, input: ReauthInput = ReauthInput(), sessionId: String? = null, codeVerifier: String? = null, nonce: String? = null, state: String? = null): IdentityView {
+    fun link(accountId: String, providerId: String, authorizationCode: String?, redirectUri: String?, input: ReauthInput = ReauthInput(), sessionId: String? = null, codeVerifier: String? = null, nonce: String? = null, state: String? = null, idToken: String? = null, accessToken: String? = null): IdentityView {
         val provider = registry.findEnabled(providerId) ?: throw OAuthProviderNotFoundException(providerId)
         // PKCE · nonce 전제는 다시 인증을 쓰기 **전**에 본다 — 틀려도 제공자의 한 번 쓰는 코드와 6자리 코드가 타지 않아 같은 것으로 다시 시도할 수 있다
-        val exchange = provider.codeExchange(authorizationCode, redirectUri, codeVerifier, nonce, state)
+        val credential = provider.credentialOf(authorizationCode, redirectUri, codeVerifier, nonce, state, idToken, accessToken)
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         // 어차피 거절될 요청(정지 계정 · 이 계정에 이미 같은 제공자)은 증명을 쓰기 전에 거절한다 — 메일 코드가 타지 않는다. 남의 계정이 쥔 주체는 증명 **뒤에만** 알린다
         identities.checkLinkable(accountId, provider.providerId.trim().lowercase())
@@ -63,13 +78,7 @@ class SocialLinkService(private val registry: OAuthProviderRegistry, private val
         val allowance = core.limits.acquire("social-link:account", accountId, limit.perAccount, limit.perAccountWindow)
         if (!allowance.allowed) throw RateLimitedException(allowance.retryAfterSeconds)
         val proof = reauth.check(account, input, sessionId)
-        val profile = try {
-            provider.fetchProfile(exchange)
-        } catch (ex: OAuthInvalidAuthorizationCodeException) {
-            throw ex
-        } catch (ex: RuntimeException) {
-            throw OAuthProviderGatewayException(provider.providerId, ex)
-        }
+        val profile = provider.resolveProfile(credential)
         // 다시 인증은 **연결하기 전에** 태운다 — 같은 코드를 든 두 요청이 겹쳐도 하나만 연결한다
         proof.commit()
         return identities.link(accountId, provider.providerId.trim().lowercase(), profile.providerUserId, verified = true, expectEmailVerified = account.emailVerified)

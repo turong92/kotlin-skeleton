@@ -211,4 +211,40 @@ class AccountSocialWebTest {
         mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-other"))).andExpect(status().isCreated)
         assertEquals("notice-me@example.com", mail.of(MailKind.IDENTITY_LINKED_NOTICE).single().to)
     }
+
+    private fun idLink(auth: String, body: String) = mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(body))
+    private fun deleteWith(auth: String, social: String) = mvc.perform(post("/api/v1/account/delete").header("Authorization", auth).header("Idempotency-Key", java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""{"socialReauth":$social}"""))
+
+    @Test
+    fun `an app id token links a provider account, and another account cannot take it with the same token`() {
+        val me = bearer(passwordAccount("native-linker@example.com"))
+        idLink(me, """{"idToken":"t-noemail-natlink","currentPassword":"tangerine-42-moon"}""")
+            .andExpect(status().isCreated).andExpect(jsonPath("$.value.method").value("fakeidp"))
+        val other = bearer(passwordAccount("native-other@example.com"))
+        idLink(other, """{"idToken":"t-noemail-natlink","currentPassword":"tangerine-42-moon"}""")
+            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.IDENTITY_TAKEN"))
+        idLink(other, """{"idToken":"t-noemail-natlink","currentPassword":"wrong-password-1"}""")
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.CURRENT_PASSWORD_INVALID"))
+        idLink(other, """{"idToken":"forged","currentPassword":"tangerine-42-moon"}""").andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `linking takes exactly one of authorizationCode, idToken and accessToken`() {
+        val auth = bearer(passwordAccount("native-one-of@example.com"))
+        idLink(auth, """{"currentPassword":"tangerine-42-moon"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        idLink(auth, """{"authorizationCode":"c-link","idToken":"t-noemail-natlink","currentPassword":"tangerine-42-moon"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        idLink(auth, """{"accessToken":"a-1","currentPassword":"tangerine-42-moon"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        mvc.perform(get("/api/v1/account/identities").header("Authorization", auth)).andExpect(jsonPath("$.values.length()").value(1))
+    }
+
+    @Test
+    fun `an account without an email re-authenticates with an app id token of its own provider account - another account's token does not count`() {
+        val auth = bearer(social("c-noemail-nat").andExpect(status().isOk).andReturn())
+        social("c-third").andExpect(status().isOk)
+        deleteWith(auth, """{"provider":"fakeidp","idToken":"t-third"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_FAILED"))
+        deleteWith(auth, """{"provider":"fakeidp","idToken":"forged"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_FAILED"))
+        deleteWith(auth, """{"provider":"fakeidp","authorizationCode":"c-noemail-nat","idToken":"t-noemail-nat"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        deleteWith(auth, """{"provider":"fakeidp"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        deleteWith(auth, """{"provider":"fakeidp","idToken":"t-noemail-nat"}""").andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("DELETION_SCHEDULED"))
+    }
 }

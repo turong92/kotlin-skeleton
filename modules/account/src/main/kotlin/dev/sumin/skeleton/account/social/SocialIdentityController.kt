@@ -8,7 +8,6 @@ import dev.sumin.skeleton.common.openapi.CreatedOperation
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
-import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
@@ -21,7 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 data class LinkSocialRequest(
-    @field:NotBlank @field:Size(max = 2048) val authorizationCode: String?,
+    /** 인가 코드, 앱 SDK 의 [idToken], [accessToken] 중 정확히 하나 (`GET /auth/methods` 의 `nativeToken` 이 제공자가 받는 종류) */
+    @field:Size(max = 2048) val authorizationCode: String? = null,
     @field:Size(max = 2048) val redirectUri: String? = null,
     /** 비밀번호가 있는 계정의 다시 인증 */
     @field:Size(max = 128) val currentPassword: String? = null,
@@ -34,8 +34,11 @@ data class LinkSocialRequest(
     @field:Size(max = 256) val nonce: String? = null,
     /** 콜백이 받은 OAuth `state` — Naver 처럼 토큰 요청에 요구하는 제공자에게만 전달된다 */
     @field:Size(max = 512) val state: String? = null,
+    /** 앱 SDK 의 토큰 — 인가 코드 대신 (정확히 하나) */
+    @field:Size(max = 4096) val idToken: String? = null,
+    @field:Size(max = 4096) val accessToken: String? = null,
 ) {
-    override fun toString() = "LinkSocialRequest(authorizationCode=<redacted>, <credentials redacted>)"
+    override fun toString() = "LinkSocialRequest(<credentials redacted>)"
 }
 
 /** 소셜 제공자 계정을 지금 로그인한 계정에 붙인다. [AccountSocialAutoConfiguration] 이 auth-social 이 있을 때만 등록한다 */
@@ -49,9 +52,9 @@ class SocialIdentityController(private val callers: AccountCallers, private val 
     fun link(authentication: Authentication?, @PathVariable provider: String, @Valid @RequestBody request: LinkSocialRequest): ResponseEntity<DataResponse<IdentityView>> {
         val caller = callers.require(authentication)
         val view = links.link(
-            caller.accountId, provider, request.authorizationCode!!, request.redirectUri,
+            caller.accountId, provider, request.authorizationCode, request.redirectUri,
             dev.sumin.skeleton.account.web.reauthOf(request.currentPassword, request.confirmationCode, request.socialReauth), caller.sessionId,
-            request.codeVerifier, request.nonce, request.state,
+            request.codeVerifier, request.nonce, request.state, request.idToken, request.accessToken,
         )
         return ResponseEntity.status(HttpStatus.CREATED).body(Response.ok(view))
     }
