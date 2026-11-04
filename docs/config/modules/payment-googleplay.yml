@@ -1,0 +1,16 @@
+# payment-googleplay — Google Play 앱 안 결제(구매 확인 + 실시간 개발자 알림 RTDN). 기본 꺼짐.
+skeleton:
+  payment-googleplay:
+    enabled: false                       # true + 네 값이 모두 있고 서비스 계정을 읽을 수 있어야 결제사 빈이 생긴다 (아니면 이 결제사만 꺼지고, 보호 환경 stage · prod 에서는 기동 실패)
+    provider-id: googleplay              # 라우팅에서 쓰는 ID — 알림 주소 /api/v1/payments/webhooks/googleplay
+    client-name: payment-googleplay      # 외부 HTTP 클라이언트 이름
+    package-name: ""                     # 앱의 패키지 이름 (예: com.example.app) — 구글 API 는 이 경로로만 묻고, RTDN 의 packageName 이 다르면 무시한다
+    service-account: ""                  # 서비스 계정 키(JSON)의 base64 — 비밀 (env 로 넘긴다). Play Console 에서 이 계정에 재무 데이터 · 주문 및 구독 관리 권한
+    pubsub:
+      audience: ""                       # Pub/Sub push 구독에 적은 토큰 대상(audience) — 보통 https://<서비스 주소>/api/v1/payments/webhooks/googleplay
+      service-account-email: ""          # push 구독이 OIDC 토큰을 만들 때 쓰는 서비스 계정의 이메일
+    base-url: ""                         # 비우면 https://androidpublisher.googleapis.com (시험의 가짜 서버는 여기에) — 보호 환경에서 구글 주소가 아니면 기동 때 경고
+    token-url: ""                        # 비우면 https://oauth2.googleapis.com/token — 시험만 바꾼다. 보호 환경에서 구글 주소가 아니면 기동 실패
+    certs-url: ""                        # 비우면 https://www.googleapis.com/oauth2/v3/certs (push 토큰을 확인하는 구글 공개키) — 시험만 바꾼다. 보호 환경에서 구글 주소가 아니면 기동 실패
+    lookup-timeout: 5s                   # 구글 API 한 번 호출(토큰 · 조회 · 승인 통지)의 제한 시간
+# 프로젝트 여럿(skeleton.projects)이면 skeleton.projects.<id>.config.payment-googleplay.* 로 프로젝트마다 — 그 프로젝트에서 켜지 않으면 그 프로젝트에 없다
