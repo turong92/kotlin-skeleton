@@ -22,7 +22,7 @@
 | 부팅에 필요한 것 | `account` 의 부팅 조건과 같다 |
 | 교체 지점 | `WebHandoff`, `WebHandoffController`, `webHandoffSessionEventListener` |
 | 마이그레이션 | 없음 (`account_tokens` 를 쓴다 — 용도 `web_handoff`) |
-| 프론트 짝 | 웹 결제 화면이 `#handoff` 를 읽어 redeem 을 부른다 |
+| 프론트 짝 | 없음 (웹 결제 화면이 주소의 #handoff 조각을 읽어 redeem 을 부른다 - react 패키지는 아직 없다) |
 | 테스트 | `modules/auth-web-handoff/src/test` |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

@@ -34,14 +34,14 @@
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment-iap"))` |
-| 함께 오는 모듈 | `platform`, `payment` |
-| 컴파일 전용 | `spring-security-core`(호출자 — 앱의 보안 설정이 낸다) |
+| 함께 오는 모듈 | `platform`, `payment`, `crypto` |
+| 컴파일 전용 | 없음 (호출자 spring-security-core 는 앱의 보안 설정이 낸다) |
 | 설정 접두사 | `skeleton.payment-iap` — [docs/config/modules/payment-iap.yml](../config/modules/payment-iap.yml) |
 | 기본 동작 | 꺼짐. `enabled=true` 이고 장부가 있을 때만 경로가 선다. 설정이 잘못되면 기동 실패. |
 | 부팅에 필요한 것 | `enabled=true` 면 `payment-jdbc`(장부)와 스토어 모듈 하나 이상. 구독 상품을 쓰면 `skeleton.payment.subscription.enabled=true` + `SubscriptionPlans` 빈 |
 | 교체 지점 | `IapProducts`(상품 지도 — 카탈로그 DB 링크로 바꿀 자리), `IapChannelPolicy`(나라 · 플랫폼 말고 다른 기준으로 채널을 정할 때) — 둘 다 `@ConditionalOnMissingBean` |
 | 마이그레이션 | 없음 |
-| 프론트 짝 | flutter `payment`(IAP 는 다음 단계) |
+| 프론트 짝 | 없음 (모바일 앱의 flutter payment 가 부른다 - IAP 는 다음 단계) |
 | 테스트 | `modules/payment-iap/src/test` — 메모리 장부 + 가짜 스토어(`FakeStoreGateway`)로 컨트롤러까지(MockMvc). 실계정 호출 없음 |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

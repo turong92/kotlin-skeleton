@@ -9,8 +9,8 @@ skeleton:
     issuer-id: ""                        # App Store Connect 인앱 구매 키의 Issuer ID (env 로 넘긴다)
     key-id: ""                           # 그 키의 Key ID (env 로 넘긴다)
     private-key: ""                      # 그 키(.p8)의 PKCS#8 PEM 본문 — 비밀 (env 로 넘긴다)
-    base-url: ""                         # 비우면 https://api.storekit.apple.com (시험의 가짜 서버는 여기에) — 보호 환경에서 애플 주소가 아니면 기동 때 경고
-    sandbox-base-url: ""                 # 비우면 https://api.storekit-sandbox.apple.com — 운영이 거래를 모른다(404)고 하면 여기에 묻는다
+    base-url: https://api.storekit.apple.com                         # 비워도 같다 (시험의 가짜 서버는 여기에) — 보호 환경에서 애플 주소가 아니면 기동 때 경고
+    sandbox-base-url: https://api.storekit-sandbox.apple.com                 # 비워도 같다 — 운영이 거래를 모른다(404)고 하면 여기에 묻는다
     lookup-timeout: 5s                   # 거래 · 구독 조회 한 번의 제한 시간
 # 신뢰하는 애플 루트(Apple Root CA - G3)는 모듈에 들어 있고 바꾸는 설정이 없다 — 시험만 AppStoreSignatureVerifier 빈을 바꿔 끼운다
 # 프로젝트 여럿(skeleton.projects)이면 skeleton.projects.<id>.config.payment-appstore.* 로 프로젝트마다 — 그 프로젝트에서 켜지 않으면 그 프로젝트에 없다

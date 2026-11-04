@@ -19,6 +19,7 @@
 | `auth-social-naver` | Naver OAuth 제공자 | [auth-social-naver](auth-social-naver.md) |
 | `auth-social-oidc` | 범용 OpenID Connect 제공자 (속성으로 여러 개 · LINE 프리셋) | [auth-social-oidc](auth-social-oidc.md) |
 | `auth-social-x` | X(Twitter) OAuth 2.0 + PKCE 제공자 | [auth-social-x](auth-social-x.md) |
+| `auth-web-handoff` | 앱 → 웹 한 번 쓰는 자동 로그인 코드 (메일 링크와 같은 토큰 장치, 기본 꺼짐) | [auth-web-handoff](auth-web-handoff.md) |
 | `async` | 컨텍스트(trace id · MDC)를 넘기는 @Async 실행기 | [async](async.md) |
 | `async-notification` | 비동기 예외를 알림으로 보낸다 | [async-notification](async-notification.md) |
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 | [notification](notification.md) |
@@ -56,6 +57,9 @@
 | `point` | 포인트 원장: 적립(유효기간 선택) · 소멸 임박 순 차감 · 하루 한 번 소멸 · 운영자 조정, 보상 지급기 `point` (사용은 서버 API 뿐, 운영 경로 기본 꺼짐) | [point](point.md) |
 | `point-jdbc` | 포인트 원장 저장소 (PostgreSQL · MySQL): 잔액 줄 잠금 · 지급 건 멱등 · 음수 잔액 금지 | [point-jdbc](point-jdbc.md) |
 | `payment` | 결제 계약 · 제공자 라우팅 | [payment](payment.md) |
+| `payment-appstore` | App Store 앱 안 결제 제공자 (애플 서명 확인 + 서버 알림 V2) | [payment-appstore](payment-appstore.md) |
+| `payment-googleplay` | Google Play 앱 안 결제 제공자 (구매 확인 + 실시간 개발자 알림) | [payment-googleplay](payment-googleplay.md) |
+| `payment-iap` | 앱 인앱결제 서버 HTTP (설정 · 지역 스위치 · 구매 확인) | [payment-iap](payment-iap.md) |
 | `payment-jdbc` | 결제 장부 저장소 + 작업 어댑터 (PostgreSQL · MySQL) | [payment-jdbc](payment-jdbc.md) |
 | `payment-toss` | Toss 결제 제공자 | [payment-toss](payment-toss.md) |
 | `payment-kakaopay` | 카카오페이 직접 연동 단건 결제 제공자 (토스 계약 없이) | [payment-kakaopay](payment-kakaopay.md) |

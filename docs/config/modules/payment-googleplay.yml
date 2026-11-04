@@ -9,8 +9,8 @@ skeleton:
     pubsub:
       audience: ""                       # Pub/Sub push 구독에 적은 토큰 대상(audience) — 보통 https://<서비스 주소>/api/v1/payments/webhooks/googleplay
       service-account-email: ""          # push 구독이 OIDC 토큰을 만들 때 쓰는 서비스 계정의 이메일
-    base-url: ""                         # 비우면 https://androidpublisher.googleapis.com (시험의 가짜 서버는 여기에) — 보호 환경에서 구글 주소가 아니면 기동 때 경고
-    token-url: ""                        # 비우면 https://oauth2.googleapis.com/token — 시험만 바꾼다. 보호 환경에서 구글 주소가 아니면 기동 실패
-    certs-url: ""                        # 비우면 https://www.googleapis.com/oauth2/v3/certs (push 토큰을 확인하는 구글 공개키) — 시험만 바꾼다. 보호 환경에서 구글 주소가 아니면 기동 실패
+    base-url: https://androidpublisher.googleapis.com                         # 비워도 같다 (시험의 가짜 서버는 여기에) — 보호 환경에서 구글 주소가 아니면 기동 때 경고
+    token-url: https://oauth2.googleapis.com/token                        # 비워도 같다 — 시험만 바꾼다. 보호 환경에서 구글 주소가 아니면 기동 실패
+    certs-url: https://www.googleapis.com/oauth2/v3/certs                        # 비워도 같다 (push 토큰을 확인하는 구글 공개키) — 시험만 바꾼다. 보호 환경에서 구글 주소가 아니면 기동 실패
     lookup-timeout: 5s                   # 구글 API 한 번 호출(토큰 · 조회 · 승인 통지)의 제한 시간
 # 프로젝트 여럿(skeleton.projects)이면 skeleton.projects.<id>.config.payment-googleplay.* 로 프로젝트마다 — 그 프로젝트에서 켜지 않으면 그 프로젝트에 없다

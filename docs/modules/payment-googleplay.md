@@ -40,7 +40,7 @@ Google Play(앱 안 결제)를 `payment` 의 **스토어 결제사**(`PaymentSto
 | 교체 지점 | `GooglePlayPaymentProvider` |
 | 필요한 Google 설정 | Play Console → API 액세스에서 서비스 계정에 **재무 데이터 보기 · 주문 및 구독 관리** 권한, 수익 창출 설정 → 실시간 개발자 알림 주제(Pub/Sub)에 **push 구독**(엔드포인트 `https://<서비스 주소>/api/v1/payments/webhooks/googleplay`, 인증 켜기: 서비스 계정 이메일 · 대상 = `pubsub.audience`) |
 | 마이그레이션 | 없음 |
-| 프론트 짝 | 없음 (모바일 앱의 in_app_purchase 가 `setObfuscatedAccountId` 로 계정 토큰을 싣고 구매 토큰을 보내면 서버가 검증한다) |
+| 프론트 짝 | 없음 (모바일 앱의 in_app_purchase 가 setObfuscatedAccountId 로 계정 토큰을 싣고 구매 토큰을 보내면 서버가 검증한다) |
 | 테스트 | `modules/payment-googleplay/src/test` — 가짜 서버 `FakePlayServer`(토큰 주소 · productsv2 · subscriptionsv2 · orders · acknowledge · OIDC 공개키)와 시험용 서명 키(실계정 호출 없음) |
 
 ## 변이 확인 기록

@@ -35,7 +35,7 @@
 - 알림 (종 · 목록 · 안 읽은 수) [notification, notification-jdbc] → kotlin `--modules notification,notification-jdbc` · react `--packages notifications` — 손으로: 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드 — 받는 사람은…
 - 알림이 새로고침 없이 즉시 뜬다 (실시간) [notification, notification-jdbc] → kotlin `--modules notification,notification-jdbc,notification-sse` (notification-sse | notification-websocket 중 하나 이상 고른다) · react `--packages notifications,realtime` — 손으로: SSE(단방향, 더 단순)
 - 파일 업로드 (이미지 · 첨부) [storage, storage-s3] → kotlin `--modules storage,storage-s3` · react `--packages storage` — 손으로: 버킷 · 키(환경변수), 업로드 규칙(skeleton.storage.validation — 확장자 ·…
-- 결제 (토스 · 스트라이프) [payment] → kotlin `--modules payment,payment-toss` (payment-toss | payment-kakaopay | payment-naverpay | payment-stripe | payment-paddle 중 하나 이상 고른다) · react `--packages payment` — 손으로: HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명…
+- 결제 (토스 · 스트라이프) [payment] → kotlin `--modules payment,payment-toss` (payment-toss | payment-kakaopay | payment-naverpay | payment-stripe | payment-paddle | payment-appstore | payment-googleplay 중 하나 이상 고른다) · react `--packages payment` — 손으로: HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명…
 - 이벤트 (출석 · 친구초대) · 쿠폰 · 포인트 · 쿠폰으로 결제 할인 · 무료 이용권 [campaign, reward, coupon, point] → kotlin `--modules campaign,campaign-jdbc,reward,reward-jdbc,coupon,coupon-jdbc,point,point-jdbc` · react `--packages rewards` — 손으로: 보상 모듈은 서로를 모르고 각자 단독으로 돈다(쿠폰만 · 포인트만 · 이벤트 + 일꾼만).
 - 봇 방지 (캡차) [captcha-turnstile] → kotlin `--modules captcha-turnstile` · react `--packages captcha-turnstile` — 손으로: 가입 · 로그인 요청에서 TurnstileVerifier 로 토큰을 검증하는 코드(앱)와…
 - 메일 보내기 (SMTP) [notification-mail] → kotlin `--modules notification-mail` — 손으로: SMTP 환경변수(host · username · password · from)와 메일 본문 ·…
@@ -98,6 +98,7 @@
 - auth-social-naver: 네이버 OAuth 제공자 [네이버 로그인, 네이버 소셜 로그인]
 - auth-social-oidc: 범용 OpenID Connect 소셜 로그인 제공자 — 속성만으로… [라인 로그인, LINE 로그인]
 - auth-social-x: X(Twitter) 로그인 제공자 — OAuth 2.0… [X 로그인, 엑스 로그인]
+- auth-web-handoff: 앱에서 웹으로 넘어갈 때 쓰는 한 번 쓰는 자동 로그인 코드 [자동 로그인 링크, 앱에서 웹으로]
 - author-profile: 작성자 프로필 — 한 계정이 닉네임(프로필)을 여러 개 만들어 글 ·… [작성자 프로필, 닉네임 여러 개]
 - author-profile-jdbc: 작성자 프로필 저장소 — PostgreSQL · MySQL 로… [작성자 프로필 저장소, 프로필 DB]
 - authz: 운영자 역할 관리 — 역할 만들기 · 고치기 · 지우기(역할 → 권한… [역할 관리, 권한 관리]
@@ -148,6 +149,9 @@
 - notification-webpush: 웹 푸시(VAPID) 전달 수단 — 브라우저 구독으로 푸시를 보낸다. [웹 푸시, 브라우저 푸시]
 - notification-websocket: 알림을 STOMP over… [웹소켓, 실시간 알림]
 - payment: 결제 계약 + 장부 HTTP — PaymentService ·… [결제, 결제 승인]
+- payment-appstore: App Store 앱 안 결제 — 앱이 보낸 거래 id 를 서버가… [앱스토어 결제, 애플 인앱결제]
+- payment-googleplay: Google Play 앱 안 결제 [구글 플레이 결제, 플레이 스토어 인앱결제]
+- payment-iap: 앱 인앱결제의 서버 HTTP — 설정 응답(GET /config: 지역… [인앱결제, 앱 결제]
 - payment-jdbc: 결제 장부 저장소 — PostgreSQL · MySQL 로… [결제 장부, 주문 장부]
 - payment-kakaopay: 카카오페이 직접 연동 단건 결제 — 토스 계약 없이 카카오페이 계약만… [카카오페이, 카카오페이 결제]
 - payment-naverpay: 네이버페이 직접 연동 단건 결제 — 토스 계약 없이 네이버페이 계약만… [네이버페이, 네이버페이 결제]
