@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment.iap
 
 import com.jayway.jsonpath.JsonPath
+import dev.sumin.skeleton.common.account.SessionBoundPrincipal
 import dev.sumin.skeleton.common.account.WebHandoffIssuer
 import dev.sumin.skeleton.iaptest.IapLedgerBeans
 import dev.sumin.skeleton.iaptest.IapWebTestApplication
@@ -22,7 +23,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 class RecordingHandoff : WebHandoffIssuer {
     val issuedFor = CopyOnWriteArrayList<String>()
-    override fun issue(accountId: String): String = "code-for-$accountId".also { issuedFor += accountId }
+    val sessionsSeen = CopyOnWriteArrayList<String?>()
+    override fun issue(accountId: String, sessionId: String?): String = "code-for-$accountId".also { issuedFor += accountId; sessionsSeen += sessionId }
 }
 
 @TestConfiguration(proxyBeanMethods = false)
@@ -57,7 +59,7 @@ class IapWebCheckoutLinkTest {
 
     private fun link(account: String?, platform: String, storefront: String?) = mvc.perform(
         post(path).param("platform", platform).let { b -> if (storefront != null) b.param("storefront", storefront) else b }
-            .let { b -> if (account != null) b.principal(UsernamePasswordAuthenticationToken(account, "n/a", emptyList())) else b },
+            .let { b -> if (account != null) b.principal(object : UsernamePasswordAuthenticationToken(object : SessionBoundPrincipal { override val sessionId = "sid-$account" }, "n/a", emptyList()) { override fun getName() = account }) else b },
     )
 
     @Test
@@ -65,6 +67,7 @@ class IapWebCheckoutLinkTest {
         val r = link("acc_link_1", "ios", "USA").andExpect(status().isOk).andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store"))).andReturn()
         assertEquals("https://example.com/pricing#handoff=code-for-acc_link_1", JsonPath.read<String>(r.response.contentAsString, "$.value.url"))
         assertEquals(listOf("acc_link_1"), recorded().filter { it == "acc_link_1" })
+        assertTrue("sid-acc_link_1" in (handoff as RecordingHandoff).sessionsSeen, "the code is asked for with the caller's session id")
     }
 
     @Test

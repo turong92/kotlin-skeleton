@@ -6,6 +6,9 @@ import dev.sumin.skeleton.account.token.OneTimeTokens
 import dev.sumin.skeleton.auth.account.AccountIdentifier
 import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
+import dev.sumin.skeleton.auth.session.SessionInspector
+import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.account.WebHandoffIssuer
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.Duration
@@ -26,12 +29,20 @@ class WebHandoff(
     private val tokens: OneTimeTokens,
     private val accounts: AuthAccountRepository,
     private val properties: WebHandoffProperties,
+    private val sessions: SessionInspector,
 ) : WebHandoffIssuer {
-    override fun issue(accountId: String): String = tokens.issue(PURPOSE, accountId, accountId, properties.ttl)
+    /** 코드는 호출한 세션([sessionId])에 묶인다 - 이미 닫힌 세션(훔친 액세스 토큰 · 로그아웃 뒤)은 새 세션을 열 코드를 못 받는다 */
+    override fun issue(accountId: String, sessionId: String?): String {
+        if (sessionId == null || sessions.openedAt(accountId, sessionId) == null) throw ApplicationException("Session is not open", PlatformErrorCode.UNAUTHORIZED)
+        return tokens.issue(PURPOSE, accountId, accountId, properties.ttl, payload = sessionId)
+    }
 
     /** 코드를 소비해 로그인할 계정을 돌려준다. 쓸 수 없는 코드는 410 `ACCOUNT.TOKEN_INVALID` (원문은 메시지에 싣지 않는다) */
     fun redeem(code: String): AuthAccount {
         val grant = tokens.consume(PURPOSE, code) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
+        // 코드를 받은 뒤 그 세션이 닫혔으면(모든 기기 로그아웃 · 비밀번호 재설정 · 폐기 신호 없이 닫힌 경우 포함) 새 세션을 열지 않는다
+        val sid = grant.payload
+        if (sid == null || grant.accountId == null || sessions.openedAt(grant.accountId!!, sid) == null) throw AccountException(AccountErrorCode.TOKEN_INVALID)
         return grant.accountId?.let { accounts.findBy(AccountIdentifier(accountId = it)) } ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
     }
 

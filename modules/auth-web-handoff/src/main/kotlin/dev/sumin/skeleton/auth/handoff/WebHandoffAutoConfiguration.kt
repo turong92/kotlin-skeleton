@@ -5,6 +5,7 @@ import dev.sumin.skeleton.account.AccountCore
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.session.SessionEventListener
+import dev.sumin.skeleton.auth.session.SessionInspector
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -19,10 +20,13 @@ import org.springframework.context.annotation.Bean
 @EnableConfigurationProperties(WebHandoffProperties::class)
 @ConditionalOnProperty(prefix = "skeleton.auth-web-handoff", name = ["enabled"], havingValue = "true")
 class WebHandoffAutoConfiguration {
-    /** 계정의 세션이 한꺼번에 닫히면(세션 사건) 남은 코드도 닫는다 */
+    /** 세션 장치(`auth-session` 의 [SessionInspector])가 없으면 앱이 뜨지 않는다 - 열린 세션에 묶지 못하는 코드는 내지 않는다 */
     @Bean
     @ConditionalOnMissingBean
-    fun webHandoff(core: AccountCore, accounts: AuthAccountRepository, properties: WebHandoffProperties): WebHandoff = WebHandoff(core.tokens, accounts, properties)
+    fun webHandoff(core: AccountCore, accounts: AuthAccountRepository, properties: WebHandoffProperties, sessions: SessionInspector): WebHandoff =
+        WebHandoff(core.tokens, accounts, properties, sessions)
+
+    /** 계정의 세션이 한꺼번에 닫히면(세션 사건) 남은 코드도 닫는다 */
 
     @Bean
     @ConditionalOnMissingBean(name = ["webHandoffSessionEventListener"])

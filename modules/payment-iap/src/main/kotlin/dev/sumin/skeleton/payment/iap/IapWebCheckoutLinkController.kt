@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment.iap
 
+import dev.sumin.skeleton.common.account.SessionBoundPrincipal
 import dev.sumin.skeleton.common.account.WebHandoffIssuer
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.DataResponse
@@ -58,6 +59,6 @@ class IapWebCheckoutLinkController(
         val country = StorefrontCountries.alpha2(storefront) ?: routing.of(request).country
         if (!channels.channelOf(country, target).allowsWeb) throw ApplicationException("No web checkout in this channel", PlatformErrorCode.NOT_FOUND)
         response.setHeader("Cache-Control", "no-store")
-        return Response.ok(IapWebCheckoutLinkResponse("${properties.webCheckoutUrl.substringBefore('#')}#handoff=${handoff.issue(account)}"))
+        return Response.ok(IapWebCheckoutLinkResponse("${properties.webCheckoutUrl.substringBefore('#')}#handoff=${handoff.issue(account, (authentication?.principal as? SessionBoundPrincipal)?.sessionId)}"))
     }
 }

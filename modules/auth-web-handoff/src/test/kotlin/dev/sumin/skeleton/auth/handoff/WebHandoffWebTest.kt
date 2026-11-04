@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.account.signin.AccountSignInService
+import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.account.WebHandoffIssuer
 import dev.sumin.skeleton.account.signin.SignInProof
 import dev.sumin.skeleton.account.token.InMemoryOneTimeTokenStore
@@ -13,6 +14,7 @@ import dev.sumin.skeleton.auth.session.SessionEvent
 import dev.sumin.skeleton.auth.session.SessionEventListener
 import dev.sumin.skeleton.auth.session.SessionEventType
 import dev.sumin.skeleton.handofftest.HandoffTestApplication
+import dev.sumin.skeleton.handofftest.FakeSessionInspector
 import dev.sumin.skeleton.handofftest.HandoffTestBeans
 import dev.sumin.skeleton.handofftest.MutableTime
 import java.time.Duration
@@ -20,6 +22,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.slf4j.LoggerFactory
@@ -48,10 +51,13 @@ class WebHandoffWebTest {
     @Autowired lateinit var issuer: WebHandoffIssuer
     @Autowired lateinit var signIn: AccountSignInService
     @Autowired lateinit var store: OneTimeTokenStore
+    @Autowired lateinit var sessions: FakeSessionInspector
     @Autowired lateinit var listeners: List<SessionEventListener>
 
     private fun account(): String =
         signIn.signIn(SignInProof("handoff_test", "h${System.nanoTime()}@example.com", "h${System.nanoTime()}@example.com", emailVerified = true, allowSignUp = true))!!.accountId
+
+    private fun issueFor(accountId: String): String = issuer.issue(accountId, sessions.open(accountId))
 
     private fun redeem(code: String) =
         mvc.perform(post("/api/v1/auth/web-handoff/redeem").contentType(MediaType.APPLICATION_JSON).content("""{"code":"$code"}"""))
@@ -60,8 +66,8 @@ class WebHandoffWebTest {
     fun `a code signs in exactly the account it was issued for, and only once`() {
         val a = account()
         val b = account()
-        val codeA = issuer.issue(a)
-        val codeB = issuer.issue(b)
+        val codeA = issueFor(a)
+        val codeB = issueFor(b)
         val ra = redeem(codeA).andExpect(status().isOk).andReturn()
         val rb = redeem(codeB).andExpect(status().isOk).andReturn()
         assertEquals(a, JsonPath.read<String>(ra.response.contentAsString, "$.value.principal.accountId"))
@@ -71,14 +77,14 @@ class WebHandoffWebTest {
 
     @Test
     fun `an expired code is dead`() {
-        val code = issuer.issue(account())
+        val code = issueFor(account())
         time.advance(Duration.ofMinutes(3))
         redeem(code).andExpect(status().isGone)
     }
 
     @Test
     fun `sixteen simultaneous exchanges of one code produce one session`() {
-        val code = issuer.issue(account())
+        val code = issueFor(account())
         val pool = Executors.newFixedThreadPool(16)
         val go = CountDownLatch(1)
         val futures = (1..16).map { pool.submit<Int> { go.await(); redeem(code).andReturn().response.status } }
@@ -92,8 +98,8 @@ class WebHandoffWebTest {
     @Test
     fun `issuing a new code for the account closes the one still open`() {
         val id = account()
-        val old = issuer.issue(id)
-        val fresh = issuer.issue(id)
+        val old = issueFor(id)
+        val fresh = issueFor(id)
         redeem(old).andExpect(status().isGone)
         redeem(fresh).andExpect(status().isOk)
     }
@@ -102,8 +108,8 @@ class WebHandoffWebTest {
     fun `closing every session of the account (logout everywhere, password reset, deletion) closes the open code`() {
         val id = account()
         val other = account()
-        val code = issuer.issue(id)
-        val untouched = issuer.issue(other)
+        val code = issueFor(id)
+        val untouched = issueFor(other)
         listeners.forEach { it.on(SessionEvent(SessionEventType.SESSIONS_REVOKED, id, count = 2, reason = "USER_REVOKED_ALL")) }
         redeem(code).andExpect(status().isGone)
         redeem(untouched).andExpect(status().isOk)   // another account's code is not touched
@@ -115,7 +121,7 @@ class WebHandoffWebTest {
         val root = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME) as Logger
         root.addAppender(logs)
         try {
-            val used = issuer.issue(account())
+            val used = issueFor(account())
             val bad = "x".repeat(40)
             redeem(used).andExpect(status().isOk)
             val replay = redeem(used).andExpect(status().isGone).andReturn().response.contentAsString
@@ -127,5 +133,24 @@ class WebHandoffWebTest {
         } finally {
             root.detachAppender(logs)
         }
+    }
+
+    @Test
+    fun `a session that is already closed cannot get a code`() {
+        val id = account()
+        val sid = sessions.open(id)
+        sessions.open.remove(sid)
+        assertFailsWith<ApplicationException> { issuer.issue(id, sid) }
+        assertFailsWith<ApplicationException> { issuer.issue(id, null) }
+        assertFailsWith<ApplicationException> { issuer.issue(id, sessions.open(account())) }   // another account's session
+    }
+
+    @Test
+    fun `a code dies when the session that asked for it is closed before the exchange`() {
+        val id = account()
+        val sid = sessions.open(id)
+        val code = issuer.issue(id, sid)
+        sessions.open.remove(sid)   // revoked, and no SESSIONS_REVOKED event reaches the listener (zero other sessions)
+        redeem(code).andExpect(status().isGone)
     }
 }

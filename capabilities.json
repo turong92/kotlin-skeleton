@@ -900,12 +900,12 @@
       "module": "auth-web-handoff",
       "path": "modules/auth-web-handoff",
       "status": "experimental",
-      "summary": "앱에서 웹으로 넘어갈 때 쓰는 한 번 쓰는 자동 로그인 코드 — 메일 링크 로그인과 같은 토큰 장치(해시 저장 · 원자적 1회 · 수명 2분 · 계정당 하나 · 세션 폐기 때 닫힘)로 코드를 받아 웹이 POST /api/v1/auth/web-handoff/redeem 으로 세션을 받는다.",
+      "summary": "앱에서 웹으로 넘어갈 때 쓰는 한 번 쓰는 자동 로그인 코드 — 메일 링크 로그인과 같은 토큰 장치(해시 저장 · 원자적 1회 · 수명 2분 · 계정당 하나 · 열린 세션에 묶여 세션이 닫히면 코드도 죽음)로 코드를 받아 웹이 POST /api/v1/auth/web-handoff/redeem 으로 세션을 받는다.",
       "starter": false,
-      "newProjectFlag": "--modules auth-web-handoff",
+      "newProjectFlag": "--modules auth-web-handoff,auth-session",
       "autoIncludes": [],
       "needs": {
-        "requires": [],
+        "requires": ["auth-session"],
         "oneOf": [],
         "optional": []
       },
@@ -919,6 +919,7 @@
       "frontend": null,
       "notFor": [
         "코드를 내는 쪽(지금은 payment-iap 의 web-checkout-link)이 없으면 쓸 일이 없다",
+        "auth-session(세션 장치)이 없으면 기동 실패 — 코드는 열린 세션에 묶여야 낸다",
         "기본 꺼짐 — 앱 yml 이 enabled=true 로 켠다",
         "2단계 인증을 켠 계정은 웹에서 2단계를 한 번 더 한다(의도)",
         "코드는 주소의 # 조각에 실어 줘야 한다 — 쿼리에 실으면 접근 로그에 남는다"
