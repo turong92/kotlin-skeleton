@@ -2,7 +2,11 @@ package dev.sumin.skeleton.auth.social.kakao
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
+import dev.sumin.skeleton.auth.social.oauth.NativeTokenKind
+import dev.sumin.skeleton.auth.social.oauth.OAuthAccessTokenInvalidException
 import dev.sumin.skeleton.auth.social.oauth.OAuthInvalidAuthorizationCodeException
+import dev.sumin.skeleton.auth.social.oauth.OAuthNativeToken
+import dev.sumin.skeleton.auth.social.oauth.OAuthProviderNotFoundException
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.auth.social.oauth.OAuthTokenErrorLog
 import dev.sumin.skeleton.auth.social.oauth.OAuthUserProfile
@@ -23,6 +27,41 @@ class KakaoOAuthProvider(
 
     override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile {
         val token = exchangeToken(authorizationCode, redirectUri)
+        return profileOf(token.accessToken)
+    }
+
+    /** `app-id` 가 있을 때만 앱 SDK 액세스 토큰 입구가 열린다 */
+    override val nativeToken: NativeTokenKind? get() = if (properties.appId.isNullOrBlank()) null else NativeTokenKind.ACCESS_TOKEN
+
+    override fun verifyNativeToken(token: OAuthNativeToken): OAuthUserProfile {
+        val expectedAppId = properties.appId?.trim()?.takeIf { it.isNotEmpty() } ?: throw OAuthProviderNotFoundException(providerId)
+        val info = try {
+            requireNotNull(
+                httpClient.get(
+                    clientName = TOKEN_INFO_CLIENT_NAME,
+                    path = TOKEN_INFO_PATH,
+                    responseType = KakaoTokenInfoResponse::class.java,
+                ) {
+                    baseUrl(properties.profileBaseUrl ?: properties.apiBaseUrl ?: DEFAULT_PROFILE_BASE_URL)
+                    header(HttpHeaders.AUTHORIZATION, "Bearer ${token.token}")
+                    loggingTag("auth-social.kakao.token-info")
+                }.block(),
+            )
+        } catch (ex: ExternalHttpStatusException) {
+            if (ex.upstreamStatus == 401) throw OAuthAccessTokenInvalidException(providerId, "kakao rejected the access token")
+            throw ex
+        }
+        // 다른 앱이 발급한 토큰이면 (그 앱의 사용자가 우리 앱으로 로그인하려는 것) 거절
+        if (info.appId?.toString() != expectedAppId) throw OAuthAccessTokenInvalidException(providerId, "access token belongs to another app")
+        return try {
+            profileOf(token.token)
+        } catch (ex: ExternalHttpStatusException) {
+            if (ex.upstreamStatus == 401) throw OAuthAccessTokenInvalidException(providerId, "kakao rejected the access token")
+            throw ex
+        }
+    }
+
+    private fun profileOf(accessToken: String): OAuthUserProfile {
         val profile = requireNotNull(
             httpClient.get(
                 clientName = PROFILE_CLIENT_NAME,
@@ -30,7 +69,7 @@ class KakaoOAuthProvider(
                 responseType = KakaoUserInfoResponse::class.java,
             ) {
                 baseUrl(properties.profileBaseUrl ?: properties.apiBaseUrl ?: DEFAULT_PROFILE_BASE_URL)
-                header(HttpHeaders.AUTHORIZATION, "Bearer ${token.accessToken}")
+                header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken")
                 loggingTag("auth-social.kakao.profile")
             }.block(),
         )
@@ -94,6 +133,12 @@ class KakaoOAuthProvider(
         val accessToken: String,
     )
 
+    /** `GET /v1/user/access_token_info` — 이 토큰이 어느 앱의 것인가 */
+    data class KakaoTokenInfoResponse(
+        @JsonProperty("app_id")
+        val appId: Long? = null,
+    )
+
     data class KakaoUserInfoResponse(
         val id: Long,
         @JsonProperty("kakao_account")
@@ -117,6 +162,8 @@ class KakaoOAuthProvider(
         const val PROVIDER_ID = "kakao"
         const val TOKEN_CLIENT_NAME = "auth-social-kakao-token"
         const val PROFILE_CLIENT_NAME = "auth-social-kakao-profile"
+        const val TOKEN_INFO_CLIENT_NAME = "auth-social-kakao-token-info"
+        const val TOKEN_INFO_PATH = "/v1/user/access_token_info"
         const val DEFAULT_TOKEN_BASE_URL = "https://kauth.kakao.com"
         const val DEFAULT_TOKEN_PATH = "/oauth/token"
         const val DEFAULT_PROFILE_BASE_URL = "https://kapi.kakao.com"

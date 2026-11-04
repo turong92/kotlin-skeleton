@@ -10,6 +10,7 @@ class KakaoNativeHints : RuntimeHintsRegistrar {
         BindingHints.register(
             hints, classLoader,
             "dev.sumin.skeleton.auth.social.kakao.KakaoOAuthProvider\$KakaoTokenResponse",
+            "dev.sumin.skeleton.auth.social.kakao.KakaoOAuthProvider\$KakaoTokenInfoResponse",
             "dev.sumin.skeleton.auth.social.kakao.KakaoOAuthProvider\$KakaoUserInfoResponse",
         )
     }

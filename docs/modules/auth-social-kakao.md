@@ -11,6 +11,7 @@ Kakao OAuth 토큰 교환 · 프로필 조회 HTTP 클라이언트를 `auth-soci
 | 설정 접두사 | 없음 (설정은 `auth-social` 블록의 providers.kakao 아래) — [auth-social 블록](../config/modules/auth-social.yml) |
 | 기본 동작 | 꺼짐. `skeleton.auth-social.providers.kakao.enabled=true` 로 켠다. |
 | 부팅에 필요한 것 | 없음. 클라이언트 id · secret 은 켤 때 필요하다. |
+| 앱 SDK 토큰 | `app-id`(콘솔의 "앱 ID" 숫자, 환경변수 `SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_APP_ID`)가 있을 때만 `POST /auth/social/kakao/token` 이 열린다(없으면 404). 액세스 토큰을 `GET /v1/user/access_token_info` 로 확인해 `app_id` 가 설정과 다르면 401 `AUTH.SOCIAL_ACCESS_TOKEN_INVALID`, 카카오가 401 이어도 같은 401, 카카오 장애는 502 (docs/real-provider-setup.md §4) |
 | 교체 지점 | `KakaoOAuthProvider` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/auth` |

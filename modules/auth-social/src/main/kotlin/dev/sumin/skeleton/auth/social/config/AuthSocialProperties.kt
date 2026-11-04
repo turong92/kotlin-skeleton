@@ -16,6 +16,8 @@ data class AuthSocialProperties(
         val profileBaseUrl: String? = null,
         val tokenPath: String? = null,
         val profilePath: String? = null,
+        /** Kakao 만 읽는다: 콘솔의 "앱 ID"(숫자). 있을 때만 앱 SDK 액세스 토큰 입구가 열리고, 그 토큰의 `app_id` 가 이 값과 같아야 한다 (환경변수 `…_PROVIDERS_KAKAO_APP_ID`) */
+        val appId: String? = null,
         /** Google 만 읽는다: 제공자가 "확인했다"고 한 이메일을 어디까지 믿나 (기본 [EmailTrust.AUTHORITATIVE]). 다른 제공자는 자기 설정을 쓴다 */
         val emailTrust: EmailTrust? = null,
     )
