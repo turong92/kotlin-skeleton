@@ -254,6 +254,16 @@ class FfmpegIntegrationTest {
     }
 
     @Test
+    fun `CEA-608 닫힌 자막 트랙(c608)이 든 MOV 도 검증 디코드를 켜고 통과한다 — 자막은 조각에 안 실린다`() {
+        server.enqueue(remuxJob("job0000044", Synth.closedCaptionMov(dir), mapOf("verifyDecode" to true)))
+        assertEquals(1, runner.runUntilIdle())
+        val done = complete("job0000044")
+        val made = probeFolder(materialize("job0000044", folderOf(done, "orig")))
+        assertEquals(0, made.otherStreams)
+        assertNull(server.fails["job0000044"])
+    }
+
+    @Test
     fun `가변 프레임율 VFR 은 검증 디코드를 켜도 통과한다 — 타임스탬프 경고는 거절 사유가 아니다`() {
         server.enqueue(remuxJob("job0000042", Synth.vfr(dir), mapOf("verifyDecode" to true)))
         runner.runUntilIdle()

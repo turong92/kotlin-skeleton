@@ -111,6 +111,17 @@ object Synth {
         return out
     }
 
+    /** 자막 트랙이 CEA-608 닫힌 자막(c608, 디코더 cc_dec)인 MOV — 허용 목록에 없던 텍스트 자막 디코더가 든 정상 파일(ffmpeg 는 webvtt · subrip 을 MP4/MOV 에 못 싣는다) */
+    fun closedCaptionMov(dir: Path, name: String = "c608.mov", sec: Int = 3): Path {
+        val scc = dir.resolve("$name.scc").also {
+            Files.writeString(it, "Scenarist_SCC V1.0\n\n00:00:00:00\t9420 9420 94ae 94ae 9452 9452 c8e5 ecec ef80 942f 942f\n\n00:00:01:00\t942c 942c\n")
+        }
+        val out = dir.resolve(name)
+        ffmpeg(*src(320, 240, sec), *tone(sec), "-i", scc.toString(), "-map", "0:v", "-map", "1:a", "-map", "2:s",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-c:s", "copy", out.toString())
+        return out
+    }
+
     /** [base] 의 영상 데이터(mdat) 한가운데 바이트를 망가뜨린 사본 — 머리(moov)는 멀쩡해 프로브는 읽히지만 디코드는 실패한다 */
     fun damaged(dir: Path, base: Path, name: String = "damaged.mp4"): Path {
         val bytes = Files.readAllBytes(base)

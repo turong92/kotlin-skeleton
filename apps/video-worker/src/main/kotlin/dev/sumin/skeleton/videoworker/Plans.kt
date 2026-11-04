@@ -30,10 +30,10 @@ object Allowed {
     val COVER_CODECS = listOf("mjpeg", "png")
 
     /**
-     * 소프트 자막(MOV 의 tx3g) — 디코더가 있는 트랙이라 목록에 없으면 ffprobe 가 파일 전체를 열지 못한다. 자막은 조각에 안 싣지만 있다는 이유로 거절하지 않는다.
+     * 소프트 자막(MOV 의 tx3g · c608 닫힌 자막 · webvtt · subrip) — 디코더 이름: mov_text · cc_dec(eia_608) · webvtt · subrip · srt. 디코더가 있는 트랙이라 목록에 없으면 ffprobe 가 파일 전체를 열지 못한다. 자막은 조각에 안 싣지만 있다는 이유로 거절하지 않는다.
      * 타임코드 · 메타데이터 같은 데이터 트랙은 디코더가 없어 목록과 상관없이 통과한다
      */
-    val SUBTITLE_CODECS = listOf("mov_text")
+    val SUBTITLE_CODECS = listOf("mov_text", "cc_dec", "webvtt", "subrip", "srt")
     val UPLOAD_CODECS: String = (VIDEO_CODECS + AUDIO_CODECS + COVER_CODECS + SUBTITLE_CODECS).joinToString(",")
 
     /** 우리가 만든 원본 단 · 호환 단 · 사다리를 다시 읽는 길 — 영상은 같고 소리는 늘 AAC */
