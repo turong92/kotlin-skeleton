@@ -42,7 +42,7 @@ enum class StoreRecordOutcome {
     /** 이 계정에 이미 살아 있는 구독이 있다 - 돈은 장부에 「확인 필요」([PaymentReviewReason.SUBSCRIPTION_SEAT_TAKEN])로 남고 지급은 없다. */
     ALREADY_SUBSCRIBED,
 
-    /** 장부의 이 구독 줄은 이미 끝났다 - 끝난 줄은 되살리지 않는다. */
+    /** 장부의 이 구독 줄은 이미 끝났고 되살릴 수 없다(환불 · 탈퇴로 끝났거나, 스토어도 끝난 구독이라 하거나, 새 기간의 결제가 없다). 스토어가 활성이라 하는 만료 뒤 재구독은 줄을 되살려 [RECORDED]. */
     SUBSCRIPTION_ENDED,
 }
 
@@ -253,7 +253,11 @@ class PaymentStorePurchases(
         if (existing.accountId != accountId) return other
         val locked = checkNotNull(tx.lockSubscription(existing.id)) { "the subscription line disappeared" }
         val result = { outcome: StoreRecordOutcome, orderId: String? -> StoreRecordResult(outcome, orderId = orderId, subscriptionId = locked.id) }
-        if (locked.status == SubscriptionStatus.ENDED) return Attempt(result(StoreRecordOutcome.SUBSCRIPTION_ENDED, null))
+        if (locked.status == SubscriptionStatus.ENDED) {
+            // 만료 뒤 다시 구독한 사람 - 애플은 같은 구독 그룹이면 같은 originalTransactionId 라 같은 줄로 온다. 스토어가 지금 활성이고 새 기간의 결제가 있으면 줄을 되살린다
+            if (!revivable(locked, purchase) || tx.findOrderByProviderPayment(provider, purchase.providerPaymentId) != null) return Attempt(result(StoreRecordOutcome.SUBSCRIPTION_ENDED, null))
+            return revive(tx, lifecycle, accountId, purchase, locked)
+        }
         // 자리가 막혀 켜지 못한 줄 - 돈은 이미 장부에 있고 켜는 길은 운영자의 몫이다
         if (locked.status == SubscriptionStatus.PENDING) return Attempt(result(StoreRecordOutcome.ALREADY_SUBSCRIBED, tx.findOrderByProviderPayment(provider, purchase.providerPaymentId)?.id))
 
@@ -275,6 +279,39 @@ class PaymentStorePurchases(
         )
         pushed.applySubscriptionState(tx, lifecycle, current, state, purchase.mode) { null }?.let { log.info("the store state was not applied to the subscription line reason={}", it) }
         return if (recorded != null) Attempt(result(StoreRecordOutcome.RECORDED, recorded.id), granted = recorded.id) else Attempt(result(StoreRecordOutcome.ALREADY_RECORDED, tx.findOrderByProviderPayment(provider, purchase.providerPaymentId)?.id))
+    }
+
+    /** 끝난 줄을 되살릴 수 있는가 - 스토어가 지금 활성이고, 끝난 이유가 환불 · 회수나 탈퇴가 아니다(그건 스토어가 활성이라 해도 되살리지 않는다). */
+    private fun revivable(ended: PaymentSubscription, purchase: StorePurchase): Boolean =
+        purchase.subscriptionStatus.let { it == null || it == PushedSubscriptionStatus.ACTIVE || it == PushedSubscriptionStatus.CANCELING } &&
+            ended.endReason != SubscriptionEndReason.REFUNDED && ended.endReason != SubscriptionEndReason.ACCOUNT_ERASED
+
+    /**
+     * 끝난 줄을 새 기간으로 되살린다 - 새 기간 주문을 넣고 줄을 `ACTIVE` 로(전이표에 없는 길이라 줄을 직접 고친다). 이 계정에 다른 살아 있는 구독이 있으면 되살리지 않고
+     * 돈만 장부에 남긴다(첫 구독의 자리 충돌과 같다).
+     */
+    private fun revive(tx: PaymentLedgerTx, lifecycle: SubscriptionLifecycle, accountId: String, purchase: StorePurchase, ended: PaymentSubscription): Attempt {
+        val result = { outcome: StoreRecordOutcome, orderId: String? -> StoreRecordResult(outcome, orderId = orderId, subscriptionId = ended.id) }
+        val seatTaken = store.findLiveSubscription(accountId) != null
+        val order = paidOrder(lifecycle, ended, purchase, lifecycle.plans()?.find(ended.planCode)).let { if (seatTaken) it.copy(reviewReason = PaymentReviewReason.SUBSCRIPTION_SEAT_TAKEN) else it }
+        if (!tx.insertOrderIfAbsent(order)) return Attempt(result(StoreRecordOutcome.ALREADY_RECORDED, null))
+        tx.appendEvent(writer.event(order.id, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = STORE, to = PaymentOrderStatus.PAID))
+        if (seatTaken) {
+            tx.appendEvent(writer.event(order.id, PaymentEventType.REVIEW_FLAGGED, PaymentActor.PROVIDER, providerCode = PaymentReviewReason.SUBSCRIPTION_SEAT_TAKEN.name, from = order.status, to = order.status))
+            review.flagged(order.id, PaymentReviewReason.SUBSCRIPTION_SEAT_TAKEN)
+            log.warn("a store subscription came back after it ended but the account already has a live one order={}", order.id)
+            return Attempt(result(StoreRecordOutcome.ALREADY_SUBSCRIBED, order.id))
+        }
+        val start = purchase.periodStart ?: purchase.paidAt
+        val now = writer.now()
+        val revived = ended.copy(
+            status = SubscriptionStatus.ACTIVE, activeKey = accountId, endReason = null, endedAt = null, chargeOrderId = order.id, providerSyncedAt = purchase.paidAt,
+            currentPeriodStart = start, currentPeriodEnd = purchase.periodEnd ?: SubscriptionPeriod.parse(ended.period).after(start, 1), periodSeq = ended.periodSeq + 1, updatedAt = now,
+        )
+        tx.updateSubscription(revived)
+        if (purchase.subscriptionStatus == PushedSubscriptionStatus.CANCELING) lifecycle.save(tx, revived, SubscriptionStatus.CANCELING)
+        tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_FULFIL, order.id))
+        return Attempt(result(StoreRecordOutcome.RECORDED, order.id), granted = order.id)
     }
 
     /** 스토어가 받은 이 기간의 돈 - 정기 금액이 아니라 스토어 금액 그대로(무료 체험은 0원)이고, 이미 `PAID` 로 시작한다. */

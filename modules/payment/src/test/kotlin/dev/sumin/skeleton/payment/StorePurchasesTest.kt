@@ -250,6 +250,59 @@ class StorePurchasesTest {
     }
 
     @Test
+    fun `a subscriber who lets the subscription expire and subscribes again - the same store subscription number - gets the line back with the new period's order`() {
+        val first = record(subscription(), basic)
+        record(subscription(status = PushedSubscriptionStatus.ENDED), basic)   // the store's expiry notice ends the line
+        assertEquals(SubscriptionStatus.ENDED, checkNotNull(kit.store.findSubscription(checkNotNull(first.subscriptionId))).status)
+
+        val resubscribed = record(subscription(txn = "txn_2", start = monthLater, end = Instant.parse("2027-01-04T10:00:00Z")), basic)
+
+        assertEquals(StoreRecordOutcome.RECORDED, resubscribed.outcome)
+        assertEquals(first.subscriptionId, resubscribed.subscriptionId, "the same line - the store keeps the same subscription number")
+        val line = checkNotNull(kit.store.findSubscription(checkNotNull(first.subscriptionId)))
+        assertEquals(SubscriptionStatus.ACTIVE, line.status)
+        assertNull(line.endReason)
+        assertEquals("acc_1", line.activeKey)
+        assertEquals(monthLater, line.currentPeriodStart)
+        assertEquals(PaymentOrderStatus.PAID, kit.order(checkNotNull(resubscribed.orderId)).status)
+        assertEquals(kit.store.findLiveSubscription("acc_1")?.id, first.subscriptionId)
+        kit.runTasks()
+        assertEquals(2, kit.listener.paid.size)
+        assertEquals(StoreRecordOutcome.ALREADY_RECORDED, record(subscription(txn = "txn_2", start = monthLater, end = Instant.parse("2027-01-04T10:00:00Z")), basic).outcome, "asking again changes nothing")
+        assertEquals(2, orders().size)
+    }
+
+    @Test
+    fun `a subscription ended by a refund stays ended even when the store says it is active again`() {
+        val first = record(subscription(), basic)
+        kit.store.inTransaction { tx ->
+            val line = checkNotNull(tx.lockSubscription(checkNotNull(first.subscriptionId)))
+            kit.lifecycle.end(tx, line, SubscriptionEndReason.REFUNDED)
+        }
+
+        val again = record(subscription(txn = "txn_2", start = monthLater, end = Instant.parse("2027-01-04T10:00:00Z")), basic)
+
+        assertEquals(StoreRecordOutcome.SUBSCRIPTION_ENDED, again.outcome)
+        assertEquals(SubscriptionStatus.ENDED, checkNotNull(kit.store.findSubscription(checkNotNull(first.subscriptionId))).status)
+        assertEquals(1, orders().size)
+    }
+
+    @Test
+    fun `a subscriber who subscribes again while another subscription of the account is live keeps the money flagged and gets no second seat`() {
+        val first = record(subscription(), basic)
+        record(subscription(status = PushedSubscriptionStatus.ENDED), basic)
+        val other = PaymentTestOrders.subscription(status = SubscriptionStatus.ACTIVE, activeKey = "acc_1")
+        kit.store.inTransaction { it.insertSubscriptionIfAbsent(other) }
+
+        val again = record(subscription(txn = "txn_2", start = monthLater, end = Instant.parse("2027-01-04T10:00:00Z")), basic)
+
+        assertEquals(StoreRecordOutcome.ALREADY_SUBSCRIBED, again.outcome)
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_SEAT_TAKEN, kit.order(checkNotNull(again.orderId)).reviewReason)
+        assertEquals(SubscriptionStatus.ENDED, checkNotNull(kit.store.findSubscription(checkNotNull(first.subscriptionId))).status)
+        assertEquals(other.id, kit.store.findLiveSubscription("acc_1")?.id)
+    }
+
+    @Test
     fun `a product of the other kind than the purchase is a programming error`() {
         assertFailsWith<IllegalArgumentException> { record(oneTime(), basic) }
         assertFailsWith<IllegalArgumentException> { record(subscription(), cheer) }

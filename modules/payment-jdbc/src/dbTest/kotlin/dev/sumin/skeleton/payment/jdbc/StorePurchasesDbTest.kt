@@ -157,6 +157,27 @@ class StorePurchasesDbTest {
     }
 
     @Test
+    fun `a subscription that expired and was bought again - sixteen confirmations at once - revives the same line once with one new order and one grant`() {
+        val first = record(subscription(), basic)
+        record(subscription().copy(subscriptionStatus = PushedSubscriptionStatus.ENDED), basic)
+        assertEquals(SubscriptionStatus.ENDED, checkNotNull(kit.store.findSubscription(checkNotNull(first.subscriptionId))).status)
+        assertNull(kit.store.findLiveSubscription("acc_1"))
+        val again = subscription(txn = "txn_2").copy(paidAt = monthLater, periodStart = monthLater, periodEnd = monthLater.plusSeconds(30 * 86_400))
+
+        val results = all(race(16) { record(again, basic) })
+
+        assertEquals(1, results.count { it.outcome == StoreRecordOutcome.RECORDED })
+        assertEquals(15, results.count { it.outcome == StoreRecordOutcome.ALREADY_RECORDED })
+        assertEquals(1, subscriptionRows())
+        assertEquals(2, orderRows())
+        val line = checkNotNull(kit.store.findLiveSubscription("acc_1"))
+        assertEquals(first.subscriptionId, line.id)
+        assertEquals(SubscriptionStatus.ACTIVE, line.status)
+        assertNull(line.endReason)
+        assertEquals(2, kit.listener.paid.size)
+    }
+
+    @Test
     fun `a new token that links to our line ends the old line as replaced in the same step`() {
         val old = record(subscription(txn = "order_1", sub = "hash_old"), basic)
 
