@@ -323,6 +323,8 @@ while IFS= read -r m; do
   fi
   M="$m" perl -ni -e 'print unless /^include\(":modules:\Q$ENV{M}\E"\)\s*$/' settings.gradle.kts
   [ ! -f docs/modules/README.md ] || M="$m" perl -ni -e 'print unless /\]\(\Q$ENV{M}\E\.md\)/' docs/modules/README.md
+  # 배포 문서가 이 모듈 문서로 건 링크는 글자만 남긴다(빠진 문서로 가는 깨진 링크가 남지 않게)
+  [ ! -f docs/deploy.md ] || M="$m" perl -pi -e 's/\[([^\]]+)\]\(modules\/\Q$ENV{M}\E\.md\)/$1/g' docs/deploy.md
 done <<EOF
 $REMOVED
 EOF

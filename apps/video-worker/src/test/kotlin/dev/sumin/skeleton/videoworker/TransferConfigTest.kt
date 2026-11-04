@@ -74,7 +74,7 @@ class TransferConfigTest {
         assertFalse(c.toString().contains("secret-token-value"))
         assertFailsWith<IllegalStateException> { WorkerConfig.fromEnv(env - "VIDEO_WORKER_TOKEN") }
         assertFailsWith<IllegalArgumentException> { WorkerConfig.fromEnv(env + ("VIDEO_WORKER_LANES" to "REMUX,WARP")) }
-        assertEquals(setOf("REMUX", "COMPAT", "LADDER"), WorkerConfig.fromEnv(env - "VIDEO_WORKER_LANES").lanes)
+        assertEquals(setOf("REMUX", "COMPAT", "LADDER", "ANIMATED"), WorkerConfig.fromEnv(env - "VIDEO_WORKER_LANES").lanes)
     }
 
     @Test

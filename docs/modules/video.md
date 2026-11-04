@@ -3,7 +3,7 @@
 영상 올리기 · 재생 · 삭제 — 브라우저가 파일을 객체 저장소(R2 등 S3 호환)로 **직접** 멀티파트로 올리고, 서버는 시작 · 조각 주소 · 조각 목록 · 마침(크기 확인)만 한다. 새로 고친 뒤에도 같은 파일을 다시 고르면 빠진 조각만 이어 올린다.
 올리기 뒤의 변환(원본 단 → 호환 단 → 사다리)은 **서버가 아니라 일꾼**(`apps/video-worker`)이 한다 — 서버는 일꾼을 부르지 않고, 어디서든 같은 이미지가 일꾼 토큰으로 서버 API 를 불러 일을 집어 간다. 이 모듈은 그 일꾼 API · 임대 · 결과 검증 · 후속(`VideoEvents`)을 맡는다. 재생 허가 · 삭제 · 운영자 삭제는 아래에 있다. 저장은 포트(`VideoStore`)이고 구현은 `video-jdbc` 가 낸다.
 
-**켜기**: 모듈 기본은 **꺼짐** — 앱 yml 이 `skeleton.video.enabled=true`. 켰는데 `VideoStore` · `VideoWorkerStore` · `VideoFollowUps` · `VideoTransactions`(`video-jdbc` + `job-queue-jdbc`) · `PresignedStorage`(`storage-s3`)가 없거나 영상 키 구역이 업로드 · 공개 구역과 겹치거나 재생 비밀(`skeleton.video.playback.secret`, 환경변수 `<P>_VIDEO_PLAYBACK_SECRET` — 선언의 `secrets:`)이 비었거나 32자보다 짧으면 **기동 실패**다.
+**켜기**: 모듈 기본은 **꺼짐** — 앱 yml 이 `skeleton.video.enabled=true`. 켰는데 `VideoStore` · `VideoWorkerStore` · `VideoFollowUps` · `VideoTransactions`(`video-jdbc` + `job-queue-jdbc`) 가 없거나 영상 키 구역이 업로드 · 공개 구역과 겹치거나 재생 비밀(`skeleton.video.playback.secret`, 환경변수 `<P>_VIDEO_PLAYBACK_SECRET` — 선언의 `secrets:`)이 비었거나 32자보다 짧으면 **기동 실패**다. 객체 저장소(`PresignedStorage` - `storage-s3` 에 버킷을 준 환경)가 없으면 실패가 아니라 영상 모듈이 통째로 빠진다(`storage-image` 와 같다 - 저장소 설정 없이 환경변수만으로 부팅하는 앱이 그대로 뜬다).
 
 **경로**(서블릿 웹 앱 + Spring Security 가 있을 때, 로그인한 사람만 — 익명 401. 응답은 `{value: …}` 봉투):
 
@@ -67,7 +67,7 @@
 | 컴파일 전용 | `scheduler`, `alert`, `storage-image` |
 | 설정 접두사 | `skeleton.video` — [docs/config/modules/video.yml](../config/modules/video.yml) |
 | 기본 동작 | 꺼짐. 앱 yml 이 `skeleton.video.enabled=true` 로 켜면 올리기 서비스 · 일꾼 일 서비스 · 기본 정책 · 청소가 서고, 서블릿 앱(+ Spring Security)이면 `/api/v1/videos` · 일꾼 API · 운영자 일꾼 발급도 켜진다. |
-| 부팅에 필요한 것 | 켰을 때 `TimeProvider`(platform), `PresignedStorage`(storage-s3), 재생 비밀 `skeleton.video.playback.secret`(32자 이상), `VideoStore` · `VideoWorkerStore` · `VideoFollowUps` · `VideoTransactions`(video-jdbc, 작업 큐 `job-queue-jdbc` 필요) 빈. 없으면 기동 실패. |
+| 부팅에 필요한 것 | 켰을 때 `TimeProvider`(platform), 재생 비밀 `skeleton.video.playback.secret`(32자 이상), `VideoStore` · `VideoWorkerStore` · `VideoFollowUps` · `VideoTransactions`(video-jdbc, 작업 큐 `job-queue-jdbc` 필요) 빈. 없으면 기동 실패. `PresignedStorage` 빈이 없으면 모듈이 꺼진 채 뜬다. |
 | 교체 지점 | `VideoAccessPolicy`, `VideoQuota`, `VideoEvents`, `VideoWaker`, `VideoWorkerInputs`, `VideoPlayback`, `VideoOperatorPolicy`, `VideoStore`, `VideoWorkerStore`, `VideoController`, `VideoPlaylistController`, `VideoWorkerController`, `videoCleanupTask` |
 | 마이그레이션 | 없음 (`video-jdbc` 가 가진다) |
 | 프론트 짝 | `@skeleton/video` |
