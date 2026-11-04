@@ -202,7 +202,7 @@ class PaymentLedgerKit(
     val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties, couponDiscounts = discounts, scheduleDiscounts = subscriptionDiscounts)
     val planChanges = SubscriptionPlanChanges(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, writer, properties)
     val revoke = SubscriptionRevokeTaskHandler(store, router, ReversibleTestEncryptor, writer)
-    val cancellations = SubscriptionCancellations(store, plans, cancelPolicies, usage, lifecycle, refunds, convergence, tasks, writer, properties)
+    val cancellations = SubscriptionCancellations(store, router, plans, cancelPolicies, usage, lifecycle, refunds, convergence, tasks, writer, properties)
     val cancelRefund = SubscriptionCancelRefundTaskHandler(store, cancellations)
 
     /** 앱의 갱신 판단 대역 — [blocked] 에 든 계정은 갱신하지 않는다. */

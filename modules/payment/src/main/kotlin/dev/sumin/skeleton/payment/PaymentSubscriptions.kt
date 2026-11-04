@@ -355,6 +355,7 @@ class PaymentSubscriptions(
      */
     private fun asProviderCancel(accountId: String, subscriptionId: String) {
         val subscription = owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
+        if (router.isStore(subscription.provider)) throw PaymentSubscriptionManagedByStoreException() // 스토어가 과금한다 - 해지는 스토어의 구독 관리 화면에서
         val providerId = subscription.providerSubscriptionId ?: return
         if (subscription.status != SubscriptionStatus.ACTIVE && subscription.status != SubscriptionStatus.PAST_DUE) return
         store.requireNoOpenTransaction("PaymentSubscriptions.cancel")

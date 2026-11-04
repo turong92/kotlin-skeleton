@@ -154,6 +154,11 @@ enum class PaymentErrorCode(
         status = HttpStatus.CONFLICT,
         title = "The subscription cannot be canceled now",
     ),
+    SUBSCRIPTION_MANAGED_BY_STORE(
+        code = "PAYMENT.SUBSCRIPTION_MANAGED_BY_STORE",
+        status = HttpStatus.CONFLICT,
+        title = "The subscription is managed by the app store",
+    ),
     SUBSCRIPTION_CHARGE_IN_PROGRESS(
         code = "PAYMENT.SUBSCRIPTION_CHARGE_IN_PROGRESS",
         status = HttpStatus.CONFLICT,

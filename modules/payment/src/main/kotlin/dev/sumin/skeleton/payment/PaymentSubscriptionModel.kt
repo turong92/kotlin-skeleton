@@ -49,6 +49,9 @@ enum class SubscriptionEndReason {
 
     /** 그 기간의 결제가 전액 환불됐다. */
     REFUNDED,
+
+    /** 다른 구독이 이어받았다(구글 스토어의 올리기 · 다시 구독: 새 구매 토큰이 옛 토큰을 가리킨다). */
+    REPLACED,
 }
 
 /**

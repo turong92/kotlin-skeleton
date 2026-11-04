@@ -55,8 +55,8 @@ class PaymentSubscriptionAutoConfiguration {
         val plansBean = plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean (the app owns the plans and prices)")
         val encryptorBean = encryptor.getIfAvailable()
             ?: error("skeleton.payment.subscription.enabled=true needs an encryption key to store billing keys: set skeleton.crypto.keys (the crypto module's TextEncryptor); with skeleton.projects give each project its own skeleton.projects.<id>.config.crypto.keys.<id> (projects must not share key bytes)")
-        check(router.anyGateway(PaymentBillingGateway::class) || router.anyGateway(PaymentHostedSubscriptionGateway::class)) {
-            "skeleton.payment.subscription.enabled=true needs a payment provider with the billing capability (PaymentBillingGateway, e.g. payment-toss) or one that renews by itself (PaymentHostedSubscriptionGateway, e.g. payment-paddle)"
+        check(router.anyGateway(PaymentBillingGateway::class) || router.anyGateway(PaymentHostedSubscriptionGateway::class) || router.anyGateway(PaymentStoreGateway::class)) {
+            "skeleton.payment.subscription.enabled=true needs a payment provider with the billing capability (PaymentBillingGateway, e.g. payment-toss) or one that renews by itself (PaymentHostedSubscriptionGateway, e.g. payment-paddle; PaymentStoreGateway, e.g. payment-appstore)"
         }
         // 프로젝트 모드: 빌링키를 받는 결제사를 켠 프로젝트는 빌링키를 암호화할 자기 키가 있어야 한다 — 카드를 받은 뒤에야 못 저장하는 일이 없게 기동 때 막는다
         projects.getIfAvailable()?.let { registry ->
@@ -152,6 +152,7 @@ class PaymentSubscriptionAutoConfiguration {
     @ConditionalOnMissingBean
     fun subscriptionCancellations(
         store: PaymentLedgerStore,
+        router: PaymentProviderRouter,
         plans: ObjectProvider<SubscriptionPlans>,
         policies: SubscriptionCancelPolicies,
         usage: SubscriptionUsageCheck,
@@ -163,6 +164,7 @@ class PaymentSubscriptionAutoConfiguration {
         properties: PaymentProperties,
     ): SubscriptionCancellations = SubscriptionCancellations(
         store,
+        router,
         plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean"),
         policies,
         usage,

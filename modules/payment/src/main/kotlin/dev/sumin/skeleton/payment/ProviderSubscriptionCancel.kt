@@ -19,6 +19,7 @@ class ProviderSubscriptionCancelTaskHandler(
         val provider = run.subjectId.substringBefore(':', "")
         val providerSubscriptionId = run.subjectId.substringAfter(':', "")
         if (provider.isEmpty() || providerSubscriptionId.isEmpty()) throw PaymentTaskPermanentException("The provider subscription cancel task has an unreadable subject")
+        if (router.isStore(provider)) return // 스토어가 과금하는 구독은 서버가 해지하지 않는다 (탈퇴하면 앱이 「스토어에서 해지하세요」를 안내한다)
         val gateway = try {
             router.gateway(provider, PaymentHostedSubscriptionGateway::class)
         } catch (e: PaymentProviderNotFoundException) {

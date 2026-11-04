@@ -465,6 +465,7 @@ CS 처럼 `payment.read` + `payment.refund` 만 가진 역할은 환불 줄만 �
 | `PAYMENT.ORDER_CLOSE_NEEDS_CONFIRMATION` | 409 | 운영자 — 막힌 구독 결제 닫기: 주문 번호로 결제를 물을 수 없는 결제사(카카오페이)의 결제 키 없는 주문은 「없다」는 대답이 결제가 없다는 뜻이 아니다(응답이 유실된 승인이 돈을 받았을 수 있다) - 본문 `confirmedAtProvider: true` 없이는 닫지 않는다 |
 | `PAYMENT.ORDER_NOT_CLOSABLE` | 409 | 운영자 — 막힌 구독 결제 닫기: 구독 결제가 아니다 · `CONFIRMING` 이 아니다 · 결제사가 아직 처리 중이다 |
 | `PAYMENT.SUBSCRIPTION_CANCEL_NOT_ALLOWED` | 409 | 구독 중도 해지 - 이용 중(`ACTIVE` · `CANCELING`)이 아니다 · 이 구독의 나라 정책이 중도 해지를 닫았다 |
+| `PAYMENT.SUBSCRIPTION_MANAGED_BY_STORE` | 409 | 앱 스토어가 과금하는 구독 - 서버는 해지 · 중도 해지 · 플랜 변경을 하지 않는다(앱이 스토어의 구독 관리 화면을 연다) |
 | `PAYMENT.SUBSCRIPTION_CHARGE_IN_PROGRESS` | 409 | 구독 중도 해지 - 갱신 · 변경 결제가 아직 오가는 중이다(끝난 뒤 다시) |
 | `PAYMENT.PLAN_CHANGE_NOT_ALLOWED` | 409 | 구독 플랜 변경 — 꺼져 있다 · 이용 중(`ACTIVE`)이 아니다 · 위 등급이 아니다 · 주기 · 통화가 다르다 · 과금 중인 주문이 있다 |
 | `PAYMENT.PLAN_CHANGE_CHARGE_CHANGED` | 409 | 구독 플랜 변경 — 서버가 다시 계산한 금액이 호출자가 본 금액보다 크다 |
@@ -517,7 +518,7 @@ CS 처럼 `payment.read` + `payment.refund` 만 가진 역할은 환불 줄만 �
 | `currentPeriodStart` · `currentPeriodEnd` | 지금 기간. `currentPeriodEnd` = 다음 결제일(`CANCELING` 이면 이용이 끝나는 날) |
 | `pendingPlanCode` | 플랜 변경의 결제가 확인 중이면 바뀔 플랜 코드(`planCode` 는 아직 옛 플랜), 아니면 `null` |
 | `attempt` | 이번 기간의 시도 번호 — `PAST_DUE` 에서 몇 번째 재시도인지 |
-| `endReason` | `ENDED` 일 때: `FIRST_PAYMENT_DECLINED` · `USER_CANCELED` · `USER_CANCELED_NOW`(중도 해지) · `PAYMENT_FAILED` · `ACCOUNT_ERASED` · `RENEWAL_BLOCKED` · `REFUNDED` |
+| `endReason` | `ENDED` 일 때: `FIRST_PAYMENT_DECLINED` · `USER_CANCELED` · `USER_CANCELED_NOW`(중도 해지) · `PAYMENT_FAILED` · `ACCOUNT_ERASED` · `RENEWAL_BLOCKED` · `REFUNDED` · `REPLACED`(다른 구독이 이어받음 - 스토어) |
 | `card` `{issuer, last4}` · `testMode` · `createdAt` | 화면 표시용 카드(끝나면 `null`) |
 | `discount` | 할인이 붙은 구독이면 `{ label, stages: [{type: "FREE"\|"PERCENT"\|"FIXED", value, maxDiscount\|null, periods\|null}], periodsUsed, nextAmount, remainingPeriods\|null }`, 아니면(끝난 할인 포함) `null`. 칸은 늘 온다. `stages` 는 시작 때 복사한 단계(쿠폰 정의를 고쳐도 그대로), `nextAmount` 는 다음 결제액(최소 단위, 구독 통화), `remainingPeriods` 는 남은 할인 횟수(영원이면 `null`). `amount` 는 늘 **정가**(할인 전 박힌 금액)다 |
 

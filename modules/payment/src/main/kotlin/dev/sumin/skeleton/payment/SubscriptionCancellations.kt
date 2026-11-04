@@ -22,6 +22,7 @@ data class CancelNowResult(val subscription: PaymentSubscription, val quote: Can
  */
 class SubscriptionCancellations(
     private val store: PaymentLedgerStore,
+    private val router: PaymentProviderRouter,
     private val plans: SubscriptionPlans,
     private val policies: SubscriptionCancelPolicies,
     private val usage: SubscriptionUsageCheck,
@@ -45,6 +46,7 @@ class SubscriptionCancellations(
         store.requireNoOpenTransaction("SubscriptionCancellations.cancelNow")
         val ended = store.inTransaction { tx ->
             val locked = owned(tx.lockSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
+            if (router.isStore(locked.provider)) throw PaymentSubscriptionManagedByStoreException()
             if (locked.status == SubscriptionStatus.ENDED && locked.endReason == SubscriptionEndReason.USER_CANCELED_NOW) return@inTransaction locked // 같은 요청의 재전송
             if (!locked.status.isInUse) throw PaymentSubscriptionCancelNotAllowedException()
             if (!lifecycle.isSettled(locked.chargeOrderId?.let(store::findOrder))) throw PaymentSubscriptionChargeInProgressException()

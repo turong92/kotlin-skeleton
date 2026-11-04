@@ -191,6 +191,12 @@ class PaymentSubscriptionNotCancelableException : ApplicationException(
     errorCode = PaymentErrorCode.SUBSCRIPTION_NOT_CANCELABLE,
 )
 
+/** 앱 스토어가 과금하는 구독이라 서버가 해지 · 중도 해지 · 플랜 변경을 할 수 없다 - 앱이 스토어의 구독 관리 화면을 연다. */
+class PaymentSubscriptionManagedByStoreException : ApplicationException(
+    message = "This subscription is managed by the app store.",
+    errorCode = PaymentErrorCode.SUBSCRIPTION_MANAGED_BY_STORE,
+)
+
 /** 중도 해지를 할 수 없다 — 이용 중이 아니다 · 이 나라의 정책이 중도 해지를 닫았다. */
 class PaymentSubscriptionCancelNotAllowedException : ApplicationException(
     message = "This subscription cannot be canceled now with a refund.",

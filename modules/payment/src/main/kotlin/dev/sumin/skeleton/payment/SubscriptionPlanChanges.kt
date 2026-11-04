@@ -63,6 +63,7 @@ class SubscriptionPlanChanges(
 
     fun preview(accountId: String, subscriptionId: String, planCode: String): PlanChangeQuote {
         val subscription = owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
+        if (router.isStore(subscription.provider)) throw PaymentSubscriptionManagedByStoreException()
         return if (subscription.isProviderManaged) hosted(subscription, planCode).quote else quote(subscription, planCode)
     }
 
@@ -73,6 +74,7 @@ class SubscriptionPlanChanges(
     fun change(accountId: String, subscriptionId: String, planCode: String, expectedCharge: Long, key: IdempotencyKey): PaymentSubscription {
         store.requireNoOpenTransaction("PaymentSubscriptions.change")
         val before = owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
+        if (router.isStore(before.provider)) throw PaymentSubscriptionManagedByStoreException()
         if (before.isProviderManaged) return changeHosted(before, planCode, expectedCharge)
         val dedupeKey = "subchg:$subscriptionId:${PaymentOrderIds.dedupeKey(accountId, key).take(32)}"
         if (store.findOrderByDedupeKey(dedupeKey) != null) return before // 같은 요청의 재전송 — 이미 했다
