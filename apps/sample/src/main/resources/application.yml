@@ -240,6 +240,42 @@ skeleton:
       cheer-1000: ${PADDLE_PRICE_CHEER_1000:}
       cheer-3000: ${PADDLE_PRICE_CHEER_3000:}
       cheer-5000: ${PADDLE_PRICE_CHEER_5000:}
+  # 앱 인앱결제(App Store · Google Play) — 서버는 앱이 보낸 영수증을 믿지 않고 스토어에 직접 물어 확인한 뒤에만 지급한다. 장부(payment-jdbc)가 있어서 HTTP 가 서고(GET /api/v1/payments/iap/config),
+  # 스토어 둘은 꺼진 채 시작한다 - 키 없이 뜨면 /iap/config 의 store 가 null 이고 구매 확인은 503 이다. 켜는 법 · 스토어 콘솔 절차: docs/real-provider-setup.md, 비밀 이름: docs/deploy.md §7.
+  payment-iap:
+    enabled: true
+    web-checkout-url: ${SKELETON_PAYMENT_IAP_WEB_CHECKOUT_URL:}   # 웹 결제(토스) 화면 주소 - 채널에 웹이 드는 값을 켤 때만 필요하다(예: https://app.example.com/cheer). 비밀 아님
+    channels:
+      default: IAP_ONLY                 # 지역 스위치 꺼짐 - 모든 나라 · 플랫폼이 인앱결제만. 웹으로 보내는 나라는 아래처럼 켠다(규정 확인 뒤에)
+      # countries:
+      #   US:
+      #     ios: IAP_AND_WEB            # 2026-11 기준 앱 안 링크가 자유로운 곳은 미국뿐이다. 켜면 web-checkout-url 이 필요하고(없으면 기동 실패), 웹 로그인은 아래 auth-web-handoff 의 자동 로그인 주소가 이어 준다
+      #     android: IAP_ONLY
+    products:                           # 상품 지도 - 스토어 상품 id 가 우리 쪽 무엇인지. 지도에 없는 상품은 지급하지 않는다(422). 금액의 출처는 스토어다
+      - item-type: cheer                # 단건(소모성): 응원 3,000원 = cheer/CheerCatalog 의 cheer-3000
+        item-ref: cheer-3000
+        ios-product-id: com.example.sample.cheer3000
+        play-product-id: cheer_3000
+      - plan: standard                  # 월 구독: catalog 씨앗의 스탠다드 플랜. 구독을 켠 앱에서만 지급된다(SKELETON_PAYMENT_SUBSCRIPTION_ENABLED=true)
+        ios-product-id: com.example.sample.standard.monthly
+        play-product-id: standard
+        play-base-plan-id: monthly
+  payment-appstore:                                          # 켜기: SKELETON_PAYMENT_APPSTORE_ENABLED=true. 다섯 값이 모두 있어야 서고, 하나라도 비면 이 스토어만 없다(보호 환경은 기동 실패)
+    enabled: ${SKELETON_PAYMENT_APPSTORE_ENABLED:false}
+    bundle-id: ${SKELETON_PAYMENT_APPSTORE_BUNDLE_ID:}       # 앱의 번들 id (비밀 아님)
+    app-apple-id: ${SKELETON_PAYMENT_APPSTORE_APP_APPLE_ID:} # 앱의 App Store 숫자 id (비밀 아님)
+    issuer-id: ${SKELETON_PAYMENT_APPSTORE_ISSUER_ID:}       # App Store Connect 인앱 구매 키의 Issuer ID (비밀 아님)
+    key-id: ${SKELETON_PAYMENT_APPSTORE_KEY_ID:}             # 그 키의 Key ID (비밀 아님)
+    private-key: ${SKELETON_PAYMENT_APPSTORE_PRIVATE_KEY:}   # 그 키(.p8)의 PKCS#8 PEM 본문 - 비밀, 커밋하지 않는다
+  payment-googleplay:                                        # 켜기: SKELETON_PAYMENT_GOOGLEPLAY_ENABLED=true. 네 값이 모두 있어야 서고, 하나라도 비면 이 스토어만 없다(보호 환경은 기동 실패)
+    enabled: ${SKELETON_PAYMENT_GOOGLEPLAY_ENABLED:false}
+    package-name: ${SKELETON_PAYMENT_GOOGLEPLAY_PACKAGE_NAME:}   # 앱의 패키지 이름 (비밀 아님)
+    service-account: ${SKELETON_PAYMENT_GOOGLEPLAY_SERVICE_ACCOUNT:}   # 서비스 계정 키 JSON 의 base64 - 비밀, 커밋하지 않는다
+    pubsub:
+      audience: ${SKELETON_PAYMENT_GOOGLEPLAY_PUBSUB_AUDIENCE:}   # Pub/Sub push 구독에 적은 토큰 대상 - 보통 https://<서비스 주소>/api/v1/payments/webhooks/googleplay (비밀 아님)
+      service-account-email: ${SKELETON_PAYMENT_GOOGLEPLAY_PUBSUB_SERVICE_ACCOUNT_EMAIL:}   # push 구독이 OIDC 토큰을 만들 때 쓰는 서비스 계정 (비밀 아님)
+  auth-web-handoff:
+    enabled: true                       # 앱 -> 웹 한 번 쓰는 자동 로그인 코드(수명 2분 · 1회). 코드를 내는 payment-iap 의 web-checkout-link 는 채널에 웹이 들 때만 열린다 - 지금(IAP_ONLY)은 쓰이지 않는다
   http:
     clients:
       payment-toss:

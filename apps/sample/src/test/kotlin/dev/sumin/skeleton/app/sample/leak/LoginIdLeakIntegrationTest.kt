@@ -197,6 +197,8 @@ class LoginIdLeakIntegrationTest {
         if (template == "/api/v1/admin/coupons") paths = listOf(w.xAcc, w.yAcc).map { "$template?accountId=$it" }
         // 공지 대상 수 미리보기는 `kind` 가 필수다
         if (template == "/api/v1/admin/broadcasts/audience-count") paths = listOf("$template?kind=all", "$template?kind=role&param=USER")
+        // 앱 인앱결제 설정은 `platform` 이 필수다 - 두 플랫폼으로 훑는다
+        if (template == "/api/v1/payments/iap/config") paths = listOf("$template?platform=ios&storefront=KR", "$template?platform=android")
         // 출석 달력은 `month` 가 필수다
         if (template.endsWith("/attendance")) paths = paths.map { "$it?month=${java.time.YearMonth.now()}" }
         return paths

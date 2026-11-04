@@ -56,6 +56,10 @@ dependencies {
     implementation(project(":modules:payment-kakaopay"))   // 카카오페이 직접 연동(토스 계약 없이) — 꺼진 채 시작한다: SKELETON_PAYMENT_KAKAOPAY_ENABLED=true + SECRET_KEY · CID · RETURN_URL (docs/real-provider-setup.md). 토스와 함께 켜면 결제 화면에서 고른다
     implementation(project(":modules:payment-naverpay"))   // 네이버페이 직접 연동(토스 계약 없이) — 꺼진 채 시작한다: SKELETON_PAYMENT_NAVERPAY_ENABLED=true + MODE · CLIENT_ID · CLIENT_SECRET · CHAIN_ID · RETURN_URL (docs/real-provider-setup.md). 카카오페이 · 토스와 함께 켜면 결제 화면에서 고른다
     implementation(project(":modules:payment-paddle"))     // Paddle(해외 결제) — 꺼진 채 시작한다: SKELETON_PAYMENT_PADDLE_ENABLED=true + PADDLE_API_KEY · PADDLE_CLIENT_TOKEN · PADDLE_WEBHOOK_SECRET. 세 비밀 중 하나라도 비면 이 결제사만 없다
+    implementation(project(":modules:payment-iap"))        // 앱 인앱결제의 서버 HTTP(GET /api/v1/payments/iap/config · POST …/{store}/purchases) - 켜진 채 시작하고 지역 스위치는 IAP_ONLY. 상품 지도 = 응원 cheer-3000 + 월 구독 standard (application.yml). docs/modules/payment-iap.md
+    implementation(project(":modules:payment-appstore"))    // App Store 구매 확인 + 서버 알림 V2 - 꺼진 채 시작한다: SKELETON_PAYMENT_APPSTORE_ENABLED=true + PRIVATE_KEY · ISSUER_ID · KEY_ID · BUNDLE_ID · APP_APPLE_ID. 하나라도 비면 이 스토어만 없다(GET /iap/config 의 store 가 null)
+    implementation(project(":modules:payment-googleplay"))  // Google Play 구매 확인 + 실시간 개발자 알림 - 꺼진 채 시작한다: SKELETON_PAYMENT_GOOGLEPLAY_ENABLED=true + SERVICE_ACCOUNT · PACKAGE_NAME · PUBSUB_AUDIENCE · PUBSUB_SERVICE_ACCOUNT_EMAIL
+    implementation(project(":modules:auth-web-handoff"))    // 앱 -> 웹 한 번 쓰는 자동 로그인 코드(POST /api/v1/auth/web-handoff/redeem) - 채널이 IAP_ONLY 면 코드를 내는 쪽(web-checkout-link)이 404 라 쓰이지 않는다. docs/modules/auth-web-handoff.md
     implementation(project(":modules:reward-jdbc"))        // 보상 지급의 허리: 이벤트가 기록한 지급 건을 일꾼이 지급기(쿠폰 · 포인트)로 준다 (+ reward: /api/v1/admin/reward-grants) - docs/modules/reward.md
     implementation(project(":modules:catalog-jdbc"))        // 상품 · 가격 표(월 · 연 · 통화별)와 결제 계약 구현 - docs/modules/catalog.md
     implementation(project(":modules:coupon-jdbc"))        // 쿠폰: 단계 목록 정의 · 쿠폰함 · 공용 코드, 결제 할인 수단 (+ coupon: /api/v1/coupons) - docs/modules/coupon.md
@@ -92,6 +96,8 @@ dependencies {
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation(testFixtures(project(":modules:payment")))   // ScriptedGateway — 결제 통합 시험의 가짜 결제사 (시험 소스에만 있다)
+    testImplementation(testFixtures(project(":modules:payment-appstore")))     // 가짜 App Store 서버 · 시험용 인증서 체인 - 앱 인앱결제 통합 시험
+    testImplementation(testFixtures(project(":modules:payment-googleplay")))   // 가짜 Google Play 서버 · 시험용 OIDC 키
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")

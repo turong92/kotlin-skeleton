@@ -96,7 +96,7 @@ class WriteGateCensusTest {
             "POST /api/v1/auth/magic-link/redeem", "POST /api/v1/auth/magic-link/request",
             "POST /api/v1/auth/mfa/disable", "POST /api/v1/auth/mfa/recovery-codes", "POST /api/v1/auth/mfa/totp/enrollment", "POST /api/v1/auth/mfa/totp/enrollment/confirm", "POST /api/v1/auth/mfa/verify",   // 2단계 인증(auth-mfa) - 이메일이 없어도 켠다
             "POST /api/v1/auth/refresh", "POST /api/v1/auth/social/{provider}/login",
-            "POST /api/v1/auth/verify-email", "POST /api/v1/legal/consents", "POST /api/v1/legal/consents/{type}/withdraw",
+            "POST /api/v1/auth/verify-email", "POST /api/v1/auth/web-handoff/redeem", "POST /api/v1/legal/consents", "POST /api/v1/legal/consents/{type}/withdraw",
         )
 
         /**
@@ -239,8 +239,8 @@ class WriteGateCensusTest {
         val payments = census.filterKeys { it.template.startsWith("/api/v1/payments") && !it.template.startsWith(webhookPrefix) }
         // 사용자 엔드포인트의 변경 메서드가 전부 막혀 있어야 한다 (영수증 · 환불 안내가 갈 주소가 없는 결제를 만들지 않는다, 스펙 §9.3)
         assertTrue(payments.isNotEmpty(), "the sample assembles the payment ledger, so its write endpoints must be in the census")
-        // 구독 쓰기 셋(만들기 · 카드 등록 + 첫 결제 · 해지 예약)도 전수에 있고 같은 문에 막힌다 — 새 구독 경로를 목록에서 빠뜨리지 않았다는 증거
-        listOf("POST /api/v1/payments/subscriptions", "POST /api/v1/payments/subscriptions/{id}/activate", "POST /api/v1/payments/subscriptions/{id}/cancel").forEach { name ->
+        // 구독 쓰기 셋(만들기 · 카드 등록 + 첫 결제 · 해지 예약)와 앱 구매 확인도 전수에 있고 같은 문에 막힌다 — 새 구독 경로를 목록에서 빠뜨리지 않았다는 증거
+        listOf("POST /api/v1/payments/subscriptions", "POST /api/v1/payments/subscriptions/{id}/activate", "POST /api/v1/payments/subscriptions/{id}/cancel", "POST /api/v1/payments/iap/{store}/purchases").forEach { name ->
             assertTrue(payments.keys.any { it.toString() == name }, "$name must be in the census")
         }
         payments.forEach { (route, result) -> assertEquals(Verdict.BLOCKED, result.first, "$route must be refused for an account without an address (it answered ${result.second})") }
