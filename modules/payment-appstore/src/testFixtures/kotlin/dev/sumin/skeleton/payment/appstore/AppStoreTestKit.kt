@@ -34,19 +34,19 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import org.springframework.web.reactive.function.client.WebClient
 
-internal val NOW: Instant = Instant.parse("2026-11-04T10:00:00Z")
-internal const val BUNDLE = "com.example.sample"
-internal const val APP_APPLE_ID = "1234567890"
-internal const val ISSUER = "11111111-2222-3333-4444-555555555555"
-internal const val KEY_ID = "ABC123DEFG"
+val NOW: Instant = Instant.parse("2026-11-04T10:00:00Z")
+const val BUNDLE = "com.example.sample"
+const val APP_APPLE_ID = "1234567890"
+const val ISSUER = "11111111-2222-3333-4444-555555555555"
+const val KEY_ID = "ABC123DEFG"
 
-internal const val INTERMEDIATE_OID = "1.2.840.113635.100.6.2.1"
-internal const val LEAF_OID = "1.2.840.113635.100.6.11.1"
+const val INTERMEDIATE_OID = "1.2.840.113635.100.6.2.1"
+const val LEAF_OID = "1.2.840.113635.100.6.11.1"
 
 private fun ecKeys(): KeyPair = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
 
 /** 시험용 인증서 체인 - 루트 · 중간 · 잎. 애플 체인과 같은 모양(중간 · 잎에 애플 확장 OID, 비-중요 확장)이고, 옵션으로 OID 를 뺀다. */
-internal class TestChain(
+class TestChain(
     val root: X509Certificate,
     val intermediate: X509Certificate,
     val leaf: X509Certificate,
@@ -81,25 +81,25 @@ internal class TestChain(
 }
 
 /** 앱 스토어 서버 API 인증용 .p8 키(PKCS#8 PEM) - 서버가 만든 ES256 JWT 를 시험이 이 공개키로 확인한다. */
-internal class TestApiKey {
+class TestApiKey {
     private val pair = ecKeys()
     val publicKey get() = pair.public as java.security.interfaces.ECPublicKey
     val pem: String = "-----BEGIN PRIVATE KEY-----\n" + java.util.Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(pair.private.encoded) + "\n-----END PRIVATE KEY-----"
 }
 
-internal fun properties(baseUrl: String = "", sandboxBaseUrl: String = "", key: TestApiKey = TestApiKey()) =
+fun properties(baseUrl: String = "", sandboxBaseUrl: String = "", key: TestApiKey = TestApiKey()) =
     AppStoreProperties(enabled = true, bundleId = BUNDLE, appAppleId = APP_APPLE_ID, issuerId = ISSUER, keyId = KEY_ID, privateKey = key.pem, baseUrl = baseUrl, sandboxBaseUrl = sandboxBaseUrl)
 
-internal fun httpClient() = DefaultExternalHttpClient(
+fun httpClient() = DefaultExternalHttpClient(
     webClientBuilder = WebClient.builder(),
     properties = OutboundHttpProperties(defaultConnectTimeout = Duration.ofSeconds(30), defaultResponseTimeout = Duration.ofSeconds(30)),
     defaultErrorMapper = DefaultExternalHttpErrorMapper(),
     customizers = emptyList(),
 )
 
-internal fun verifier(chain: TestChain, now: Instant = NOW) = AppStoreSignatureVerifier(setOf(chain.root), TimeProvider { now })
+fun verifier(chain: TestChain, now: Instant = NOW) = AppStoreSignatureVerifier(setOf(chain.root), TimeProvider { now })
 
-internal fun provider(chain: TestChain, prod: FakeAppStoreServer, sandbox: FakeAppStoreServer, key: TestApiKey = TestApiKey()) = AppStorePaymentProvider(
+fun provider(chain: TestChain, prod: FakeAppStoreServer, sandbox: FakeAppStoreServer, key: TestApiKey = TestApiKey()) = AppStorePaymentProvider(
     httpClient = httpClient(),
     properties = properties(prod.baseUrl, sandbox.baseUrl, key),
     verifier = verifier(chain),
@@ -107,7 +107,7 @@ internal fun provider(chain: TestChain, prod: FakeAppStoreServer, sandbox: FakeA
 )
 
 /** 서명한 거래 정보(JWSTransactionDecodedPayload)의 JSON. 금액은 밀리 단위(`price`). */
-internal fun transactionJson(
+fun transactionJson(
     transactionId: String = "2000000000000001",
     originalTransactionId: String = transactionId,
     productId: String = "com.example.sample.cheer3000",
@@ -137,7 +137,7 @@ internal fun transactionJson(
     append("}")
 }
 
-internal fun renewalJson(autoRenewStatus: Int = 1, gracePeriodExpiresDate: Instant? = null, isInBillingRetryPeriod: Boolean = false, autoRenewProductId: String = "com.example.sample.premium.monthly") = buildString {
+fun renewalJson(autoRenewStatus: Int = 1, gracePeriodExpiresDate: Instant? = null, isInBillingRetryPeriod: Boolean = false, autoRenewProductId: String = "com.example.sample.premium.monthly") = buildString {
     append("{\"originalTransactionId\":\"2000000000000010\",\"autoRenewStatus\":$autoRenewStatus,\"autoRenewProductId\":\"$autoRenewProductId\",\"isInBillingRetryPeriod\":$isInBillingRetryPeriod,\"environment\":\"Production\",\"signedDate\":${NOW.toEpochMilli()}")
     if (gracePeriodExpiresDate != null) append(",\"gracePeriodExpiresDate\":${gracePeriodExpiresDate.toEpochMilli()}")
     append("}")
@@ -147,7 +147,7 @@ internal fun renewalJson(autoRenewStatus: Int = 1, gracePeriodExpiresDate: Insta
  * 가짜 앱 스토어 서버 API - 루프백에만 묶고, 시험용 체인으로 서명한 JWS 를 돌려준다. 받은 요청(경로 · 인증 헤더)을 남긴다.
  * `GET /inApps/v1/transactions/{id}` 와 `GET /inApps/v1/subscriptions/{id}` 를 흉내 내며, 모르는 거래는 404(`4040010`)다.
  */
-internal class FakeAppStoreServer(private val chain: TestChain, private val environment: String = "Production") : AutoCloseable {
+class FakeAppStoreServer(private val chain: TestChain, private val environment: String = "Production") : AutoCloseable {
     data class Req(val method: String, val path: String, val auth: String?)
 
     val requests: MutableList<Req> = Collections.synchronizedList(mutableListOf())
@@ -204,7 +204,7 @@ internal class FakeAppStoreServer(private val chain: TestChain, private val envi
 }
 
 /** 알림 한 건의 본문 `{"signedPayload": …}` - 알림 본문(`ResponseBodyV2DecodedPayload`)과 안의 거래 · 갱신 정보를 시험 체인으로 서명한다. */
-internal fun notificationBody(
+fun notificationBody(
     chain: TestChain,
     type: String,
     subtype: String? = null,

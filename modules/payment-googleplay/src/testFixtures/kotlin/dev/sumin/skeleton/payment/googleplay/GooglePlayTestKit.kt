@@ -28,19 +28,19 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import org.springframework.web.reactive.function.client.WebClient
 import tools.jackson.databind.json.JsonMapper
 
-internal val NOW: Instant = Instant.parse("2026-11-04T10:00:00Z")
-internal const val PACKAGE = "com.example.sample"
-internal const val AUDIENCE = "https://api.example.com/api/v1/payments/webhooks/googleplay"
-internal const val PUSH_EMAIL = "pubsub-push@sample-project.iam.gserviceaccount.com"
-internal const val SA_EMAIL = "play-api@sample-project.iam.gserviceaccount.com"
-internal const val ACCOUNT_TOKEN = "6f1c2a3e-0000-4000-8000-000000000001"
+val NOW: Instant = Instant.parse("2026-11-04T10:00:00Z")
+const val PACKAGE = "com.example.sample"
+const val AUDIENCE = "https://api.example.com/api/v1/payments/webhooks/googleplay"
+const val PUSH_EMAIL = "pubsub-push@sample-project.iam.gserviceaccount.com"
+const val SA_EMAIL = "play-api@sample-project.iam.gserviceaccount.com"
+const val ACCOUNT_TOKEN = "6f1c2a3e-0000-4000-8000-000000000001"
 
 private val JSON = JsonMapper.builder().build()
 
 private fun rsaKeys(): KeyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
 
 /** 시험용 서비스 계정 키 - 서버가 만든 JWT assertion 을 가짜 토큰 주소가 이 공개키로 확인한다. */
-internal class TestServiceAccount {
+class TestServiceAccount {
     private val pair = rsaKeys()
     val publicKey get() = pair.public as RSAPublicKey
     val base64: String = run {
@@ -51,7 +51,7 @@ internal class TestServiceAccount {
 }
 
 /** 시험용 구글 OIDC 서명 키 - 가짜 서버의 공개키 주소가 이 공개키를 내놓고, 시험이 push 토큰을 이 키로 서명한다. */
-internal class TestOidc(val kid: String = "test-key-1") {
+class TestOidc(val kid: String = "test-key-1") {
     private val pair = rsaKeys()
     val jwks: String = JWKSet(RSAKey.Builder(pair.public as RSAPublicKey).keyID(kid).build()).toString()
 
@@ -73,7 +73,7 @@ internal class TestOidc(val kid: String = "test-key-1") {
     }
 }
 
-internal fun properties(server: FakePlayServer, account: TestServiceAccount = TestServiceAccount()) = GooglePlayProperties(
+fun properties(server: FakePlayServer, account: TestServiceAccount = TestServiceAccount()) = GooglePlayProperties(
     enabled = true,
     packageName = PACKAGE,
     serviceAccount = account.base64,
@@ -83,24 +83,24 @@ internal fun properties(server: FakePlayServer, account: TestServiceAccount = Te
     certsUrl = "${server.baseUrl}/certs",
 )
 
-internal fun httpClient() = DefaultExternalHttpClient(
+fun httpClient() = DefaultExternalHttpClient(
     webClientBuilder = WebClient.builder(),
     properties = OutboundHttpProperties(defaultConnectTimeout = Duration.ofSeconds(30), defaultResponseTimeout = Duration.ofSeconds(30)),
     defaultErrorMapper = DefaultExternalHttpErrorMapper(),
     customizers = emptyList(),
 )
 
-internal fun provider(server: FakePlayServer, account: TestServiceAccount = TestServiceAccount()) =
+fun provider(server: FakePlayServer, account: TestServiceAccount = TestServiceAccount()) =
     GooglePlayPaymentProvider(httpClient(), properties(server, account), TimeProvider { NOW })
 
 // --- 구글 응답 모양 ---
 
-internal fun money(currency: String, units: Long, nanos: Int = 0) = """{"currencyCode":"$currency","units":"$units","nanos":$nanos}"""
+fun money(currency: String, units: Long, nanos: Int = 0) = """{"currencyCode":"$currency","units":"$units","nanos":$nanos}"""
 
-internal fun orderJson(orderId: String, currency: String = "KRW", units: Long = 3000, nanos: Int = 0, state: String = "PROCESSED", createTime: Instant = NOW.minusSeconds(3600)) =
+fun orderJson(orderId: String, currency: String = "KRW", units: Long = 3000, nanos: Int = 0, state: String = "PROCESSED", createTime: Instant = NOW.minusSeconds(3600)) =
     """{"orderId":"$orderId","state":"$state","createTime":"$createTime","total":${money(currency, units, nanos)}}"""
 
-internal fun productJson(
+fun productJson(
     productId: String = "cheer3000",
     orderId: String? = "GPA.3300-0000-0000-00001",
     state: String = "PURCHASED",
@@ -120,7 +120,7 @@ internal fun productJson(
     append(""""purchaseCompletionTime":"${NOW.minusSeconds(3600)}"}""")
 }
 
-internal fun subscriptionJson(
+fun subscriptionJson(
     productId: String = "premium",
     basePlanId: String = "monthly",
     state: String = "SUBSCRIPTION_STATE_ACTIVE",
@@ -143,22 +143,22 @@ internal fun subscriptionJson(
 }
 
 /** Pub/Sub push 본문 - `message.data` 는 RTDN(DeveloperNotification) JSON 의 base64 이다. */
-internal fun pushBody(notification: String, messageId: String = "7000000000001"): String {
+fun pushBody(notification: String, messageId: String = "7000000000001"): String {
     val data = Base64.getEncoder().encodeToString(notification.toByteArray())
     return """{"message":{"data":"$data","messageId":"$messageId","publishTime":"$NOW"},"subscription":"projects/sample-project/subscriptions/play-rtdn"}"""
 }
 
-internal fun subscriptionNotification(type: Int, token: String, packageName: String = PACKAGE, subscriptionId: String = "premium") =
+fun subscriptionNotification(type: Int, token: String, packageName: String = PACKAGE, subscriptionId: String = "premium") =
     """{"version":"1.0","packageName":"$packageName","eventTimeMillis":"${NOW.toEpochMilli()}","subscriptionNotification":{"version":"1.0","notificationType":$type,"purchaseToken":"$token","subscriptionId":"$subscriptionId"}}"""
 
-internal fun voidedNotification(token: String, orderId: String, productType: Int = 2, refundType: Int = 1, packageName: String = PACKAGE) =
+fun voidedNotification(token: String, orderId: String, productType: Int = 2, refundType: Int = 1, packageName: String = PACKAGE) =
     """{"version":"1.0","packageName":"$packageName","eventTimeMillis":"${NOW.toEpochMilli()}","voidedPurchaseNotification":{"purchaseToken":"$token","orderId":"$orderId","productType":$productType,"refundType":$refundType}}"""
 
 /**
  * 가짜 Google 서버 - 루프백에만 묶는다. 토큰 주소(`/token`, 서비스 계정 assertion 을 시험용 공개키로 확인) · androidpublisher(productsv2 · subscriptionsv2 · orders · acknowledge) ·
  * OIDC 공개키(`/certs`)를 흉내 낸다. 받은 요청을 남긴다. 모르는 토큰 · 주문은 404.
  */
-internal class FakePlayServer(private val account: TestServiceAccount? = null, private val oidc: TestOidc? = null) : AutoCloseable {
+class FakePlayServer(private val account: TestServiceAccount? = null, private val oidc: TestOidc? = null) : AutoCloseable {
     data class Req(val method: String, val path: String, val auth: String?, val body: String)
 
     val requests: MutableList<Req> = Collections.synchronizedList(mutableListOf())
