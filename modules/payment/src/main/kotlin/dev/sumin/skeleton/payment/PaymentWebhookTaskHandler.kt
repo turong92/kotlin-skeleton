@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment
 
+import dev.sumin.skeleton.common.http.ExternalHttpException
 import org.slf4j.LoggerFactory
 
 /**
@@ -95,6 +96,10 @@ class PaymentWebhookTaskHandler(
         }
         val pushedEvent = try {
             event.payload?.let(gateway::interpret)?.let { withBuyerCountry(gateway, it) }
+        } catch (e: ExternalHttpException) {
+            // 해석이 외부 호출을 하는 결제사(구글 RTDN)의 일시 실패 - 원문은 멀쩡하다. 줄을 죽이지 않고 다시 한다
+            log.warn("pushed webhook event={} could not be read now attempt={}/{} exception={}", id, run.attempt, run.maxAttempts, e.javaClass.simpleName)
+            throw retry(id, WebhookCodes.LOOKUP_UNAVAILABLE, "Webhook event $id could not be read right now")
         } catch (e: Exception) {
             log.warn("pushed webhook event={} could not be read exception={}", id, e.javaClass.simpleName)
             fail(id, PAYLOAD_UNREADABLE, dead = true)

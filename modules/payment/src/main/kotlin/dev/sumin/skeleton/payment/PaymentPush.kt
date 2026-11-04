@@ -64,6 +64,8 @@ data class PushedPayment(
     val subscriptionChange: Boolean = false,
     /** 구매자 주소의 나라(ISO-3166 두 글자) - 처리 작업이 락 밖에서 물어 채운다. 못 물었으면 null. */
     val buyerCountry: String? = null,
+    /** 이 거래의 모드 - null 이면 결제사(게이트웨이)의 모드를 따른다. 스토어는 거래마다 다르다(샌드박스 · 테스트 구매는 `TEST`). */
+    val mode: PaymentMode? = null,
 ) : PushedPaymentEvent
 
 /** 결제 시도가 실패했다(카드 거절 등). 거래는 열려 있어 같은 거래로 다시 결제할 수 있다 - 장부는 상태를 바꾸지 않고 이력 한 줄만 남긴다. [errorCode] 는 결제사가 준 사유 코드(설명 문장은 싣지 않는다). */
@@ -106,6 +108,8 @@ data class PushedRefund(
     val warning: Boolean = false,
     /** 환불이 걸린 거래의 결제사 구독 id(구독 거래면). 결제 웹훅보다 먼저 온 갱신 거래의 환불이 우리 것인지 가리는 데만 쓴다. */
     val providerSubscriptionId: String? = null,
+    /** 이 거래의 모드 - null 이면 결제사(게이트웨이)의 모드를 따른다. 스토어는 거래마다 다르다(샌드박스 · 테스트 구매는 `TEST`). */
+    val mode: PaymentMode? = null,
 ) : PushedPaymentEvent
 
 enum class PushedSubscriptionStatus { ACTIVE, PAST_DUE, CANCELING, ENDED }
@@ -128,6 +132,8 @@ data class PushedSubscription(
     val items: List<PushedItem> = emptyList(),
     /** 앞으로 갱신마다 내는 금액(세금 포함) - 사건이 실었을 때만. 플랜을 맞출 때 금액도 같이 맞추는 데 쓴다. */
     val amount: PaymentAmount? = null,
+    /** 이 거래의 모드 - null 이면 결제사(게이트웨이)의 모드를 따른다. 스토어는 거래마다 다르다(샌드박스 · 테스트 구매는 `TEST`). */
+    val mode: PaymentMode? = null,
 ) : PushedPaymentEvent
 
 /**

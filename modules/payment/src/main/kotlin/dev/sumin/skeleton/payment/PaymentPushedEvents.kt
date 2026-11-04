@@ -3,7 +3,7 @@ package dev.sumin.skeleton.payment
 import org.slf4j.LoggerFactory
 
 /**
- * 서명된 웹훅이 곧 사실인 결제사([PaymentPushGateway])의 사건을 장부에 옮긴다 - 결제(단건 · 구독)와 구독 상태. **조회하지 않는다**: 서명이 진위를, 결제사가 말한 금액 · 통화가 사실을 보증한다.
+ * 서명된 웹훅이 곧 사실인 결제사([PaymentPushGateway])의 사건을 장부에 옮긴다 - 결제(단건 · 구독)와 구독 상태. 사건의 `mode` 가 있으면(스토어: 거래마다 다르다) 결제사의 모드 대신 그것이 줄 · 주문의 모드와 맞아야 한다. **조회하지 않는다**: 서명이 진위를, 결제사가 말한 금액 · 통화가 사실을 보증한다.
  *
  * **무엇을 샀는지는 서버가 정했다**: 결제사의 거래는 서버가 먼저 만들었고(가격 · 수량 · 우리 줄 id 는 서버가 정한 값, [PaymentTransactionGateway]) 거래 id 가 우리 줄에 저장돼 있다.
  * 웹훅은 그 **거래 id 로만** 줄을 찾는다 - 단건은 주문의 결제 키, 구독의 첫 결제는 구독의 첫 거래 id. 구독의 갱신 · 상태 사건은 **줄에 연결된 결제사 구독 id** 로만 찾는다
@@ -75,8 +75,9 @@ class PaymentPushedEvents(
         val order = tx.lockOrder(orderId) ?: return UNKNOWN_ORDER
         if (order.status.isPaidFamily) return null
         // 우리 주문을 찾은 뒤의 거절은 수신함만 닫지 않는다 - 돈이 들어왔을 수 있으니 주문에 「확인 필요」를 찍는다(지급 없음)
-        val context = ConvergeContext(gateway.mode, ConvergeSource.WEBHOOK, PaymentActor.PROVIDER)
-        if (order.providerMode != gateway.mode) {
+        val mode = event.mode ?: gateway.mode
+        val context = ConvergeContext(mode, ConvergeSource.WEBHOOK, PaymentActor.PROVIDER)
+        if (order.providerMode != mode) {
             flags.flag(tx, order, PaymentReviewReason.MODE_MISMATCH, context)
             return MODE_MISMATCH
         }
@@ -132,7 +133,7 @@ class PaymentPushedEvents(
         val id = byFirst?.id ?: event.providerSubscriptionId?.let { store.findSubscriptionByProviderId(provider, it)?.id } ?: return UNKNOWN_TRANSACTION
         val subscription = tx.lockSubscription(id)?.takeIf { it.provider == provider } ?: return UNKNOWN_TRANSACTION
         // 우리 줄을 찾은 뒤의 거절은 결제를 기록하고 「확인 필요」로 표시한다(수신함만 닫으면 돈이 들어온 사실이 운영자에게 안 보인다). 자동 해지는 붙이지 않는다 - 운영자가 본다
-        if (subscription.providerMode != gateway.mode) return unapplied(tx, lifecycle, subscription, event, MODE_MISMATCH, cancel = false)
+        if (subscription.providerMode != (event.mode ?: gateway.mode)) return unapplied(tx, lifecycle, subscription, event, MODE_MISMATCH, cancel = false)
         if (event.ourSubscriptionId != null && event.ourSubscriptionId != subscription.id) return unapplied(tx, lifecycle, subscription, event, SUBSCRIPTION_MISMATCH, cancel = false) // 교차 확인
         val first = subscription.status == SubscriptionStatus.PENDING // 아직 켜지지 않은 줄의 첫 결제(첫 거래 id 로 왔든, 연결된 구독의 거래로 왔든)
         return when {
@@ -250,8 +251,9 @@ class PaymentPushedEvents(
                 return UNKNOWN_TRANSACTION
             }
         val order = tx.lockOrder(known.id) ?: return UNKNOWN_ORDER
-        val context = ConvergeContext(gateway.mode, ConvergeSource.WEBHOOK, PaymentActor.PROVIDER)
-        if (order.providerMode != gateway.mode) {
+        val mode = event.mode ?: gateway.mode
+        val context = ConvergeContext(mode, ConvergeSource.WEBHOOK, PaymentActor.PROVIDER)
+        if (order.providerMode != mode) {
             flags.flag(tx, order, PaymentReviewReason.MODE_MISMATCH, context)
             return MODE_MISMATCH
         }
@@ -369,7 +371,7 @@ class PaymentPushedEvents(
             tx.updateSubscription(subscription.copy(providerSubscriptionId = event.providerSubscriptionId, providerSyncedAt = event.occurredAt, updatedAt = writer.now()))
             return null
         }
-        if (subscription.providerMode != gateway.mode) return MODE_MISMATCH
+        if (subscription.providerMode != (event.mode ?: gateway.mode)) return MODE_MISMATCH
         if (subscription.status == SubscriptionStatus.ENDED) return ALREADY_ENDED
         val syncedAt = subscription.providerSyncedAt
         if (syncedAt != null && event.occurredAt.isBefore(syncedAt)) return STALE_EVENT // 더 새로운 사건이 먼저 도착해 반영됐다

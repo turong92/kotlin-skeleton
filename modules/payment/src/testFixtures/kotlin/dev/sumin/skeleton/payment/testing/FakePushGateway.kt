@@ -159,7 +159,14 @@ open class FakePushGateway(override val providerId: String = "paddle", override 
         return WebhookEnvelope(eventKey = id, eventType = "test.event", resourceType = PushedEvents.RESOURCE_TYPE, resourceId = "res_$id", storedPayload = id)
     }
 
-    override fun interpret(payload: String): PushedPaymentEvent? = events[payload]
+    /** 사건을 읽다가 이 예외로 실패한다 - 해석이 외부 호출을 하는 결제사(구글 RTDN)의 일시 실패를 심는다. */
+    @Volatile
+    var interpretFailure: Throwable? = null
+
+    override fun interpret(payload: String): PushedPaymentEvent? {
+        interpretFailure?.let { throw it }
+        return events[payload]
+    }
 
     /** 결제사 쪽 가격 id 가 없는 품목 코드 - 시험이 넣는다 */
     val unpriced: MutableSet<String> = ConcurrentHashMap.newKeySet()
