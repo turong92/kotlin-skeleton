@@ -21,23 +21,29 @@ import org.springframework.context.annotation.Bean
     afterName = ["dev.sumin.skeleton.video.jdbc.VideoJdbcAutoConfiguration", "dev.sumin.skeleton.storage.image.StorageImageAutoConfiguration"],
 )
 @ConditionalOnProperty(prefix = "skeleton.video", name = ["enabled"], havingValue = "true")
-@ConditionalOnClass(AnimatedDisplays::class)   // `storage-image` 가 클래스패스에 없으면 이 클래스는 읽히지도 않는다
-@ConditionalOnBean(VideoPorts::class, AnimatedDisplays::class, DisplayJobStore::class)
 class VideoDisplayAutoConfiguration {
-    @Bean
-    @ConditionalOnMissingBean
-    fun videoDisplayTarget(displays: AnimatedDisplays): DisplayTarget = object : DisplayTarget {
-        override fun folder(keyHash: String) = displays.folder(keyHash)
-        override fun copyExtension(keyHash: String) = displays.copyExtension(keyHash)
-        override fun use(keyHash: String, ext: String) = displays.use(keyHash, ext)
+    /**
+     * 중첩이라 `storage-image` 가 클래스패스에 없으면 이 안의 타입은 읽히지도 않는다(바깥 클래스의 메서드 서명에 선택 타입이 있으면
+     * 클래스 목록을 직접 건네는 조립에서 조건을 읽다가 터진다). `@Configuration` 표지는 달지 않는다 - `@Bean` 메서드만으로 중첩 설정으로 읽힌다
+     */
+    @ConditionalOnClass(AnimatedDisplays::class)
+    @ConditionalOnBean(VideoPorts::class, AnimatedDisplays::class, DisplayJobStore::class)
+    class Wiring {
+        @Bean
+        @ConditionalOnMissingBean
+        fun videoDisplayTarget(displays: AnimatedDisplays): DisplayTarget = object : DisplayTarget {
+            override fun folder(keyHash: String) = displays.folder(keyHash)
+            override fun copyExtension(keyHash: String) = displays.copyExtension(keyHash)
+            override fun use(keyHash: String, ext: String) = displays.use(keyHash, ext)
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        fun videoDisplayJobs(props: VideoProperties, store: DisplayJobStore, target: DisplayTarget, storage: PresignedStorage, time: TimeProvider): VideoDisplayJobs =
+            VideoDisplayJobs(props, store, target, storage, time)
+
+        @Bean
+        @ConditionalOnMissingBean(AnimatedDisplayConverter::class)
+        fun videoAnimatedDisplayConverter(jobs: VideoDisplayJobs): AnimatedDisplayConverter = AnimatedDisplayConverter { keyHash, objectKey -> jobs.enqueue(keyHash, objectKey) }
     }
-
-    @Bean
-    @ConditionalOnMissingBean
-    fun videoDisplayJobs(props: VideoProperties, store: DisplayJobStore, target: DisplayTarget, storage: PresignedStorage, time: TimeProvider): VideoDisplayJobs =
-        VideoDisplayJobs(props, store, target, storage, time)
-
-    @Bean
-    @ConditionalOnMissingBean(AnimatedDisplayConverter::class)
-    fun videoAnimatedDisplayConverter(jobs: VideoDisplayJobs): AnimatedDisplayConverter = AnimatedDisplayConverter { keyHash, objectKey -> jobs.enqueue(keyHash, objectKey) }
 }
