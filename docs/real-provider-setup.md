@@ -103,6 +103,7 @@
 - 토큰 교환은 `application/x-www-form-urlencoded` 폼 POST. `redirect_uri` 는 **프런트가 인가 요청에 실은 값을 그대로** 받아 같이 보낸다(없으면 `…_REDIRECT_URI`). 인가 요청의 값과 다르면 구글이 `redirect_uri_mismatch`/`invalid_grant`.
 - `email_verified` 는 구글이 불리언으로 준다(`true` 일 때만 "확인된 이메일"로 취급 — 기존 계정과의 병합 · 연결은 이 값이 `true` 일 때만). 구글 계정은 거의 항상 확인된 주소다. **다만 병합 · 새 계정의 주소는 `@gmail.com`/`googlemail.com` 이거나 Workspace(`hd` == 주소 도메인)일 때만** 쓴다(`email-trust` 기본 `AUTHORITATIVE`, 비-Gmail 주소는 주인이 바뀌어도 `email_verified: true` 가 남는다) — Gmail 주소로 시험하는 지금 계정에는 영향이 없다.
 - 구글이 4xx 로 거절하면 사용자에게는 `INVALID_AUTHORIZATION_CODE` 가 나가고, **서버 로그에 한 줄**이 남는다: `social login token exchange rejected provider=google status=400 error=redirect_uri_mismatch …` — 시험 중 실패하면 이 줄이 원인이다(비밀 · 코드는 싣지 않는다).
+- **앱(Flutter 등)이 보내는 ID 토큰**(`POST /api/v1/auth/social/google/token`): 앱은 구글 SDK 를 `serverClientId` = **위에서 만든 웹 클라이언트 ID**(`…_GOOGLE_CLIENT_ID` 와 같은 값)로 초기화한다. 그래야 안드로이드 · iOS 에서 받은 ID 토큰의 `aud` 가 모두 이 웹 클라이언트 ID 가 되어 서버가 한 값으로 확인한다. 안드로이드는 콘솔에 패키지명과 SHA-1 인증서 지문을 따로 등록한다(서버 설정은 바뀌지 않는다). 같은 Google Cloud 프로젝트의 클라이언트만 이 `aud` 를 받는다. 실기기로는 아직 확인하지 못했다.
 
 ## 2. LINE Login 채널 (일본 사용자용)
 
@@ -193,6 +194,8 @@
 
 위 표에 없는 코드는 스크립트가 제공자 원문(`error` · `error_code` · `error_description`)만 보여 준다.
 
+11. **앱 SDK 액세스 토큰 입구(`POST /api/v1/auth/social/kakao/token`)는 `app-id` 가 있어야 열린다.** 값은 콘솔 **앱 → 일반 → 앱 정보의 "앱 ID"(숫자)**다 - REST API 키(32자)가 아니다. `…_KAKAO_APP_ID`(= `skeleton.auth-social.providers.kakao.app-id`)에 넣는다. 서버는 앱이 준 토큰을 `GET /v1/user/access_token_info` 로 물어 그 `app_id` 가 이 값과 같을 때만 받는다(다른 앱이 발급한 토큰은 `401 AUTH.SOCIAL_ACCESS_TOKEN_INVALID`). 값이 없으면 입구가 닫혀 404 다. 앱은 같은 콘솔의 **네이티브 앱 키**로 SDK 를 초기화한다(서버 설정에는 들어가지 않는다).
+
 ### Naver (선택)
 > 이 절의 콘솔 항목(별명 · 개발 중 상태의 테스터)은 네이버 개발자센터(developers.naver.com)의 공식 문서 원문을 이 환경의 도구로는 열 수 없어 **조사 문서로 확인하지 못했다** — 아래는 주인의 시험에서 알려진 동작이고 콘솔 화면으로 확인한다.
 
@@ -202,6 +205,17 @@
 4. 이미 만들어진 계정은 콘솔을 고쳐도 이름이 자동으로 채워지지 않는다(가입 때 한 번만 쓰인다) — Kakao 8번과 같다.
 5. **네이버는 확인된 이메일을 주는 보증이 없다 → 이 백엔드는 항상 "이메일 미확인"으로 다룬다**: 주소 없는 계정이 되고 병합되지 않는다.
 6. **토큰 요청의 `state`**: 네이버 토큰 발급 요청은 `state` 를 받는다(공식 명세 원문은 이 환경에서 못 열었다 — 널리 쓰이는 구현은 모두 `grant_type` · `client_id` · `client_secret` · `code` · `state` 를 보낸다). 이 레포는 이제 콜백이 받은 `state` 를 **로그인 · 연결 · 다시 인증 요청의 선택 필드 `state`** 로 받아(프런트가 같이 보낸다) 네이버 토큰 요청에 싣는다. 다른 제공자는 무시한다. 프런트가 `state` 를 보내지 않으면 예전처럼 싣지 않는다 — **실제 네이버로 확인(2026-10-08)**: `state` 를 싣지 않은 토큰 요청으로도 가입 · 로그인이 성공했다 — 없어도 된다. 싣는 쪽이 명세에 가깝다고 보고 그대로 둔다. `check-real-providers.sh` 는 가짜 코드 + `state` 로 토큰 서버를 한 번 두드려 응답 원문을 보여 준다(틀린 키만 ✗, 그 밖의 응답은 단정하지 않고 원문을 보인다).
+7. **앱 SDK 액세스 토큰 입구(`POST /api/v1/auth/social/naver/token`)**: 앱이 네이버 SDK 로 받은 액세스 토큰을 서버가 프로필 API(`/v1/nid/me`)로 확인해 그 프로필로 로그인시킨다(켜는 설정은 따로 없다 - 모듈이 켜져 있으면 열린다). **다른 앱이 발급한 토큰인지 확인하는 방법은 찾지 못했다(앱별 id 여부는 확인 안 됨).**
+
+### Apple (iOS 앱의 Sign in with Apple)
+
+모듈은 `auth-social-apple`, 1차는 **iOS 앱만** 지원한다(웹 · 안드로이드 애플 로그인은 다음 단계). 이 절은 애플 개발자 콘솔 쪽 절차를 **적어 두기만** 한 것이다 - 이 레포의 시험은 가짜 애플 서버로만 돌고 진짜 애플 계정으로는 재 보지 않았다.
+
+1. **App ID**: Certificates, Identifiers & Profiles → Identifiers 에서 앱의 App ID(번들 id, 예 `com.example.app`)에 **Sign in with Apple** capability 를 켠다. 이 번들 id 가 `…_APPLE_CLIENT_ID` 다(비밀 아님, 비어 있으면 모듈이 꺼진다).
+2. **키**: Keys → 새 키에서 **Sign in with Apple** 을 켜고 위 App ID 를 고른다. `.p8` 파일은 **한 번만 내려받을 수 있다**. 값 셋을 적는다 - **Key ID**(`…_APPLE_KEY_ID`), 계정 우상단/멤버십의 **Team ID**(`…_APPLE_TEAM_ID`), `.p8` 파일 내용 전체(`…_APPLE_PRIVATE_KEY` - 비밀, 줄바꿈이 `\n` 두 글자로 와도 된다). 서버는 이 키로 ES256 `client_secret` JWT 를 요청마다 새로 서명한다.
+3. **릴레이 메일 발송 도메인 등록은 필수다.** 사용자가 "이메일 가리기"를 고르면 앱은 `…@privaterelay.appleid.com` 주소를 받고, 우리가 그 주소로 보내는 메일(탈퇴 확인 메일 등)은 애플의 릴레이를 거쳐야 닿는다. 애플은 **등록한 도메인/주소에서 보낸 메일만** 전달한다. Certificates, Identifiers & Profiles → Services → **Sign in with Apple for Email Communication** 에 우리 메일이 나가는 도메인(예 `example.com`, SPF/DKIM 이 통과해야 한다)과 보내는 주소를 등록한다. 안 하면 이 사용자들은 **탈퇴 확인 메일을 받지 못해 탈퇴가 막힌다**(메일 확인이 탈퇴의 일부이므로).
+4. 탈퇴 순서: 앱이 애플 시트로 새 `authorizationCode` 를 받아 `POST /api/v1/auth/social/apple/revoke` 로 애플 토큰을 철회하고, 이어서 `/account/delete` 를 부른다(앱스토어 심사 5.1.1(v)는 계정 삭제 때 애플 토큰 철회를 요구한다).
+5. `GET /auth/methods` 의 apple 항목은 `nativeToken: id_token`, `nonce: required` 다 - 앱은 SHA-256 으로 만든 nonce 를 애플 요청에 싣고 원문을 서버에 보낸다.
 
 ## 5. 메일 발송 — 서비스 고르기 · DNS(Cloudflare) · SMTP 값
 
@@ -376,7 +390,7 @@ scripts/check-real-providers.sh        # 백엔드가 뜬 뒤 다시: /auth/meth
 
 | 제공자 | 대상 | 이메일 | 메모 |
 |---|---|---|---|
-| Apple | iOS 앱이 다른 소셜 로그인을 넣으면 앱스토어가 **Sign in with Apple 도 요구**한다 | 사용자가 숨길 수 있다(릴레이 주소) | 클라이언트 시크릿이 **JWT(ES256)를 직접 서명**해 만든다(6개월 만료) — 단순 "client secret 문자열"이 아니라 모듈에 서명 로직이 필요. 이번에는 제외 |
+| Apple | iOS 앱이 다른 소셜 로그인을 넣으면 앱스토어가 **Sign in with Apple 도 요구**한다 | 사용자가 숨길 수 있다(릴레이 주소) | 클라이언트 시크릿이 **JWT(ES256)를 직접 서명**해 만든다(6개월 만료) — 단순 "client secret 문자열"이 아니라 모듈에 서명 로직이 필요 - `auth-social-apple` 이 한다. **1차는 iOS 앱만**(웹 · 안드로이드 애플 로그인은 아직 지원하지 않는다), 콘솔 절차는 §4 Apple |
 | LINE | 일본 · 대만 · 태국 | 권한 신청 후 | OIDC — §2 |
 | X | 영어권 · 일본 | 없음 | OAuth 2.0 + PKCE — §3 |
 | Facebook(Meta) | 영어권 | 사용자가 거부할 수 있다 | 앱 검토(App Review)와 비즈니스 인증이 까다롭다 |
