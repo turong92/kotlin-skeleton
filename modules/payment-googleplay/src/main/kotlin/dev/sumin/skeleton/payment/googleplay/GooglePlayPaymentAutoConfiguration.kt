@@ -7,6 +7,7 @@ import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.project.ProjectsConfigured
 import dev.sumin.skeleton.common.project.ProjectsNotConfigured
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.web.BearerIgnoredPaths
 import dev.sumin.skeleton.payment.PaymentGatewaySource
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -19,6 +20,7 @@ import org.springframework.boot.context.properties.bind.Binder
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.ConditionContext
 import org.springframework.context.annotation.Conditional
+import org.springframework.core.env.Environment
 import org.springframework.core.type.AnnotatedTypeMetadata
 
 @AutoConfiguration
@@ -31,6 +33,17 @@ class GooglePlayPaymentAutoConfiguration {
     @ConditionalOnMissingBean(name = ["googlePlayPaymentProvider"])
     fun googlePlayPaymentProvider(httpClient: ExternalHttpClient, properties: GooglePlayProperties, time: ObjectProvider<TimeProvider>): GooglePlayPaymentProvider =
         GooglePlayPaymentProvider(httpClient, properties, time.getIfAvailable { TimeProvider.systemUtc() })
+
+    /**
+     * Pub/Sub push 는 `Authorization: Bearer <구글이 서명한 OIDC 토큰>` 을 싣고 온다 - 이 앱의 로그인 토큰이 아니다. 앱의 JWT 필터가 이 헤더를 읽으면 로그인 토큰이 아니라며 `401` 로 막아 알림이 한 건도 닿지 않으므로,
+     * 이 결제사의 웹훅 경로는 Bearer 를 읽지 않고 지나보낸다(진위는 [GoogleOidcVerifier] 가 구글 공개키로 확인한다). `auth` 가 없는 앱에서는 아무도 읽지 않는 빈이다.
+     */
+    @Bean("googlePlayBearerIgnored")
+    @ConditionalOnMissingBean(name = ["googlePlayBearerIgnored"])
+    fun googlePlayBearerIgnored(environment: Environment): BearerIgnoredPaths = BearerIgnoredPaths {
+        val basePath = environment.getProperty("skeleton.payment.http.base-path", "/api/v1/payments").trimEnd('/')
+        listOf("$basePath/webhooks/${environment.getProperty("${GooglePlayProperties.PREFIX}.provider-id", "googleplay")}")
+    }
 
     @Bean("googlePlayGuard")
     @ConditionalOnProperty(prefix = "skeleton.payment-googleplay", name = ["enabled"], havingValue = "true")
