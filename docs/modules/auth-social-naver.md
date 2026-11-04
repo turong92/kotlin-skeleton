@@ -12,6 +12,7 @@ Naver OAuth 토큰 교환 · 프로필 조회 HTTP 클라이언트를 `auth-soci
 | 기본 동작 | 꺼짐. `skeleton.auth-social.providers.naver.enabled=true` 로 켠다. |
 | 부팅에 필요한 것 | 없음. 클라이언트 id · secret 은 켤 때 필요하다. |
 | 토큰 요청의 `state` | 로그인 · 연결 · 다시 인증 요청의 선택 필드 `state`(콜백이 받은 값)를 `OAuthCodeExchange.state` 로 받아 토큰 요청 폼에 싣는다. 없으면 싣지 않는다 (docs/real-provider-setup.md §4) |
+| 앱 SDK 토큰 | `POST /auth/social/naver/token` 은 모듈이 켜져 있으면 열린다. 앱이 준 액세스 토큰을 프로필 API(`/v1/nid/me`)로 확인해 코드 흐름과 같은 프로필을 만든다(401 이면 401 `AUTH.SOCIAL_ACCESS_TOKEN_INVALID`, 장애는 502). 앱별 id 여부는 확인 안 됨 - 다른 앱이 발급한 토큰인지는 가려내지 못한다 |
 | 교체 지점 | `NaverOAuthProvider` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/auth` |

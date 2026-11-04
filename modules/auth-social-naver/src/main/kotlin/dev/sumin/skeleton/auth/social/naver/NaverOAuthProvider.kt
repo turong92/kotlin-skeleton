@@ -2,7 +2,10 @@ package dev.sumin.skeleton.auth.social.naver
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
+import dev.sumin.skeleton.auth.social.oauth.NativeTokenKind
+import dev.sumin.skeleton.auth.social.oauth.OAuthAccessTokenInvalidException
 import dev.sumin.skeleton.auth.social.oauth.OAuthCodeExchange
+import dev.sumin.skeleton.auth.social.oauth.OAuthNativeToken
 import dev.sumin.skeleton.auth.social.oauth.OAuthInvalidAuthorizationCodeException
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.auth.social.oauth.OAuthTokenErrorLog
@@ -28,6 +31,21 @@ class NaverOAuthProvider(
     /** Naver 의 토큰 발급 요청은 `state` 를 받는다 — 콜백이 받은 값이 있으면 싣는다 (없으면 예전처럼 싣지 않는다) */
     override fun fetchProfile(exchange: OAuthCodeExchange): OAuthUserProfile {
         val token = exchangeToken(exchange.authorizationCode, exchange.redirectUri, exchange.state)
+        return profileOf(token.accessToken)
+    }
+
+    override val nativeToken: NativeTokenKind get() = NativeTokenKind.ACCESS_TOKEN
+
+    /** 앱 SDK 의 액세스 토큰을 프로필 API 로 확인한다. 네이버는 어느 앱이 발급한 토큰인지 확인할 방법이 없다 */
+    override fun verifyNativeToken(token: OAuthNativeToken): OAuthUserProfile =
+        try {
+            profileOf(token.token)
+        } catch (ex: ExternalHttpStatusException) {
+            if (ex.upstreamStatus == 401) throw OAuthAccessTokenInvalidException(providerId, "naver rejected the access token")
+            throw ex
+        }
+
+    private fun profileOf(accessToken: String): OAuthUserProfile {
         val profile = requireNotNull(
             httpClient.get(
                 clientName = PROFILE_CLIENT_NAME,
@@ -35,7 +53,7 @@ class NaverOAuthProvider(
                 responseType = NaverUserInfoResponse::class.java,
             ) {
                 baseUrl(properties.profileBaseUrl ?: properties.apiBaseUrl ?: DEFAULT_PROFILE_BASE_URL)
-                header(HttpHeaders.AUTHORIZATION, "Bearer ${token.accessToken}")
+                header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken")
                 loggingTag("auth-social.naver.profile")
             }.block(),
         )
