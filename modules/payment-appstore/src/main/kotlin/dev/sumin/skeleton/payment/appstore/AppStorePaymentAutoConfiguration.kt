@@ -1,7 +1,9 @@
 package dev.sumin.skeleton.payment.appstore
 
+import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.http.ExternalHttpClient
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.project.ProjectsConfigured
 import dev.sumin.skeleton.common.project.ProjectsNotConfigured
 import dev.sumin.skeleton.common.time.TimeProvider
@@ -58,6 +60,19 @@ class AppStorePaymentAutoConfiguration {
                 AppStorePaymentProvider(httpClient, properties, verifier.getIfAvailable { AppStoreSignatureVerifier(now) }, now)
             }
         }
+
+    /** 프로젝트 모드의 가드: App Store 를 켠 프로젝트마다 같은 규칙을 본다 - 메시지 앞에 `project '<id>': ` */
+    @Bean("appStoreProjectGuard")
+    @ConditionalOnMissingBean(name = ["appStoreProjectGuard"])
+    @Conditional(ProjectsConfigured::class)
+    fun appStoreProjectGuard(projects: ProjectRegistry): DeployGuard = object : DeployGuard {
+        override val name = "payment-appstore"
+        override fun problems(context: DeployContext) = perProject { it.problems(context) }
+        override fun warnings(context: DeployContext) = perProject { it.warnings(context) }
+        private fun perProject(of: (AppStoreGuard) -> List<String>) =
+            projects.active.map { it to projects.bind(it, "skeleton.payment-appstore", AppStoreProperties::class.java) }.filter { it.second.enabled }
+                .flatMap { (project, properties) -> of(AppStoreGuard(properties)).map { "project '${project.id}': $it" } }
+    }
 
     internal class AppStoreValuesConfigured : SpringBootCondition() {
         override fun getMatchOutcome(context: ConditionContext, metadata: AnnotatedTypeMetadata): ConditionOutcome {

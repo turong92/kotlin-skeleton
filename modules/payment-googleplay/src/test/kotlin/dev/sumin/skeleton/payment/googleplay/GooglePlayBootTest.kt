@@ -68,6 +68,15 @@ class GooglePlayBootTest {
     }
 
     @Test
+    fun `a Google subdomain that is not the fixed certificate or token address still stops a protected environment`() {
+        for ((key, url) in listOf("certs-url" to "https://storage.googleapis.com/some-bucket/certs", "token-url" to "https://www.googleapis.com/oauth2/v4/token")) {
+            runner.withPropertyValues(*secrets, "skeleton.payment-googleplay.$key=$url").run {
+                assertThat(it.getBean("googlePlayGuard", DeployGuard::class.java).problems(stage)).`as`(key).singleElement().asString().contains(key)
+            }
+        }
+    }
+
+    @Test
     fun `an API address that is not Google's is a warning in a protected environment`() {
         runner.withPropertyValues(*secrets, "skeleton.payment-googleplay.base-url=https://proxy.example.com/SECRET-PATH").run {
             val guard = it.getBean("googlePlayGuard", DeployGuard::class.java)

@@ -25,9 +25,9 @@ Google Play(앱 안 결제)를 `payment` 의 **스토어 결제사**(`PaymentSto
 
 모든 사건은 `testPurchase`/`testPurchaseContext` 로 모드를 싣는다(있으면 `TEST`, 아니면 `LIVE`) — 시험 구매는 운영 서버에서도 지급되지만 `TEST` 로 표시되어 대시보드 매출에서 빠진다.
 
-**설정**: `enabled`(false) · `package-name` · `service-account`(비밀) · `pubsub.audience` · `pubsub.service-account-email` · `base-url` · `token-url` · `certs-url` · `lookup-timeout`. 네 값 중 하나라도 비었거나 서비스 계정을 읽을 수 없으면 이 결제사만 서지 않는다 — **보호 환경(`skeleton.env=stage|prod`)에서는 기동 실패**(돈 낸 사람이 못 받는 배포가 정상으로 뜨지 않게), 그 밖에서는 경고. `token-url` · `certs-url` 은 구글 주소로 고정이고 시험만 바꾼다 — **보호 환경에서 구글 주소가 아니면 기동 실패**(서명한 자격이 그리로 간다 · 알림 위조 방어가 풀린다). `base-url` 이 구글 주소가 아니면 경고. 값은 메시지에 적지 않는다. 결제사 id 는 `googleplay`.
+**설정**: `enabled`(false) · `package-name` · `service-account`(비밀) · `pubsub.audience` · `pubsub.service-account-email` · `base-url` · `token-url` · `certs-url` · `lookup-timeout`. 네 값 중 하나라도 비었거나 서비스 계정을 읽을 수 없으면 이 결제사만 서지 않는다 — **보호 환경(`skeleton.env=stage|prod`)에서는 기동 실패**(돈 낸 사람이 못 받는 배포가 정상으로 뜨지 않게), 그 밖에서는 경고. `token-url` · `certs-url` 은 구글 주소로 고정이고 시험만 바꾼다 — **보호 환경에서 기본 구글 주소와 정확히 같지 않으면 기동 실패**(서명한 자격이 그리로 간다 · 알림 위조 방어가 풀린다). `base-url` 이 구글 주소가 아니면 경고. 값은 메시지에 적지 않는다. 결제사 id 는 `googleplay`.
 
-프로젝트 여럿([multi-project](../multi-project.md) "결제"): 프로젝트마다 자기 `payment-googleplay.*` 로 결제사를 만든다(값이 빈 프로젝트에는 없다). 키 가드는 프로젝트 모드에서 돌지 않는다.
+프로젝트 여럿([multi-project](../multi-project.md) "결제"): 프로젝트마다 자기 `payment-googleplay.*` 로 결제사를 만든다(값이 빈 프로젝트에는 없다). 키 가드는 프로젝트 모드에서도 돈다(켠 프로젝트마다 같은 규칙, 메시지 앞에 `project '<id>': `).
 
 | 항목 | 내용 |
 |---|---|

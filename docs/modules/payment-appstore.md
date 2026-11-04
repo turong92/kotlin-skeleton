@@ -23,7 +23,7 @@ App Store(앱 안 결제)를 `payment` 의 **스토어 결제사**(`PaymentStore
 
 **설정**: `enabled`(false) · `bundle-id` · `app-apple-id` · `issuer-id` · `key-id` · `private-key`(비밀) · `base-url` · `sandbox-base-url` · `lookup-timeout`. 다섯 값(`bundle-id` · `app-apple-id` · `issuer-id` · `key-id` · `private-key`) 중 하나라도 비면 이 결제사만 서지 않는다 — **보호 환경(`skeleton.env=stage|prod`)에서는 기동 실패**(돈 낸 사람이 못 받는 배포가 정상으로 뜨지 않게), 그 밖에서는 경고. 보호 환경에서 `base-url` · `sandbox-base-url` 이 애플 주소가 아니면(인증 토큰이 그리로 간다) 경고한다(값은 적지 않는다). 결제사 id 는 `appstore`.
 
-프로젝트 여럿([multi-project](../multi-project.md) "결제"): 프로젝트마다 자기 `payment-appstore.*` 로 결제사를 만든다(값이 빈 프로젝트에는 없다). 키 가드는 프로젝트 모드에서 돌지 않는다.
+프로젝트 여럿([multi-project](../multi-project.md) "결제"): 프로젝트마다 자기 `payment-appstore.*` 로 결제사를 만든다(값이 빈 프로젝트에는 없다). 키 가드는 프로젝트 모드에서도 돈다(켠 프로젝트마다 같은 규칙, 메시지 앞에 `project '<id>': `).
 
 | 항목 | 내용 |
 |---|---|
