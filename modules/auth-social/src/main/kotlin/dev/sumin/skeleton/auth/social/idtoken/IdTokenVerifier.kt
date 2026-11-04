@@ -1,4 +1,4 @@
-package dev.sumin.skeleton.auth.social.oidc
+package dev.sumin.skeleton.auth.social.idtoken
 
 import com.nimbusds.jose.JOSEException
 import com.nimbusds.jose.JWSAlgorithm
@@ -58,7 +58,7 @@ class JwksCache(
 
     private fun refresh(now: Instant, mustSucceed: Boolean) {
         try {
-            val body = requireNotNull(http.get("auth-social-oidc-jwks", url(), String::class.java) { loggingTag("auth-social.oidc.jwks") }.block()) { "empty JWKS" }
+            val body = requireNotNull(http.get("auth-social-jwks", url(), String::class.java) { loggingTag("auth-social.jwks") }.block()) { "empty JWKS" }
             keys = JWKSet.parse(body)
             fetchedAt = now
         } catch (ex: RuntimeException) {
@@ -70,16 +70,19 @@ class JwksCache(
 }
 
 /**
- * ID 토큰 검증 (OIDC Core §3.1.3.7): 서명(허용 알고리즘만 · HS 계열은 client secret, RS · ES 계열은 JWKS 의 같은 종류 키) → `iss` → `aud`(여럿이면 `azp`) → `exp`(+skew) → `nbf` → `nonce`(기대값이 있을 때).
+ * ID 토큰 검증 (OIDC Core §3.1.3.7): 서명(허용 알고리즘만 · HS 계열은 client secret, RS · ES 계열은 JWKS 의 같은 종류 키) → `iss`(집합 중 하나) → `aud`(여럿이면 `azp`) → `exp`(+skew) → `nbf` → `nonce`(기대값이 있을 때 · 비교는 [nonceMatches]).
+ * [algorithms] 가 허용 목록이다 — 목록에 없는 알고리즘(`none` · 목록 밖 HS · ES)은 서명을 보기 전에 거절한다. 제공자 모듈(google · apple)은 `RS256` 하나만 준다.
  */
 class IdTokenVerifier(
     private val clientId: String,
     private val clientSecret: String,
     private val algorithms: List<JWSAlgorithm>,
-    private val issuer: () -> String?,
+    private val issuers: () -> Set<String>?,
     private val jwks: JwksCache?,
     private val skew: Duration,
     private val clock: Clock,
+    /** 토큰의 `nonce` 클레임([claim])이 요청의 기대값([expected])과 맞나 — 기본은 같은 문자열(상수 시간). 애플은 클레임이 SHA-256 hex 라서 함수를 바꿔 준다 */
+    private val nonceMatches: (claim: String, expected: String) -> Boolean = EXACT_NONCE,
 ) {
     fun verify(idToken: String, expectedNonce: String?): JWTClaimsSet {
         val parsed = try {
@@ -124,8 +127,8 @@ class IdTokenVerifier(
     }
 
     private fun checkClaims(claims: JWTClaimsSet, expectedNonce: String?) {
-        val expectedIssuer = issuer()
-        if (expectedIssuer != null && claims.issuer != expectedIssuer) throw IdTokenRejected("iss '${claims.issuer}' is not '$expectedIssuer'")
+        val expectedIssuers = issuers()
+        if (expectedIssuers != null && claims.issuer !in expectedIssuers) throw IdTokenRejected("iss '${claims.issuer}' is not one of $expectedIssuers")
         val aud = claims.audience
         if (clientId !in aud) throw IdTokenRejected("aud $aud does not contain our client id")
         if (aud.size > 1 && claims.getStringClaim("azp") != clientId) throw IdTokenRejected("azp: several audiences need azp = our client id")
@@ -135,8 +138,15 @@ class IdTokenVerifier(
         claims.notBeforeTime?.let { if (now.plus(skew).isBefore(it.toInstant())) throw IdTokenRejected("nbf: token is not valid yet") }
         if (expectedNonce != null) {
             val actual = claims.getStringClaim("nonce") ?: throw IdTokenRejected("nonce: the token has none")
-            if (!MessageDigest.isEqual(actual.toByteArray(StandardCharsets.UTF_8), expectedNonce.toByteArray(StandardCharsets.UTF_8))) throw IdTokenRejected("nonce does not match")
+            if (!nonceMatches(actual, expectedNonce)) throw IdTokenRejected("nonce does not match")
         }
         if (claims.subject.isNullOrBlank()) throw IdTokenRejected("sub is missing")
+    }
+
+    companion object {
+        /** 같은 문자열인가 (상수 시간) */
+        val EXACT_NONCE: (String, String) -> Boolean = { claim, expected ->
+            MessageDigest.isEqual(claim.toByteArray(StandardCharsets.UTF_8), expected.toByteArray(StandardCharsets.UTF_8))
+        }
     }
 }

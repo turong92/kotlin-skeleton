@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.auth.social.oidc
 
+import dev.sumin.skeleton.auth.social.testing.FakeIdp
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.common.http.ExternalHttpClient
 import java.util.function.Supplier

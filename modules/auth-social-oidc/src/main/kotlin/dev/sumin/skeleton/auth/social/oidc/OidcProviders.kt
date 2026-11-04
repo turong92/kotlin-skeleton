@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.auth.social.oidc
 
+import dev.sumin.skeleton.auth.social.idtoken.IdTokenVerifier
+import dev.sumin.skeleton.auth.social.idtoken.JwksCache
 import dev.sumin.skeleton.common.http.ExternalHttpClient
 import java.time.Clock
 
@@ -39,7 +41,7 @@ object OidcProviders {
         } else {
             null
         }
-        val verifier = IdTokenVerifier(cfg.clientId, cfg.clientSecret, cfg.algorithms, { cfg.issuer }, jwks, global.clockSkew, clock)
+        val verifier = IdTokenVerifier(cfg.clientId, cfg.clientSecret, cfg.algorithms, { cfg.issuer?.let { setOf(it) } }, jwks, global.clockSkew, clock)
         return OidcOAuthProvider(cfg, http, discovery, verifier)
     }
 }

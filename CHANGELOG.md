@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 앱 소셜 로그인 - 토큰 교환 (2026-11-04)
+
+- **패키지 이동(깨지는 변경)**: `IdTokenVerifier` · `JwksCache` · `IdTokenRejected` 가 `auth-social-oidc` 의 `dev.sumin.skeleton.auth.social.oidc` 에서 `auth-social` 의 `dev.sumin.skeleton.auth.social.idtoken` 으로 옮겨 갔다(구글 · 애플 모듈이 oidc 모듈을 끌어오지 않게). 앱이 이 클래스를 직접 import 했다면 패키지만 바꾼다. 바뀐 점: `iss` 를 집합으로 받고(`issuer: () -> String?` → `issuers: () -> Set<String>?`), `nonce` 비교를 함수(`nonceMatches`, 기본은 같은 문자열)로 받는다. `auth-social-oidc` 의 동작은 그대로다.
+- 시험 대역: oidc 시험의 `FakeIdp`(JDK `HttpServer`)가 `auth-social` 의 `testFixtures`(`dev.sumin.skeleton.auth.social.testing`)로 옮겨 갔고, `stub(path)` 로 임의 경로의 가짜 응답을 세울 수 있다.
+
 ### 앱 인앱결제 - App Store · Google Play (2026-11-04)
 
 - 새 모듈 넷 - `payment-iap`(앱용 HTTP `/api/v1/payments/iap`: `GET /config` = 지역 스위치 `IAP_ONLY`(기본)/`IAP_AND_WEB`/`WEB_ONLY` · 상품 지도 · 스토어 계정 토큰, `POST /{store}/purchases` = **앱이 보낸 영수증을 믿지 않고 스토어에 직접 물은 뒤에만** 지급, `POST /web-checkout-link` = 웹으로 넘어갈 때의 자동 로그인 주소), `payment-appstore`(App Store Server API · 서버 알림 V2 - 서명은 모듈에 넣어 둔 Apple Root CA - G3 까지 인증서 체인 · 애플 확장 OID · `bundleId` 로 확인, 애플 라이브러리는 쓰지 않는다), `payment-googleplay`(Play Developer API productsv2 · subscriptionsv2 · orders + acknowledge, 실시간 개발자 알림은 Pub/Sub push 의 구글 OIDC 토큰으로 확인하고 API 를 다시 읽는다), `auth-web-handoff`(앱 → 웹 한 번 쓰는 로그인 코드: 해시 저장 · 원자적 1회 · 수명 2분 · 계정당 하나 · 세션을 닫으면 같이 닫힘 · `#` 조각으로 전달). 넷 다 **기본 꺼짐**이고 앱 yml 이 켠다. 스토어 비밀이 하나라도 비면 그 스토어만 없고(`store: null`), 보호 환경에서 켰는데 비면 기동 실패.

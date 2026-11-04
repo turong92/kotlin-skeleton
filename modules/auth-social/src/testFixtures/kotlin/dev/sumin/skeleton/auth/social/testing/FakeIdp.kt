@@ -1,4 +1,4 @@
-package dev.sumin.skeleton.auth.social.oidc
+package dev.sumin.skeleton.auth.social.testing
 
 import com.nimbusds.jose.JWSAlgorithm
 import com.nimbusds.jose.JWSHeader
@@ -40,7 +40,7 @@ data class Recorded(val method: String, val path: String, val headers: Map<Strin
 }
 
 /**
- * 진짜 제공자 대신 서는 로컬 서버 (JDK HttpServer): discovery · authorize 는 없고 · token(PKCE S256 · 한 번 쓰는 코드 · 클라이언트 인증) · jwks · userinfo.
+ * 진짜 제공자 대신 서는 로컬 서버 (JDK HttpServer): discovery · authorize 는 없고 · token(PKCE S256 · 한 번 쓰는 코드 · 클라이언트 인증) · jwks · userinfo, 그리고 [stub] 으로 세우는 임의 경로.
  * 응답의 모양(필드 이름 · 오류 본문)은 각 제공자의 공식 문서에서 가져왔다.
  */
 class FakeIdp(val clientId: String = "client-1", val clientSecret: String = "secret-secret-secret-secret-0123456789") : AutoCloseable {
@@ -60,8 +60,13 @@ class FakeIdp(val clientId: String = "client-1", val clientSecret: String = "sec
 
     class Issued(val challenge: String?, val redirectUri: String?, val idToken: String?, val accessToken: String, var used: Boolean = false)
     private val codes = ConcurrentHashMap<String, Issued>()
+    private val stubs = ConcurrentHashMap<String, (Recorded) -> Pair<Int, String>>()
 
     fun issue(code: String, challenge: String?, redirectUri: String?, idToken: String?, accessToken: String = "at-$code") { codes[code] = Issued(challenge, redirectUri, idToken, accessToken) }
+
+    /** 임의 경로의 가짜 응답 (카카오 `access_token_info` · 애플 `/auth/token` · 네이버 `/v1/nid/me` 처럼 제공자 모듈 시험이 세운다). [respond] 가 요청을 보고 상태와 본문을 정한다 – 기록(`requests`)은 그대로 남는다 */
+    fun stub(path: String, respond: (Recorded) -> Pair<Int, String>) { stubs[path] = respond }
+    fun stub(path: String, status: Int = 200, body: String) = stub(path) { status to body }
 
     fun count(path: String) = requests.count { it.path == path }
 
@@ -90,6 +95,7 @@ class FakeIdp(val clientId: String = "client-1", val clientSecret: String = "sec
         val body = ex.requestBody.bufferedReader().use { it.readText() }
         val rec = Recorded(ex.requestMethod, ex.requestURI.path, ex.requestHeaders.mapKeys { it.key.lowercase() }, body)
         requests += rec
+        stubs[ex.requestURI.path]?.let { respond -> return respond(rec).let { (status, text) -> ex.respond(status, text) } }
         when (ex.requestURI.path) {
             "/.well-known/openid-configuration" -> if (discoveryStatus != 200) ex.respond(discoveryStatus, """{"error":"boom"}""") else ex.respond(
                 200,

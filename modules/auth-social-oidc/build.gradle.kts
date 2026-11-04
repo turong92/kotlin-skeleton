@@ -8,6 +8,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
+    testImplementation(testFixtures(project(":modules:auth-social")))   // FakeIdp
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.springframework.boot:spring-boot-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")

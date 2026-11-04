@@ -32,6 +32,6 @@
 | 교체 지점 | `OAuthProviderRegistry`, `OAuthProviderSource`, `OAuthAccountLinkRepository`, `OAuthAccountProvisioningPolicy`, `OAuthSocialLoginService` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/auth` |
-| 테스트 | `modules/auth-social/src/test` |
+| 테스트 | `modules/auth-social/src/test` · 가짜 제공자 서버 `FakeIdp` 는 `modules/auth-social/src/testFixtures` (제공자 모듈 시험이 쓴다 — 제품 코드가 아니다) |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.auth.social.oidc
 
+import dev.sumin.skeleton.auth.social.testing.FakeIdp
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator
 import dev.sumin.skeleton.auth.social.oauth.NonceMode
 import dev.sumin.skeleton.auth.social.oauth.OAuthCodeExchange
