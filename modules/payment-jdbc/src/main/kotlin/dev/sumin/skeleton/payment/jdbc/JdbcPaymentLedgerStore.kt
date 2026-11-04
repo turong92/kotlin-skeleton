@@ -9,6 +9,7 @@ import dev.sumin.skeleton.payment.PaymentOrders
 import dev.sumin.skeleton.payment.PaymentSettlement
 import dev.sumin.skeleton.payment.PaymentEvent
 import dev.sumin.skeleton.payment.PaymentLedgerConflictException
+import dev.sumin.skeleton.payment.PaymentProviderPaymentConflictException
 import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentLedgerTx
 import dev.sumin.skeleton.payment.PaymentOrder
@@ -405,7 +406,7 @@ class JdbcPaymentLedgerStore(
                 jdbc.update(insertOrderSql, rows.orderParams(order))
             } catch (e: DuplicateKeyException) {
                 // 같은 결제 번호 `(provider, provider_payment_id)` 를 동시에 넣은 쪽에 졌다 - PostgreSQL 은 `on conflict (dedupe_key)` 가 이 유니크를 가려 주지 못한다. 트랜잭션이 못 쓰게 되니 호출자가 끝내고 다시 읽는다
-                throw PaymentLedgerConflictException("the provider payment id is already attached to an order")
+                throw PaymentProviderPaymentConflictException("the provider payment id is already attached to an order")
             }
             // 갱신 행 수로는 못 가른다(MySQL) — 방금 넣은 id 가 줄로 있으면 우리가 넣은 것이다(id 는 무작위 128비트)
             val inserted = (jdbc.queryForObject("select count(*) from payment_orders where id = :id", mapOf("id" to order.id), Int::class.java) ?: 0) > 0

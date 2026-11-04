@@ -116,6 +116,8 @@ class PaymentWebhookTaskHandler(
                     mark(tx, id, if (reason == null) PaymentWebhookStatus.PROCESSED else PaymentWebhookStatus.IGNORED, reason)
                 }
             } catch (e: PaymentLedgerConflictException) {
+                // 결제 번호가 겹쳤다 = 같은 결제를 다른 길(스토어 확인)이 방금 넣었다 - 자리 충돌이 아니다. 던져서 다시 하면 이미 들어온 주문을 보고 반영된 것으로 닫는다
+                if (e is PaymentProviderPaymentConflictException) throw e
                 // 이 계정에 이미 살아 있는 구독이 있다 - 재시도해도 같다. 결제는 기록해 「확인 필요」로 남기고 결제사 구독은 해지한다(조용히 죽어 결제사가 계속 과금하지 않게)
                 store.inTransaction { tx -> mark(tx, id, PaymentWebhookStatus.IGNORED, pushed.applyConflicted(tx, gateway, pushedEvent)) }
             }

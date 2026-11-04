@@ -5,6 +5,13 @@ import dev.sumin.skeleton.payment.PaymentFulfillment
 import dev.sumin.skeleton.payment.PaymentMode
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentProperties
+import dev.sumin.skeleton.payment.PaymentProviderRouter
+import dev.sumin.skeleton.payment.PaymentTaskRetryException
+import dev.sumin.skeleton.payment.PaymentTaskRun
+import dev.sumin.skeleton.payment.PaymentTaskTypes
+import dev.sumin.skeleton.payment.PaymentWebhookStatus
+import dev.sumin.skeleton.payment.PaymentWebhookTaskHandler
+import dev.sumin.skeleton.payment.PushedPayment
 import dev.sumin.skeleton.payment.PaymentPushedEvents
 import dev.sumin.skeleton.payment.PaymentReviewReason
 import dev.sumin.skeleton.payment.PaymentStorePurchases
@@ -42,6 +49,7 @@ class StorePurchasesDbTest {
 
     private lateinit var kit: JdbcLedgerKit
     private lateinit var purchases: PaymentStorePurchases
+    private lateinit var pushedEvents: PaymentPushedEvents
 
     @BeforeTest
     fun setUp() {
@@ -50,6 +58,7 @@ class StorePurchasesDbTest {
         val lifecycle = SubscriptionLifecycle(kit.tasks, kit.writer, PaymentProperties(subscription = PaymentProperties.Subscription(enabled = true)), kit.review)
         val fulfillment = PaymentFulfillment(kit.store, kit.listener, kit.writer, lifecycle)
         val pushed = PaymentPushedEvents(kit.store, kit.tasks, kit.writer, lifecycle, kit.review)
+        pushedEvents = pushed
         purchases = PaymentStorePurchases(kit.store, kit.tasks, kit.writer, pushed, lifecycle, kit.review, fulfillment)
     }
 
@@ -189,5 +198,40 @@ class StorePurchasesDbTest {
         assertEquals(SubscriptionEndReason.REPLACED, ended.endReason)
         assertNull(ended.activeKey)
         assertEquals(upgraded.subscriptionId, kit.store.findLiveSubscription("acc_1")?.id)
+    }
+
+    @Test
+    fun `a renewal confirmed while the provider push of the same payment arrives is applied once and the push is never closed as a seat clash`() {
+        assertEquals(StoreRecordOutcome.RECORDED, record(subscription(), basic).outcome)
+        val handler = PaymentWebhookTaskHandler(kit.store, PaymentProviderRouter(listOf(gateway), PaymentProperties()), kit.convergence, kit.writer, pushedEvents)
+
+        repeat(20) { round ->
+            val txn = "renewal_$round"
+            val start = monthLater.plusSeconds(round * 86_400L)
+            val renewal = subscription(txn = txn).copy(paidAt = start, periodStart = start, periodEnd = start.plusSeconds(30 * 86_400))
+            val push = PushedPayment(
+                eventId = "evt_$txn", occurredAt = start, providerPaymentId = txn, total = PaymentAmount(3_900, "KRW"), tax = null, paidAt = start,
+                providerSubscriptionId = "orig_1", periodStart = start, periodEnd = renewal.periodEnd, mode = PaymentMode.LIVE,
+            )
+            kit.inbox.receive(gateway, gateway.delivery(push))
+            val event = checkNotNull(kit.store.findWebhookEventByKey("appstore", "evt_$txn"))
+
+            val results = race(2) { n ->
+                if (n == 0) record(renewal, basic).outcome
+                else (1..3).firstNotNullOfOrNull { attempt ->
+                    try {
+                        handler.handle(PaymentTaskRun(PaymentTaskTypes.WEBHOOK, event.id.toString(), attempt, 3))
+                        StoreRecordOutcome.RECORDED
+                    } catch (_: PaymentTaskRetryException) {
+                        null
+                    }
+                }
+            }
+
+            assertTrue(results.all { it.isSuccess }, results.mapNotNull { it.exceptionOrNull() }.toString())
+            val closed = checkNotNull(kit.store.findWebhookEvent(event.id))
+            assertEquals(PaymentWebhookStatus.PROCESSED, closed.status, "round $round: ${closed.lastError}")
+            assertEquals(1, PaymentDb.count("select count(*) from payment_orders where provider_payment_id = :id", "id" to txn), "round $round")
+        }
     }
 }

@@ -258,7 +258,13 @@ interface PaymentLedgerTx {
 }
 
 /** 유니크 제약이 막았다(예: 한 결제 키가 두 주문에 붙으려 했다). 저장소가 던진다 — 서비스는 "결제할 수 없는 주문"으로 읽는다. */
-class PaymentLedgerConflictException(message: String) : RuntimeException(message)
+open class PaymentLedgerConflictException(message: String) : RuntimeException(message)
+
+/**
+ * 주문 넣기에서 결제 번호 `(provider, provider_payment_id)` 가 다른 주문과 겹쳤다(PostgreSQL) - 같은 결제를 다른 길(스토어 확인 · 웹훅)이 먼저 넣었다는 뜻이다.
+ * 계정의 구독 자리(`active_key`) 충돌이 아니다: 웹훅 처리기는 이것을 「자리 충돌」로 읽지 않고 되돌려 다시 한다(다시 읽으면 이미 들어온 주문이 보인다).
+ */
+class PaymentProviderPaymentConflictException(message: String) : PaymentLedgerConflictException(message)
 
 /** 결제사를 부르는 코드의 입구 검사 — 열린 장부 트랜잭션 안이면 던진다(프로그래밍 오류). [what] 은 호출한 쪽 이름. */
 internal fun PaymentLedgerStore.requireNoOpenTransaction(what: String) {
