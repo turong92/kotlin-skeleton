@@ -380,6 +380,7 @@ CS 처럼 `payment.read` + `payment.refund` 만 가진 역할은 환불 줄만 �
 | `FULFILMENT_UNRESOLVED` | 돈은 받았는데 지급 작업이 죽었다(`fulfilled` 가 거짓) | 「결제사와 맞추기」가 지급 작업을 **다시 넣고** 푼다. 지급이 끝나면 스스로 비워진다 |
 | `SUBSCRIPTION_STALE_CHARGE` | (구독) 구독이 기다리는 과금 주문이 아닌 구독 주문이 늦게 `PAID` 가 됐다 — 구독 기간은 그대로이고 돈만 받았다. 돈 쪽 이유라 지급 쪽 이유를 덮는다 | 장부에는 푸는 단추가 없다. 운영자가 그 주문을 환불한다(`POST /orders/{id}/refunds`) |
 | `SUBSCRIPTION_CANCEL_REFUND_UNRESOLVED` | (구독) 중도 해지의 환불을 결제사에 보내지 못했거나(작업이 시도를 다 씀 · 금액 초과 · 모드 불일치 · 환불할 수 없는 상태) 결제사가 거절했다 — 구독은 이미 끝났다. 돈 쪽 이유 | 장부에는 푸는 단추가 없다. 운영자가 직접 환불한다 |
+| `SUBSCRIPTION_SEAT_TAKEN` | (구독) 스토어(App Store · Google Play)에서 구독을 샀는데 이 계정에는 이미 살아 있는 구독이 있다 — 돈은 `PAID` 로 장부에 있고 지급은 없다. 돈 쪽 이유 | 장부에는 푸는 단추가 없다. 운영자가 스토어에서 환불하게 한다 |
 | `REFUND_APPLY_UNRESOLVED` | 환불은 `SUCCEEDED` 인데 앱의 회수(`onRefunded`) 작업이 죽었다 | 「결제사와 맞추기」가 회수 작업을 다시 넣고 푼다. 회수가 끝나면 스스로 비워진다 |
 
 **파생 둘** — 줄에 찍힌 이유가 없을 때, `skeleton.payment.admin.stale-after`(기본 1시간)보다 오래된 것:

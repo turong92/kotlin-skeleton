@@ -192,6 +192,19 @@ class PaymentLedgerAutoConfiguration {
         chargebacks: PaymentChargebackAlert,
     ): PaymentPushedEvents = PaymentPushedEvents(store, tasks, writer, subscriptions.getIfAvailable(), review, chargebacks)
 
+    /** 스토어(App Store · Google Play)가 확인해 준 구매를 장부에 넣는다 - `payment-iap` 의 구매 확인이 부른다. 스토어 결제사가 없으면 아무도 부르지 않는다. */
+    @Bean
+    @ConditionalOnMissingBean
+    fun paymentStorePurchases(
+        store: PaymentLedgerStore,
+        tasks: PaymentTasks,
+        writer: PaymentLedgerWriter,
+        pushed: PaymentPushedEvents,
+        subscriptions: ObjectProvider<SubscriptionLifecycle>,
+        review: PaymentReviewNotifier,
+        fulfillment: PaymentFulfillment,
+    ): PaymentStorePurchases = PaymentStorePurchases(store, tasks, writer, pushed, subscriptions.getIfAvailable(), review, fulfillment)
+
     @Bean
     @ConditionalOnMissingBean
     fun paymentWebhookTaskHandler(

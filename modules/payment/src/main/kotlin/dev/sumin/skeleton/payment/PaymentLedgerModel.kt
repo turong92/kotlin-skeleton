@@ -82,6 +82,9 @@ enum class PaymentReviewReason(val isMoney: Boolean) {
     /** 구독의 지금 과금 주문이 아닌 구독 주문이 늦게 `PAID` 가 됐다 — 구독 기간은 그대로이고 돈만 받았다. 운영자가 환불한다. */
     SUBSCRIPTION_STALE_CHARGE(true),
 
+    /** 스토어(App Store · Google Play)에서 구독을 샀는데 이 계정에는 이미 살아 있는 구독이 있다 - 돈은 장부에 있고 지급은 없다. 운영자가 스토어에서 환불하게 한다. */
+    SUBSCRIPTION_SEAT_TAKEN(true),
+
     /** 첫 결제는 받았는데 결제사가 빌링키(SID)를 알려 주지 못했다 - 구독은 켜졌지만 갱신할 수단이 없어 다음 갱신일에 과금 없이 끝난다. 운영자가 알고 있게 하고, 필요하면 결제사 화면에서 확인한다. */
     SUBSCRIPTION_TOKEN_MISSING(false),
 

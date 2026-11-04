@@ -371,7 +371,15 @@ class PaymentPushedEvents(
             tx.updateSubscription(subscription.copy(providerSubscriptionId = event.providerSubscriptionId, providerSyncedAt = event.occurredAt, updatedAt = writer.now()))
             return null
         }
-        if (subscription.providerMode != (event.mode ?: gateway.mode)) return MODE_MISMATCH
+        return applySubscriptionState(tx, lifecycle, subscription, event, event.mode ?: gateway.mode, gateway::itemRefOf)
+    }
+
+    /**
+     * 잠근 구독 줄에 결제사가 말한 구독의 지금 모습(상태 · 기간 · 플랜)을 맞춘다 - 웹훅([subscriptionState])과 스토어 구매 확인의 「구매 복원」([PaymentStorePurchases])이 같은 길을 쓴다.
+     * [mode] 는 이 사건의 모드, [itemRefOf] 는 결제사의 품목 id 를 우리 플랜 코드로 바꾼다(모르면 null).
+     */
+    internal fun applySubscriptionState(tx: PaymentLedgerTx, lifecycle: SubscriptionLifecycle, subscription: PaymentSubscription, event: PushedSubscription, mode: PaymentMode, itemRefOf: (String) -> String?): String? {
+        if (subscription.providerMode != mode) return MODE_MISMATCH
         if (subscription.status == SubscriptionStatus.ENDED) return ALREADY_ENDED
         val syncedAt = subscription.providerSyncedAt
         if (syncedAt != null && event.occurredAt.isBefore(syncedAt)) return STALE_EVENT // 더 새로운 사건이 먼저 도착해 반영됐다
@@ -396,7 +404,7 @@ class PaymentPushedEvents(
             current = current.copy(currentPeriodStart = event.periodStart, currentPeriodEnd = event.periodEnd, periodSeq = if (moved) current.periodSeq + 1 else current.periodSeq)
         }
         // 결제사 쪽에서 플랜이 바뀌었다(우리 변경 · 대시보드) - 품목이 하나이고 우리 플랜 표가 아는 코드면 플랜 코드를 맞춘다. 금액은 다음 결제가 맞춘다
-        val itemCode = event.items.filter { it.quantity > 0 }.singleOrNull()?.let { gateway.itemRefOf(it.priceId) }
+        val itemCode = event.items.filter { it.quantity > 0 }.singleOrNull()?.let { itemRefOf(it.priceId) }
         if (itemCode != null && itemCode != current.planCode) {
             val plan = lifecycle.plans()?.find(itemCode)
             // 사건이 새 정기 금액을 실었고 통화가 같으면 금액도 맞춘다 - 안 실었으면 다음 결제가 맞춘다

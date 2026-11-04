@@ -1,0 +1,172 @@
+package dev.sumin.skeleton.payment.jdbc
+
+import dev.sumin.skeleton.payment.PaymentAmount
+import dev.sumin.skeleton.payment.PaymentFulfillment
+import dev.sumin.skeleton.payment.PaymentMode
+import dev.sumin.skeleton.payment.PaymentOrderStatus
+import dev.sumin.skeleton.payment.PaymentProperties
+import dev.sumin.skeleton.payment.PaymentPushedEvents
+import dev.sumin.skeleton.payment.PaymentReviewReason
+import dev.sumin.skeleton.payment.PaymentStorePurchases
+import dev.sumin.skeleton.payment.PushedSubscriptionStatus
+import dev.sumin.skeleton.payment.StoreAccountTokens
+import dev.sumin.skeleton.payment.StoreProduct
+import dev.sumin.skeleton.payment.StorePurchase
+import dev.sumin.skeleton.payment.StorePurchaseKind
+import dev.sumin.skeleton.payment.StorePurchaseState
+import dev.sumin.skeleton.payment.StoreRecordOutcome
+import dev.sumin.skeleton.payment.StoreRecordResult
+import dev.sumin.skeleton.payment.SubscriptionEndReason
+import dev.sumin.skeleton.payment.SubscriptionLifecycle
+import dev.sumin.skeleton.payment.SubscriptionPlan
+import dev.sumin.skeleton.payment.SubscriptionStatus
+import dev.sumin.skeleton.payment.testing.FakeStoreGateway
+import java.time.Instant
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/**
+ * 스토어 구매 장부 기록(인앱결제 K2) - 진짜 DB · 진짜 락(두 방언)에서: 같은 구매는 순서대로 두 번 · 열여섯 번 동시에 와도 주문 한 줄 · 지급 한 번이고,
+ * 다른 계정은 구매를 가져가지 못하고, 자리가 겹치면 돈만 장부에 남는다.
+ */
+class StorePurchasesDbTest {
+    private val gateway = FakeStoreGateway()
+    private val t0: Instant = Instant.parse("2026-11-04T10:00:00Z")
+    private val monthLater: Instant = Instant.parse("2026-12-04T10:00:00Z")
+    private val cheer = StoreProduct.OneTime("cheer", "cheer-3000", "Cheer 3000")
+    private val basic = StoreProduct.Subscription(SubscriptionPlan("basic", "Basic", PaymentAmount(3_900, "KRW"), "P1M", 1))
+
+    private lateinit var kit: JdbcLedgerKit
+    private lateinit var purchases: PaymentStorePurchases
+
+    @BeforeTest
+    fun setUp() {
+        PaymentDb.clean()
+        kit = JdbcLedgerKit()
+        val lifecycle = SubscriptionLifecycle(kit.tasks, kit.writer, PaymentProperties(subscription = PaymentProperties.Subscription(enabled = true)), kit.review)
+        val fulfillment = PaymentFulfillment(kit.store, kit.listener, kit.writer, lifecycle)
+        val pushed = PaymentPushedEvents(kit.store, kit.tasks, kit.writer, lifecycle, kit.review)
+        purchases = PaymentStorePurchases(kit.store, kit.tasks, kit.writer, pushed, lifecycle, kit.review, fulfillment)
+    }
+
+    private fun oneTime(txn: String = "txn_1", token: String? = StoreAccountTokens.of("acc_1")) = StorePurchase(
+        mode = PaymentMode.TEST, kind = StorePurchaseKind.ONE_TIME, productId = "cheer_3000", providerPaymentId = txn, accountToken = token,
+        amount = PaymentAmount(3_000, "KRW"), paidAt = t0, state = StorePurchaseState.PURCHASED,
+    )
+
+    private fun subscription(txn: String = "txn_1", sub: String = "orig_1", token: String? = StoreAccountTokens.of("acc_1"), replaces: String? = null) = StorePurchase(
+        mode = PaymentMode.LIVE, kind = StorePurchaseKind.SUBSCRIPTION, productId = "premium", basePlanId = "monthly", providerPaymentId = txn, providerSubscriptionId = sub,
+        replacesSubscriptionId = replaces, accountToken = token, amount = PaymentAmount(3_900, "KRW"), paidAt = t0, periodStart = t0, periodEnd = monthLater,
+        state = StorePurchaseState.PURCHASED, subscriptionStatus = PushedSubscriptionStatus.ACTIVE,
+    )
+
+    private fun record(purchase: StorePurchase, product: StoreProduct, account: String = "acc_1") = purchases.record(gateway, account, purchase, product)
+
+    private fun orderRows() = PaymentDb.count("select count(*) from payment_orders where provider = 'appstore'")
+
+    private fun subscriptionRows() = PaymentDb.count("select count(*) from payment_subscriptions where provider = 'appstore'")
+
+    private fun all(results: List<Result<StoreRecordResult>>): List<StoreRecordResult> {
+        assertTrue(results.all { it.isSuccess }, results.mapNotNull { it.exceptionOrNull() }.toString())
+        return results.map { it.getOrThrow() }
+    }
+
+    @Test
+    fun `the same one-time purchase twice in a row and then sixteen at once leaves one order and one grant`() {
+        assertEquals(StoreRecordOutcome.RECORDED, record(oneTime(), cheer).outcome)
+        assertEquals(StoreRecordOutcome.ALREADY_RECORDED, record(oneTime(), cheer).outcome)
+
+        val results = all(race(16) { record(oneTime(), cheer) })
+
+        assertTrue(results.all { it.outcome == StoreRecordOutcome.ALREADY_RECORDED })
+        assertEquals(1, orderRows())
+        assertEquals(1, kit.listener.paid.size)
+        val order = checkNotNull(kit.store.findOrderByProviderPayment("appstore", "txn_1"))
+        assertEquals(PaymentOrderStatus.PAID, order.status)
+        assertEquals(PaymentMode.TEST, order.providerMode)
+        assertNotNull(order.fulfilledAt)
+    }
+
+    @Test
+    fun `sixteen threads confirming a new one-time purchase at once record it once and grant it once`() {
+        val results = all(race(16) { record(oneTime(), cheer) })
+
+        assertEquals(1, results.count { it.outcome == StoreRecordOutcome.RECORDED })
+        assertEquals(15, results.count { it.outcome == StoreRecordOutcome.ALREADY_RECORDED })
+        assertEquals(1, orderRows())
+        assertEquals(1, kit.listener.paid.size)
+        assertEquals(1, gateway.acknowledged.size)
+    }
+
+    @Test
+    fun `a token of another account is refused and writes nothing - a purchase without a token goes to whoever confirmed it first`() {
+        assertEquals(StoreRecordOutcome.OWNED_BY_ANOTHER_ACCOUNT, record(oneTime(token = StoreAccountTokens.of("acc_1")), cheer, account = "acc_2").outcome)
+        assertEquals(0, orderRows())
+
+        val tokenless = oneTime(txn = "txn_2", token = null)
+        val results = all(race(16) { n -> record(tokenless, cheer, account = if (n % 2 == 0) "acc_1" else "acc_2") })
+
+        assertEquals(1, results.count { it.outcome == StoreRecordOutcome.RECORDED })
+        assertEquals(7, results.count { it.outcome == StoreRecordOutcome.ALREADY_RECORDED }, "the winner's account asking again")
+        assertEquals(8, results.count { it.outcome == StoreRecordOutcome.OWNED_BY_ANOTHER_ACCOUNT }, "the other account")
+        assertEquals(1, orderRows())
+        assertEquals(1, kit.listener.paid.size)
+    }
+
+    @Test
+    fun `the same first subscription twice and sixteen at once leaves one line one order and one grant`() {
+        assertEquals(StoreRecordOutcome.RECORDED, record(subscription(), basic).outcome)
+        assertEquals(StoreRecordOutcome.ALREADY_RECORDED, record(subscription(), basic).outcome)
+
+        val results = all(race(16) { record(subscription(), basic) })
+
+        assertTrue(results.all { it.outcome == StoreRecordOutcome.ALREADY_RECORDED })
+        assertEquals(1, subscriptionRows())
+        assertEquals(1, orderRows())
+        assertEquals(1, kit.listener.paid.size)
+        val line = checkNotNull(kit.store.findLiveSubscription("acc_1"))
+        assertEquals(SubscriptionStatus.ACTIVE, line.status)
+        assertEquals("orig_1", line.providerSubscriptionId)
+    }
+
+    @Test
+    fun `sixteen threads confirming a new subscription at once record it once`() {
+        val results = all(race(16) { record(subscription(), basic) })
+
+        assertEquals(1, results.count { it.outcome == StoreRecordOutcome.RECORDED })
+        assertEquals(1, subscriptionRows())
+        assertEquals(1, orderRows())
+        assertEquals(1, kit.listener.paid.size)
+    }
+
+    @Test
+    fun `two different subscriptions of one account racing - one takes the seat, the other keeps only its money flagged`() {
+        val results = all(race(2) { n -> record(subscription(txn = "txn_$n", sub = "orig_$n"), basic) })
+
+        assertEquals(1, results.count { it.outcome == StoreRecordOutcome.RECORDED })
+        assertEquals(1, results.count { it.outcome == StoreRecordOutcome.ALREADY_SUBSCRIBED })
+        assertEquals(2, orderRows())
+        assertEquals(1, kit.listener.paid.size, "only the line that holds the seat is granted")
+        val flagged = results.single { it.outcome == StoreRecordOutcome.ALREADY_SUBSCRIBED }
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_SEAT_TAKEN, kit.order(checkNotNull(flagged.orderId)).reviewReason)
+        assertEquals(results.single { it.outcome == StoreRecordOutcome.RECORDED }.subscriptionId, kit.store.findLiveSubscription("acc_1")?.id)
+    }
+
+    @Test
+    fun `a new token that links to our line ends the old line as replaced in the same step`() {
+        val old = record(subscription(txn = "order_1", sub = "hash_old"), basic)
+
+        val upgraded = record(subscription(txn = "order_2", sub = "hash_new", replaces = "hash_old"), basic)
+
+        assertEquals(StoreRecordOutcome.RECORDED, upgraded.outcome)
+        val ended = checkNotNull(kit.store.findSubscription(checkNotNull(old.subscriptionId)))
+        assertEquals(SubscriptionStatus.ENDED, ended.status)
+        assertEquals(SubscriptionEndReason.REPLACED, ended.endReason)
+        assertNull(ended.activeKey)
+        assertEquals(upgraded.subscriptionId, kit.store.findLiveSubscription("acc_1")?.id)
+    }
+}

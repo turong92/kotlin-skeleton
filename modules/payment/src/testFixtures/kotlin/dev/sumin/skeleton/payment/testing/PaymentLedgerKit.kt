@@ -198,6 +198,7 @@ class PaymentLedgerKit(
     )
     val pushed = PaymentPushedEvents(store, tasks, writer, lifecycle, review, chargebacks)
     val webhook = PaymentWebhookTaskHandler(store, router, convergence, writer, pushed)
+    val storePurchases = dev.sumin.skeleton.payment.PaymentStorePurchases(store, tasks, writer, pushed, lifecycle, review, fulfillment)
     val charges = SubscriptionCharges(store, convergence, fulfillment, writer)
     val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties, couponDiscounts = discounts, scheduleDiscounts = subscriptionDiscounts)
     val planChanges = SubscriptionPlanChanges(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, writer, properties)
