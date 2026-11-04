@@ -29,6 +29,9 @@ dependencies {
     implementation(project(":modules:payment-toss"))
     implementation(project(":modules:payment-kakaopay"))
     implementation(project(":modules:payment-naverpay"))
+    implementation(project(":modules:payment-appstore"))   // 꺼진 채 공존한다 - 흐름은 apps/sample
+    implementation(project(":modules:payment-googleplay"))
+    implementation(project(":modules:payment-iap"))   // 앱 인앱결제 HTTP - 기본 꺼짐(skeleton.payment-iap.enabled)
     implementation(project(":modules:payment-jdbc"))   // + payment (api) — 결제 장부(주문 · 환불 · 웹훅 수신함 · 작업)가 켜진다: /api/v1/payments. PaymentCatalog 빈이 없어 주문 만들기는 닫혀 있다(상품은 앱이 정한다 — 실제 흐름은 apps/sample 의 cheer/)
     implementation(project(":modules:persistence-jdbc"))
     implementation(project(":modules:persistence-jpa"))
@@ -67,6 +70,7 @@ dependencies {
     implementation(project(":modules:account-jdbc"))        // + account — 클래스패스에 있어 설정 스니펫이 바인딩된다. 자동설정은 application.yml 에서 꺼 둔다 (아래 참고)
     implementation(project(":modules:auth-session-jdbc"))   // + auth-session
     implementation(project(":modules:auth-magic-link"))
+    implementation(project(":modules:auth-web-handoff"))   // 앱 -> 웹 자동 로그인 코드 - 기본 꺼짐
     implementation(project(":modules:author-profile-jdbc"))   // + author-profile — account 와 같이 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
     implementation(project(":modules:author-profile"))
     implementation(project(":modules:legal-jdbc"))          // + legal — account 와 같이 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
