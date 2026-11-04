@@ -43,6 +43,7 @@ enum class StorePurchaseState { PURCHASED, PENDING, REVOKED }
  * @property replacesSubscriptionId 이 구독이 이어받는 옛 구독 번호(구글 `linkedPurchaseToken`) - 우리 줄을 가리키면 옛 줄은 `REPLACED` 로 끝난다.
  * @property accountToken 구매에 박힌 계정 토큰(`appAccountToken` · `obfuscatedAccountId`) - 없으면 null(스토어에서 바로 산 오퍼 코드 등).
  * @property subscriptionStatus 구독의 지금 상태 - 단건이면 null.
+ * @property familyShared 가족 공유로 받은 구매다(애플 `inAppOwnershipType=FAMILY_SHARED`) - 지급하지 않는다([quantity] 가 2 이상인 것과 같은 「지급 불가」 사유).
  */
 data class StorePurchase(
     val mode: PaymentMode,
@@ -60,6 +61,7 @@ data class StorePurchase(
     val periodEnd: Instant? = null,
     val state: StorePurchaseState,
     val subscriptionStatus: PushedSubscriptionStatus? = null,
+    val familyShared: Boolean = false,
 ) {
     /** 계정 토큰은 계정 id 의 해시지만 로그에 싣지 않는다. */
     override fun toString(): String = "StorePurchase(kind=$kind, mode=$mode, productId=$productId, state=$state)"

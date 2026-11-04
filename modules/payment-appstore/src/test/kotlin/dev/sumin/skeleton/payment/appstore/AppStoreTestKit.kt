@@ -123,9 +123,10 @@ internal fun transactionJson(
     revocationType: String? = null,
     revocationPercentage: Int? = null,
     quantity: Int = 1,
+    inAppOwnershipType: String = "PURCHASED",
 ): String = buildString {
     append("{\"transactionId\":\"$transactionId\",\"originalTransactionId\":\"$originalTransactionId\",\"bundleId\":\"$bundleId\",\"productId\":\"$productId\",\"type\":\"$type\",\"environment\":\"$environment\",")
-    append("\"quantity\":$quantity,\"purchaseDate\":${purchaseDate.toEpochMilli()},\"signedDate\":${NOW.toEpochMilli()},\"inAppOwnershipType\":\"PURCHASED\"")
+    append("\"quantity\":$quantity,\"purchaseDate\":${purchaseDate.toEpochMilli()},\"signedDate\":${NOW.toEpochMilli()},\"inAppOwnershipType\":\"$inAppOwnershipType\"")
     if (price != null) append(",\"price\":$price")
     if (currency != null) append(",\"currency\":\"$currency\"")
     if (appAccountToken != null) append(",\"appAccountToken\":\"$appAccountToken\"")

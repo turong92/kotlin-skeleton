@@ -54,6 +54,14 @@ class AppStoreFetchTest {
     }
 
     @Test
+    fun `a purchase shared through Family Sharing is marked so the caller can refuse to grant it`() {
+        prod.knows("2000000000000001", transactionJson(inAppOwnershipType = "FAMILY_SHARED"))
+        assertThat(gateway.fetch(claim)!!.familyShared).isTrue()
+        prod.knows("2000000000000002", transactionJson(transactionId = "2000000000000002"))
+        assertThat(gateway.fetch(StoreClaim("2000000000000002"))!!.familyShared).isFalse()
+    }
+
+    @Test
     fun `a purchase neither host knows is null`() {
         assertThat(gateway.fetch(claim)).isNull()
         assertThat(prod.requests).hasSize(1)

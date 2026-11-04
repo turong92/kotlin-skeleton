@@ -96,6 +96,7 @@ class AppStorePaymentProvider(
             accountToken = tx.text("appAccountToken"),
             amount = amountOf(tx),
             quantity = tx["quantity"]?.asInt(1) ?: 1,
+            familyShared = tx.text("inAppOwnershipType") == "FAMILY_SHARED",
             paidAt = instantOf(tx, "purchaseDate") ?: throw unreadable(),
             state = if (tx.has("revocationDate")) StorePurchaseState.REVOKED else StorePurchaseState.PURCHASED,
         )
@@ -120,6 +121,7 @@ class AppStorePaymentProvider(
             accountToken = latest.text("appAccountToken") ?: claimed.text("appAccountToken"),
             amount = amountOf(latest),
             quantity = latest["quantity"]?.asInt(1) ?: 1,
+            familyShared = latest.text("inAppOwnershipType") == "FAMILY_SHARED",
             paidAt = instantOf(latest, "purchaseDate") ?: throw unreadable(),
             periodStart = instantOf(latest, "purchaseDate"),
             periodEnd = if (status == STATUS_GRACE) graceEnd ?: periodEnd else periodEnd,
