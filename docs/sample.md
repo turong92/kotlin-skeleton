@@ -259,6 +259,18 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 로컬은 갱신 · 재시도를 몇 분 안에 볼 수 있다: 주기 3분, 거절되면 1분 뒤 다시(`skeleton.payment.subscription.renewal.retry-interval`), 세 번 거절되면 구독이 끝난다. 토스 테스트 키로 카드 등록 창은 인증 번호 `000000` 과 국내 카드만 받는다([real-provider-setup §11.7](real-provider-setup.md)).
 `CheerOrderListener` 는 `itemType == cheer` 인 주문만 응원 기록으로 남긴다 — 구독 결제는 응원이 아니다.
 
+## 앱 인앱결제 (`/api/v1/payments/iap`)
+
+모바일 앱이 App Store · Google Play 에서 산 것을 서버가 **스토어에 직접 물어 확인한 뒤에만** 지급한다([payment-iap](modules/payment-iap.md)). 이 앱은 `payment-iap`(켜짐) + `payment-appstore` + `payment-googleplay`(둘 다 꺼진 채) + `auth-web-handoff`(켜짐)를 조립하고, 지급 · 환불 회수는 결제 장부 그대로라 응원하기(`CheerOrderListener`)가 웹 결제(토스)와 같은 훅으로 기록 · 되돌린다.
+
+| 값 | 이름 |
+|---|---|
+| 상품 지도 | `application.yml` 의 `skeleton.payment-iap.products` - 응원 `cheer-3000` ↔ 스토어 상품 `com.example.sample.cheer3000`(iOS) · `cheer_3000`(Android), 월 구독 플랜 `standard`(구독을 켠 앱에서만 지급) |
+| 지역 스위치 | `skeleton.payment-iap.channels` - 기본 `IAP_ONLY`(모든 나라 인앱결제만). 미국 예시는 yml 주석. 웹이 드는 값을 켜면 `SKELETON_PAYMENT_IAP_WEB_CHECKOUT_URL` 이 필요하고(없으면 기동 실패), 앱은 `POST …/iap/web-checkout-link` 의 한 번 쓰는 자동 로그인 주소로 웹에 넘어간다 |
+| 스토어 켜기 | `SKELETON_PAYMENT_APPSTORE_ENABLED=true` + `_PRIVATE_KEY`(비밀) · `_ISSUER_ID` · `_KEY_ID` · `_BUNDLE_ID` · `_APP_APPLE_ID` / `SKELETON_PAYMENT_GOOGLEPLAY_ENABLED=true` + `_SERVICE_ACCOUNT`(비밀) · `_PACKAGE_NAME` · `_PUBSUB_AUDIENCE` · `_PUBSUB_SERVICE_ACCOUNT_EMAIL`. 키 없이 뜨면 `GET /iap/config` 의 `store` 가 `null` |
+
+시험: `IapJourneyIntegrationTest`(가짜 애플 · 가짜 구글로 확인 → 응원 기록 → 환불 알림 → 회수), `IapWithoutStoreKeysIntegrationTest`(키 없이 뜬 모양). 스토어 콘솔 절차는 [real-provider-setup §16](real-provider-setup.md).
+
 ## 돌려 보기
 
 ```bash

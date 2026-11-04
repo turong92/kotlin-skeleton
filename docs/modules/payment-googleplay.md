@@ -8,6 +8,9 @@ Google Play(앱 안 결제)를 `payment` 의 **스토어 결제사**(`PaymentSto
 - **인증**: 서비스 계정 JWT(RS256, 범위 `androidpublisher`, 5분 전까지 재사용) → 접근 토큰. `notification-fcm` 의 `FcmAccessTokens` 모양을 이 모듈 안에 옮겼다. **토큰 주소는 설정이 정하고(구글 것으로 고정) 서비스 계정 JSON 의 `token_uri` 는 읽지 않는다.**
 
 **알림(RTDN)**: 주소는 `/api/v1/payments/webhooks/googleplay`, Pub/Sub push 본문 `{ message: { data(base64), messageId }, subscription }`, 주소의 비밀 조각은 없다(`signed=true` — OIDC 토큰이 진위를 보증한다).
+
+푸시는 `Authorization: Bearer <구글의 OIDC 토큰>` 을 싣고 오므로 이 모듈이 웹훅 경로(`<base-path>/webhooks/<provider-id>`)를 `BearerIgnoredPaths` 로 내놓는다 - 앱의 JWT 필터(`auth`)는 그 경로의 Bearer 를 로그인 토큰으로 읽지 않고 지나보내고, 진위는 아래 OIDC 확인이 가린다.
+
 - **OIDC 확인**(`GoogleOidcVerifier`, 본문을 읽기 전): `Authorization: Bearer` 의 RS256 JWT 를 **구글 공개키**(JWKS, 한 시간 캐시, 모르는 `kid` 는 분당 한 번만 다시 받는다)로 확인하고, `iss`(`accounts.google.com` 또는 `https://accounts.google.com`) · `aud`(= `pubsub.audience`) · `email`(= `pubsub.service-account-email`) · `email_verified=true` · 만료(시계 오차 60초)를 본다. 하나라도 틀리면 `401`, **저장 없음**. 공개키를 못 받았는데 아는 키도 없으면 던진다(5xx — Pub/Sub 이 다시 보낸다; 위조로 취급하지 않는다).
 - **봉투**: 이벤트 키 = `messageId`(같은 메시지가 두 번 오면 수신함 한 줄), 자원 = `sha256(토큰)`. `packageName` 이 다르면 · `testNotification` · 아래 표에 없는 종류는 `IGNORED`. 저장된 원문은 RTDN 알림 JSON 이다(토큰이 들어 있어 `toString` 에는 찍지 않는다).
 - **해석**(`interpret`, 락 밖): 토큰으로 API 를 다시 물어 지금 사실로 만든다. 읽는 중 API 가 일시 실패하면 던진다 — 수신함 줄은 `DEAD` 가 아니라 재시도된다(K1 의 길). 구글이 토큰을 더는 모르면 `IGNORED`.
@@ -55,5 +58,6 @@ Google Play(앱 안 결제)를 `payment` 의 **스토어 결제사**(`PaymentSto
 | OIDC 만료 | `an expired token, another issuer and a token signed by a key Google does not publish are rejected` |
 | 앱이 댄 `productId` ↔ 구글 답 | `an answer for another product than the app claimed is refused` |
 | 운영 금액 조회 실패 → 던짐 | `a live purchase whose order Google does not know is a transient failure` |
+| 앱의 JWT 필터가 푸시 경로의 Bearer 를 건너뜀(`googlePlayBearerIgnored`) | 고치기 전 상태 그대로 `apps/sample` 의 `IapJourneyIntegrationTest` 가 `401` 로 빨개졌다(푸시의 구글 OIDC 토큰을 앱의 로그인 토큰으로 읽어 막았다). 모듈 시험은 앱 보안 체인이 없어 못 본다 |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

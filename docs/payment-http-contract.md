@@ -520,6 +520,7 @@ CS 처럼 `payment.read` + `payment.refund` 만 가진 역할은 환불 줄만 �
 | `pendingPlanCode` | 플랜 변경의 결제가 확인 중이면 바뀔 플랜 코드(`planCode` 는 아직 옛 플랜), 아니면 `null` |
 | `attempt` | 이번 기간의 시도 번호 — `PAST_DUE` 에서 몇 번째 재시도인지 |
 | `endReason` | `ENDED` 일 때: `FIRST_PAYMENT_DECLINED` · `USER_CANCELED` · `USER_CANCELED_NOW`(중도 해지) · `PAYMENT_FAILED` · `ACCOUNT_ERASED` · `RENEWAL_BLOCKED` · `REFUNDED` · `REPLACED`(다른 구독이 이어받음 - 스토어) |
+| `provider` · `providerManaged` | 어느 결제사의 구독인가(`toss` · `paddle` · 스토어는 `appstore` · `googleplay`), 결제사가 갱신을 직접 하는가(스토어 구독은 `true`). **앱은 탈퇴 화면을 열기 전에 `GET /subscriptions/me` 로 이 값을 보고, `provider` 가 `appstore` · `googleplay` 이고 `status` 가 이용 중(`ACTIVE` · `CANCELING` · `PAST_DUE`)이면 「스토어에서 구독을 해지하세요」를 안내한다**(서버는 스토어 구독을 끊지 못한다 - 탈퇴하면 우리 쪽 이용만 끝난다) |
 | `card` `{issuer, last4}` · `testMode` · `createdAt` | 화면 표시용 카드(끝나면 `null`) |
 | `discount` | 할인이 붙은 구독이면 `{ label, stages: [{type: "FREE"\|"PERCENT"\|"FIXED", value, maxDiscount\|null, periods\|null}], periodsUsed, nextAmount, remainingPeriods\|null }`, 아니면(끝난 할인 포함) `null`. 칸은 늘 온다. `stages` 는 시작 때 복사한 단계(쿠폰 정의를 고쳐도 그대로), `nextAmount` 는 다음 결제액(최소 단위, 구독 통화), `remainingPeriods` 는 남은 할인 횟수(영원이면 `null`). `amount` 는 늘 **정가**(할인 전 박힌 금액)다 |
 

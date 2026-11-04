@@ -25,6 +25,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤. 새 API 프로젝트 시작점.
 | | 네이버페이 직접 연동 | 선택 · 토스 계약 없이 네이버페이 계약만으로(카카오페이 · 토스와 함께 켜면 결제 화면에서 고른다). 서버가 결제를 예약하고(금액 고정) 구매자가 예약한 결제창에서 결제 → 서버 승인 · 취소 · 부분 환불 · 결제 내역 조회. 정기 결제(자동결제)는 정기 인증값을 설정하면 있고 웹훅은 없다. 인증값은 가맹 심사 뒤에 나온다 - 심사 전에는 가짜 서버로만 시험([real-provider-setup](docs/real-provider-setup.md) §13) | [payment-naverpay](docs/modules/payment-naverpay.md) |
 | | Stripe | 선택 · 승인 · 취소만 있다(장부 위의 구독 · 웹훅 기능은 문서에 없다) | [payment-stripe](docs/modules/payment-stripe.md) |
 | **해외 결제** | **Paddle**(판매 대행 — 해외 세금을 Paddle 이 처리, 여러 통화): 서버가 Paddle 거래를 먼저 만들고(가격은 서버 설정) 결제창은 그 거래 id 만 연다 · **서명된 웹훅**(HMAC-SHA256, 시각 허용 오차)만 믿고 장부에 옮긴다 · 산 가격 대조 · 갱신은 Paddle, 해지는 Paddle API · 가격 표시용 값(클라이언트 토큰 · 환경 · 가격 id)을 `GET /config` 로 준다 | 선택 · 가짜 Paddle 서버로 e2e, Paddle 샌드박스에서 단건 · 구독 첫 결제를 실측했다(2026-10-13 — 갱신 · 해지 · 환불은 샌드박스 미실측). 한국 구매자의 Paddle 결제는 막지 않고 운영자 「확인 필요」로 표시 | [payment-paddle](docs/modules/payment-paddle.md) |
+| **앱 인앱결제** | **App Store · Google Play**: 서버가 앱이 보낸 영수증을 믿지 않고 스토어에 직접 물어(애플은 Apple Root CA - G3 까지 인증서 체인으로 서명 확인, 구글은 Play Developer API) 확인한 뒤에만 지급 · 환불은 스토어 알림(애플 서버 알림 V2 · 구글 실시간 개발자 알림, 구글 push 는 OIDC 서명 확인)으로 회수 · 계정 토큰으로 구매를 계정에 묶음 · 테스트 구매는 인정하되 매출에서 뺌 · 지역 스위치(기본 인앱결제만) · 웹으로 넘어갈 때 한 번 쓰는 자동 로그인 주소 | 선택 · 가짜 스토어 서버로 e2e(`apps/sample`), 진짜 애플 · 구글 계정으로는 아직 재지 않았다 | [payment-iap](docs/modules/payment-iap.md) · [payment-appstore](docs/modules/payment-appstore.md) · [payment-googleplay](docs/modules/payment-googleplay.md) · [auth-web-handoff](docs/modules/auth-web-handoff.md) |
 | **접속 나라로 고르기** | 서버가 접속 나라(Cloudflare `CF-IPCountry` — 클라이언트 IP 모드가 `cloudflare` 이고 믿는 프록시에서 온 것만)로 결제사와 해지 · 환불 규칙을 정한다. 요청 본문의 `country` 는 읽지 않고, `provider` 는 같은 나라에 결제사가 둘 이상 켜졌을 때 `GET /config` 의 `choices` 안에서만 받는다. 그 나라의 결제사가 못 열리면 다른 결제사로 넘기지 않고 503. `GET /config` 가 `country` · `provider` · `cancelPolicy` 를 알려 준다 | 꺼진 채 시작 (`skeleton.payment.routing.*`) | [CHANGELOG](CHANGELOG.md) "접속 나라로 결제사 · 해지·환불 규칙" |
 | | **개발용 나라 전환**: `routing.dev-country`(모든 요청을 한 나라로) · `routing.dev-country-switch=true` 면 요청 헤더 `X-Dev-Country` 로 재기동 없이 토스 ↔ Paddle. 보호 환경(stage · prod)에서 켜져 있으면 기동 실패 | 로컬 전용 | [CHANGELOG](CHANGELOG.md) |
 | **운영 · 관리** | 주인 경보: 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 식 웹훅(+메일)으로, 여러 인스턴스의 같은 경보는 한 번만(`alert-jdbc`). 에러 수집 서비스(Sentry)를 쓰지 않는 답 | 기본 · 웹훅 주소를 넣어야 켜진다 | [alert](docs/alert.md) |
@@ -71,6 +72,7 @@ modules/                # grouped by area; a module's store / provider clients s
   |- auth-session       # refresh tokens (rotation + reuse detection), session list, logout
   |  `- auth-session-jdbc   # session store for PostgreSQL / MySQL
   |- auth-magic-link    # email-link sign-in (one more method on the same account)
+  |- auth-web-handoff   # one-time app-to-web sign-in code (off by default)
   `- auth-social        # optional social-login extension for auth
      |- auth-social-google  # optional Google OAuth provider client
      |- auth-social-kakao   # optional Kakao OAuth provider client
@@ -91,7 +93,10 @@ modules/                # grouped by area; a module's store / provider clients s
   |- payment-kakaopay   # optional KakaoPay direct provider (one-time: ready, approve, cancel; no Toss contract needed)
   |- payment-naverpay   # optional NaverPay direct provider (one-time: server reserve, apply, cancel; no Toss contract needed)
   |- payment-stripe     # optional Stripe payment provider (confirm / cancel)
-  `- payment-paddle     # optional Paddle (merchant of record) provider: server-made transactions, signed webhooks
+  |- payment-paddle     # optional Paddle (merchant of record) provider: server-made transactions, signed webhooks
+  |- payment-appstore   # optional App Store in-app purchases: purchases verified with Apple, server notifications V2
+  |- payment-googleplay # optional Google Play in-app purchases: purchases verified with Google, real-time developer notifications
+  `- payment-iap        # app HTTP for in-app purchases: config with a regional switch, purchase confirmation
 
   [Notification]
   notification          # optional notification contracts and local broker

@@ -29,6 +29,8 @@
 
 **지역 스위치**(`channels`): `default` + `countries.<나라>.<ios|android>` 표. 웹이 드는 값(`IAP_AND_WEB` · `WEB_ONLY`)이 하나라도 있는데 `web-checkout-url` 이 비었으면 **기동 실패**(링크 없는 「웹 결제」 단추가 나가지 않게). 나라가 두 글자가 아니거나 플랫폼이 `ios` · `android` 가 아니면 기동 실패. 켜도 웹 결제는 바깥 브라우저의 기존 `payment-toss` 다. 2026-11 기준 앱 안 링크가 자유로운 곳은 미국뿐이다 — EU · 일본 링크는 애플 신청과 외부 구매 신고가 따로라 **이 스위치만으로 켜지 않는다**, 한국은 구글 2026-12-31 시행을 본 뒤 정한다. 앱 → 웹으로 넘어갈 때의 자동 로그인은 아래 `web-checkout-link` 다(`auth-web-handoff` 를 얹었을 때만).
 
+**탈퇴 전 안내**: 탈퇴하면 서버는 우리 쪽 구독 줄을 닫지만 **스토어의 자동 갱신은 끊지 못한다**(애플은 서버가 구독을 끊을 길이 없고, 두 스토어가 같은 모양이 되도록 구글도 안내만 한다). 그래서 앱이 탈퇴 화면 앞에서 `GET /api/v1/payments/subscriptions/me` 의 `provider`(`appstore` · `googleplay`)와 `status` 로 스토어 구독이 살아 있는지 보고 「스토어에서 구독을 해지하세요」를 안내한다 - 서버에 더한 조회는 없다([payment-http-contract §12.1](../payment-http-contract.md)). 구독을 켠 앱(`skeleton.payment.subscription.enabled=true`)에서만 이 경로가 있다.
+
 **막는 것**(스펙 §6): 영수증 위조(앱 값을 믿지 않고 스토어에 직접 묻는다) · 이중 지급(결제 번호 유니크 + 주문 줄 락 안 `fulfilled_at` 한 번) · 다른 계정으로의 권한 이전(계정 토큰이 부른 계정과 같아야 하고 토큰이 없으면 처음 확인받은 계정이 주인 — `409`) · 환불 뒤 회수(확인 전에 환불된 구매는 `422`) · 스토어 일시 실패는 `503` 이라 앱이 끝내지 않는다. 환불 검사는 두 겹이다 — 이 모듈이 `state` 로 먼저 거르고, `record` 도 환불 · 끝난 구독을 아무것도 쓰지 않고 돌려준다.
 
 | 항목 | 내용 |
@@ -43,5 +45,18 @@
 | 마이그레이션 | 없음 |
 | 프론트 짝 | 없음 (모바일 앱의 flutter payment 가 부른다 - IAP 는 다음 단계) |
 | 테스트 | `modules/payment-iap/src/test` — 메모리 장부 + 가짜 스토어(`FakeStoreGateway`)로 컨트롤러까지(MockMvc). 실계정 호출 없음 |
+
+## 변이 확인 기록
+
+검사를 하나씩 빼 보고 시험이 빨개지는지 손으로 확인했다(2026-11-04). 스토어를 믿는 쪽의 돈 검사는 `payment` 문서의 기록(주인 · 환불 · 이중 지급)에 있다.
+
+| 뺀 검사 | 빨개진 시험 |
+|---|---|
+| 구글 `productId` 힌트 ↔ 스토어 답 | `a google purchase whose product hint differs from what the store says is not believed` |
+| 상품 지도의 종류(단건 · 구독) 확인 | `a product of the other kind than the map says is not granted either` |
+| 가족 공유 · 수량 2 이상 거절 | `a family shared purchase or a quantity of two or more is a 422 and grants nothing` |
+| 스토어 호출 실패 → `503` 매핑 | `a store that cannot be reached is a 503 and writes nothing …` |
+| 인앱결제만인 채널에서 웹 링크(코드) 거절 | `an in-app only channel gets no link and no code is made` |
+| 환불된 구매 거절(`IapPurchases` 쪽만) | **안 빨개진다** - 장부 `record` 가 같은 결과(`NOT_PURCHASED` → `422`)를 내는 이중 방어다. 일부러 두었다 |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

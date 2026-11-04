@@ -321,6 +321,10 @@ while IFS= read -r m; do
   if [ "$m" = payment-paddle ]; then
     [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-paddle:start -->\n.*?^<!-- payment-paddle:end -->\n//gms; s/\n+\z/\n/' docs/real-provider-setup.md
   fi
+  # 앱 인앱결제 절(## 16)도 같은 방식 - payment-iap 을 고른 프로젝트에만 남는다
+  if [ "$m" = payment-iap ]; then
+    [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-iap:start -->\n.*?^<!-- payment-iap:end -->\n//gms; s/\n+\z/\n/' docs/real-provider-setup.md
+  fi
   M="$m" perl -ni -e 'print unless /^include\(":modules:\Q$ENV{M}\E"\)\s*$/' settings.gradle.kts
   [ ! -f docs/modules/README.md ] || M="$m" perl -ni -e 'print unless /\]\(\Q$ENV{M}\E\.md\)/' docs/modules/README.md
   # 배포 문서가 이 모듈 문서로 건 링크는 글자만 남긴다(빠진 문서로 가는 깨진 링크가 남지 않게)
@@ -346,6 +350,11 @@ fi
 # payment-paddle 을 고른 프로젝트: 안내 문서의 표식 줄만 걷어 낸다
 if ! grep -qx payment-paddle <<<"$REMOVED"; then
   [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-paddle:(start|end) -->\n//gm' docs/real-provider-setup.md
+fi
+
+# payment-iap 을 고른 프로젝트: 안내 문서의 표식 줄만 걷어 낸다
+if ! grep -qx payment-iap <<<"$REMOVED"; then
+  [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-iap:(start|end) -->\n//gm' docs/real-provider-setup.md
 fi
 
 # 루트 build.gradle.kts: DB 통합 테스트 묶음 (선택된 모듈 · 선택된 방언만)

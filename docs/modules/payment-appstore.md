@@ -39,4 +39,16 @@ App Store(앱 안 결제)를 `payment` 의 **스토어 결제사**(`PaymentStore
 | 프론트 짝 | 없음 (모바일 앱의 in_app_purchase 가 거래 id 를 보내면 서버가 검증한다) |
 | 테스트 | `modules/payment-appstore/src/test` — 가짜 서버 `FakeAppStoreServer` + 시험용 인증서 체인 `TestChain`(bcpkix 는 이 모듈 `testImplementation` 에만; 실계정 호출 없음) |
 
+## 변이 확인 기록
+
+검사를 하나씩 빼 보고 시험이 빨개지는지 손으로 확인했다(2026-11-04, 바뀐 모듈의 시험만).
+
+| 뺀 검사 | 빨개진 시험 |
+|---|---|
+| 중간 인증서의 애플 확장 OID | `intermediate without … extension` |
+| PKIX 경로 확인(루트까지) | 다른 루트 · 만료 시험 5개 |
+| 거래의 `bundleId` 확인 | `answer for another app` |
+| 알림의 `bundleId` 확인 | `notification for another app` |
+| 헤더 `alg` = ES256 확인 | **안 빨개진다** - 서명 라이브러리(nimbus `ECDSAVerifier`)가 ES256 이 아닌 `alg` 를 스스로 거절하는 이중 방어다. 일부러 두었고 시험은 그 결과(거절)를 본다 |
+
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

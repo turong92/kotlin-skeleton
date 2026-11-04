@@ -25,4 +25,16 @@
 | 프론트 짝 | 없음 (웹 결제 화면이 주소의 #handoff 조각을 읽어 redeem 을 부른다 - react 패키지는 아직 없다) |
 | 테스트 | `modules/auth-web-handoff/src/test` |
 
+## 변이 확인 기록
+
+검사를 하나씩 빼 보고 시험이 빨개지는지 손으로 확인했다(2026-11-04).
+
+| 뺀 검사 | 빨개진 시험 |
+|---|---|
+| 세션을 한꺼번에 닫을 때 열린 코드 닫기(`closeAll`) | `closing every session of the account … closes the open code` |
+| 새 코드를 내면 열린 코드 닫기(계정 단위 주인) | `issuing a new code for the account closes the one still open` (+ 위 시험) |
+| 코드 수명(`ttl`) | `an expired code is dead` |
+
+한 번만 쓰기 · 해시 저장 · 로그 무노출은 이 모듈의 시험(`WebHandoffWebTest`)이 보지만 변이로는 확인하지 않았다.
+
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

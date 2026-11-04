@@ -50,6 +50,9 @@
 <!-- payment-paddle:start -->
 | §14 | Paddle 환불(결제 장부): 샌드박스 권한 · 알림 대상 · 눌러 볼 순서 · 못 잰 가정 | 15분 + 샌드박스 승인 대기(최대 10분) |
 <!-- payment-paddle:end -->
+<!-- payment-iap:start -->
+| §16 | 앱 인앱결제: App Store Connect 키 · 서버 알림 주소 · Play 서비스 계정 · Pub/Sub push 구독과 인증 · 못 잰 가정(적기만 했다) | 1시간 + 스토어 심사/승인 대기 |
+<!-- payment-iap:end -->
 
 > **환경변수 이름은 한 규칙**이다(`docs/deploy.md` §7): Google · Kakao · Naver 는 `SKELETON_AUTH_SOCIAL_PROVIDERS_<제공자>_{ENABLED,CLIENT_ID,CLIENT_SECRET,REDIRECT_URI}`, LINE 은 `SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,SCOPES}`, X 는 `SKELETON_AUTH_SOCIAL_X_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,REQUEST_EMAIL}`. 진짜 환경변수만으로 `apps/sample` 을 띄워 셋이 `/auth/methods` 에 나오는 것은 `SocialEnvironmentOnlyBootTest` 가 증명한다. 콘솔에서 만드는 준비(§1 · §2 · §3)는 코드와 무관하니 먼저 해 둔다.
 
@@ -689,6 +692,45 @@ npx web-push generate-vapid-keys
 FCM_TEST_CREDENTIALS=$(base64 < service-account.json | tr -d '\n') FCM_TEST_TOKEN=<기기 토큰> \
   ./gradlew :modules:notification-fcm:test --tests '*FcmRealSendTest'
 ```
+
+<!-- payment-iap:start -->
+## 16. 앱 인앱결제 (App Store · Google Play)
+
+`payment-iap` + `payment-appstore` + `payment-googleplay` 를 진짜 스토어에 붙이는 **스토어 콘솔 쪽 절차**다. 이 문서는 **적어 두기만** 한 것이다 - 이 레포의 시험은 가짜 스토어 서버로만 돌고, 진짜 애플 · 구글 계정으로는 한 번도 재 보지 않았다(2026-11-04 공식 문서를 읽고 적었다). 모듈 설명은 [payment-iap](modules/payment-iap.md) · [payment-appstore](modules/payment-appstore.md) · [payment-googleplay](modules/payment-googleplay.md), 비밀 이름은 [deploy.md](deploy.md) §7. 환경변수 이름은 `SKELETON_PAYMENT_APPSTORE_*` · `SKELETON_PAYMENT_GOOGLEPLAY_*`(프로젝트 접두사로 바뀐다)다.
+
+### 16.1 App Store Connect
+
+1. **앱과 번들 id**: 앱 레코드를 만든다. 번들 id 는 `BUNDLE_ID`, 앱 정보의 숫자 id(Apple ID)는 `APP_APPLE_ID` 다(둘 다 비밀 아님).
+2. **상품**: 소모성(예: 응원 3,000원)과 자동 갱신 구독(구독 그룹 + 월 상품)을 만든다. 상품 id 가 `skeleton.payment-iap.products[*].ios-product-id` 에 적는 값이다 - 지도에 없는 상품은 서버가 지급하지 않는다. 금액은 스토어가 정하고 서버는 스토어가 말한 값을 기록한다.
+3. **서버용 키**: 사용자 및 액세스 → 통합 → **앱 내 구입** 키를 만든다. Issuer ID(`ISSUER_ID`) · Key ID(`KEY_ID`)를 적고, `.p8` 파일은 **한 번만 받을 수 있다**. 파일의 PEM 본문이 `PRIVATE_KEY`(**운영자 비밀**)다 - 저장소에 두지 않고 배포 선언의 `secrets:` 로만 넘긴다.
+4. **서버 알림**: 앱 정보 → App Store 서버 알림에 **운영 · 샌드박스 URL 모두** `https://<서비스 주소>/api/v1/payments/webhooks/appstore` 를 넣고 **버전 2** 를 고른다. 주소에 비밀 조각은 없다(애플이 서명한다). 서버는 서명이 틀리면 `401` 을 주고 애플이 다시 보낸다(운영만 1 · 12 · 24 · 48 · 72 시간 뒤).
+5. **시험 구매**: 샌드박스 테스터 계정으로 산다. 심사원과 TestFlight 의 구매도 샌드박스 거래다 - 서버는 운영 서버에서도 지급하되 `TEST` 로 표시해 매출에서 뺀다(운영에서 먼저 묻고 `404` 면 샌드박스에 묻는다).
+
+### 16.2 Google Play Console · Google Cloud
+
+1. **서비스 계정**: Google Cloud 콘솔에서 서비스 계정을 만들고 JSON 키를 받는다(키 파일은 커밋하지 않는다). 프로젝트에서 **Google Play Android Developer API** 를 켠다. 키 JSON 의 base64 가 `SERVICE_ACCOUNT`(**운영자 비밀**)다: `base64 < key.json | tr -d '\n'`.
+2. **Play Console 권한**: 설정 → API 액세스에서 그 서비스 계정을 앱에 연결하고 **재무 데이터 보기** · **주문 및 구독 관리** 권한을 준다. 권한이 퍼지는 데 시간이 걸릴 수 있다.
+3. **상품**: 일회성 상품(`play-product-id`)과 구독(상품 id + **기본 요금제 id** = `play-base-plan-id`)을 만든다. 앱의 `package-name` 이 `PACKAGE_NAME` 이다(비밀 아님).
+4. **실시간 개발자 알림(RTDN)**: 수익 창출 설정 → 실시간 개발자 알림에 Pub/Sub **주제**를 적는다. 그 주제에 구글의 발행 계정 `google-play-developer-notifications@system.gserviceaccount.com` 에 **Pub/Sub 게시자** 역할을 준다.
+5. **push 구독**: 그 주제에 **push** 구독을 만들고 엔드포인트를 `https://<서비스 주소>/api/v1/payments/webhooks/googleplay` 로 한다. **인증을 켠다** - 서비스 계정(= `PUBSUB_SERVICE_ACCOUNT_EMAIL`)과 **대상(audience)**(= `PUBSUB_AUDIENCE`, 보통 위 주소 그대로)을 구독에 적은 값과 서버 설정이 **글자까지 같아야** 한다. 서버는 구글 공개키로 이 토큰을 확인하고 틀리면 `401` 이다(Pub/Sub 이 재시도한다). 알림은 신호일 뿐이라 서버가 구매 토큰으로 API 를 다시 읽는다.
+6. **시험 구매**: Play Console 의 라이선스 테스터 계정으로 산다(테스트 구매는 `TEST` 로 표시돼 매출에서 빠진다). 앱은 내부 테스트 트랙에 올라가 있어야 한다.
+
+### 16.3 켜기 · 확인
+
+1. 비밀을 배포 선언에 넣고 `SKELETON_PAYMENT_APPSTORE_ENABLED=true` / `SKELETON_PAYMENT_GOOGLEPLAY_ENABLED=true` 를 `env:` 에 둔다. 값이 하나라도 비면 그 스토어만 없고(`GET /api/v1/payments/iap/config` 의 `store` 가 `null`), 보호 환경(stage · prod)에서는 기동이 실패한다.
+2. 앱에서 구매 → 서버가 스토어에 직접 물어 확인 → 응답 `GRANTED` 와 지급을 본다. 환불은 App Store Connect · Play Console 에서 시험 환불을 만들어 알림이 장부의 환불 줄을 닫는지 본다.
+
+### 16.4 못 잰 가정 (진짜 계정이 있어야 잰다)
+
+| 못 잰 가정 | 틀리면 신호 | 재려면 |
+|---|---|---|
+| 애플 잎 · 중간 인증서의 확장 OID 가 애플 라이브러리 소스와 같다(`1.2.840.113635.100.6.11.1` · `…6.2.1`) | 진짜 알림이 모두 `401` | 샌드박스 TEST 알림 한 건을 받아 본다 |
+| `revocationPercentage` 가 `100000 = 100%` 단위다 | 일할 환불이 `REFUND_MISMATCH`(사람 확인)로 남는다 | 일부 환불 한 번 |
+| 구글 「이미 알림」 응답이 `400` 이고 `orders.get` 이 `state=REFUNDED` · `createTime` 을 준다 | 승인 통지가 재시도되거나 환불 뒤 확인이 지급한다 | 환불 뒤 같은 토큰을 서버에 보내 본다 |
+| 라이선스 테스트 구매에 `orderId` 가 있고 `orders.get` 이 답한다 | 없으면 0 원 · `XXX` 통화로 기록된다 | 테스트 구매 한 번 |
+| 안드로이드 `in_app_purchase` 의 `applicationUserName` 이 `setObfuscatedAccountId` 로 간다 | 구매가 계정에 안 묶여 `409` | 앱 쪽 코드 확인 |
+| 애플 구독을 환불한 뒤 자동 갱신이 이어지지 않는다 | 끝난 줄에 갱신이 와서 「확인 필요」 | 샌드박스 구독 환불 한 번 |
+<!-- payment-iap:end -->
 
 ## 게시판 사진의 CDN 캐시 비우기 (Cloudflare)
 
