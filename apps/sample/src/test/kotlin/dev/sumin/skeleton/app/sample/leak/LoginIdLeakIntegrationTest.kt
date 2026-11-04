@@ -315,9 +315,9 @@ class LoginIdLeakIntegrationTest {
         val handlers = mappings.flatMap { it.handlerMethods.values }
         assertTrue(handlers.size >= 60, "the guard walks every handler of the app (${handlers.size})")
         handlers.forEach { walk(it.method.genericReturnType) }
-        // 함수형 라우트(RouterFunction)의 핸들러는 위 매핑에 없다 — 지금은 소셜 로그인 하나뿐이고 응답은 토큰이다(아이디 없음, `AuthTokenResponse`).
+        // 함수형 라우트(RouterFunction)의 핸들러는 위 매핑에 없다 — 지금은 소셜 로그인 둘(인가 코드 · 앱 SDK 토큰)이고 둘 다 응답은 토큰이다(아이디 없음, `AuthTokenResponse`).
         // 하나가 더 생기면 이 가드가 못 보므로 여기서 멈춰 사람이 응답을 확인하고 가드를 넓히게 한다
-        assertEquals(setOf("oauthSocialAuthRoutes"), context.getBeansOfType(org.springframework.web.servlet.function.RouterFunction::class.java).keys, "functional routes are not walked by this guard - check the new route's response and extend it")
+        assertEquals(setOf("oauthSocialAuthRoutes", "oauthSocialTokenRoutes"), context.getBeansOfType(org.springframework.web.servlet.function.RouterFunction::class.java).keys, "functional routes are not walked by this guard - check the new route's response and extend it")
         val withLoginId = seen.filter { c -> c.declaredFields.any { it.name == "loginId" } || c.declaredMethods.any { it.name == "getLoginId" } }.map { it.simpleName }.toSet()
         assertEquals(ALLOWED_TYPES, withLoginId, "response types reachable from the handlers that have a loginId property")
 
