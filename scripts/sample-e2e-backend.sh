@@ -35,7 +35,7 @@ stop() {
   fi
   rm -f "$PID_FILE" "$STATE"
   docker rm -f "$COMPOSE_PROJECT_NAME-native-app" "$COMPOSE_PROJECT_NAME-native-fwd" >/dev/null 2>&1 || true
-  docker compose --profile s3 --profile mail down -v --remove-orphans >/dev/null 2>&1 || true
+  docker compose --profile s3 --profile mail --profile video down -v --remove-orphans >/dev/null 2>&1 || true
   echo "STOPPED"
 }
 
@@ -49,6 +49,12 @@ case "${1:-}" in
     docker compose up -d --wait postgres
     docker compose --profile s3 up -d s3
     docker compose --profile s3 run --rm s3-init >/dev/null
+    # 영상 변환 일꾼(video 모듈로 조립한 견본만 - compose 에 일꾼이 있고 SKELETON_VIDEO_ENABLED 를 끄지 않았을 때): 영상 e2e 는 일꾼이 있어야 끝난다.
+    # 앱 주소는 위에서 고른 SERVER_PORT 로 compose 가 받는다. 일꾼은 s3 와 망을 나눠 쓰고 s3-alias 가 S3_PORT 를 s3 로 이어 준다(docker-compose.yml)
+    if [ "${SKELETON_VIDEO_ENABLED:-true}" != false ] && grep -q '^  video-worker:' docker-compose.yml; then
+      ./gradlew :apps:video-worker:installDist -q --console=plain
+      docker compose --profile s3 --profile video up -d --build video-worker
+    fi
     docker compose --profile mail up -d mail
     for _ in $(seq 1 30); do curl -fsS "http://localhost:$MAIL_HTTP_PORT/api/v1/info" >/dev/null 2>&1 && break; sleep 1; done
     curl -fsS "http://localhost:$MAIL_HTTP_PORT/api/v1/info" >/dev/null || { echo "✗ 메일 수신기(mailpit)가 $MAIL_HTTP_PORT 에서 뜨지 않았다" >&2; exit 1; }
