@@ -1,7 +1,7 @@
 # auth-social-apple
 
 **Apple 로그인(iOS 앱)** — 앱의 네이티브 SDK(Sign in with Apple)가 준 `identityToken` 또는 `authorizationCode` 를 서버가 검증하고, 탈퇴 때 애플의 사용자 토큰을 철회한다.
-`skeleton.auth-social-apple.client-id` 가 있을 때만 켜진다 (별도 스위치 없음). 로그인 수단 이름 `apple`. **웹 리다이렉트는 지원하지 않는다**(`GET /auth/methods` 에 인가 URL 이 없고 `nativeToken=id_token` 만 있다) — 안드로이드 · 웹 애플은 Services ID 와 `form_post` 콜백이 따로 필요해 다음 단계다.
+`skeleton.auth-social-apple.client-id` 가 있을 때만 켜진다 (별도 스위치 없음). 로그인 수단 이름 `apple`. **웹 리다이렉트는 지원하지 않는다**(`GET /auth/methods` 에 `clientId` · 인가 URL 이 없고 `nativeToken=id_token` 만 있다 — 웹 화면이 단추를 만들지 않는다) — 안드로이드 · 웹 애플은 Services ID 와 `form_post` 콜백이 따로 필요해 다음 단계다.
 
 | 하는 일 | 값 · 근거 |
 |---|---|

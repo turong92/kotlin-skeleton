@@ -53,7 +53,7 @@ class AppleOAuthProviderTest {
         assertEquals(NativeTokenKind.ID_TOKEN, provider.nativeToken)
         assertEquals(NonceMode.REQUIRED, provider.nonce)
         assertTrue(provider.autoEnabled)
-        assertEquals(BUNDLE_ID, provider.publicClientId)
+        assertNull(provider.publicClientId, "the bundle id is not a web client id - /auth/methods must not offer a web button")
         assertNull(provider.authorize, "no web redirect is offered")
     }
 

@@ -45,7 +45,7 @@ class AppleAutoConfigurationTest {
             assertNull(ctx.startupFailure)
             val provider = ctx.getBean(OAuthProvider::class.java)
             assertEquals("apple", provider.providerId)
-            assertEquals(BUNDLE_ID, provider.publicClientId)
+            assertNull(provider.publicClientId, "the bundle id is not a web client id - /auth/methods must not offer a web button")
         }
     }
 
@@ -82,7 +82,7 @@ class AppleAutoConfigurationTest {
             "SKELETON_AUTH_SOCIAL_APPLE_KEY_ID" to KEY_ID, "SKELETON_AUTH_SOCIAL_APPLE_PRIVATE_KEY" to pem.replace("\n", "\\n"),
         ).run { ctx ->
             assertNull(ctx.startupFailure)
-            assertEquals(BUNDLE_ID, ctx.getBean(OAuthProvider::class.java).publicClientId)
+            assertNull(ctx.getBean(OAuthProvider::class.java).publicClientId)
         }
         env("SKELETON_AUTH_SOCIAL_APPLE_CLIENT_ID" to "", "SKELETON_AUTH_SOCIAL_APPLE_PRIVATE_KEY" to "").run { assertTrue(it.getBeansOfType(OAuthProvider::class.java).isEmpty()) }
     }
@@ -111,7 +111,7 @@ class AppleAutoConfigurationTest {
             assertTrue(ctx.getBeansOfType(OAuthProvider::class.java).isEmpty())
             val registry = ctx.getBean(ProjectRegistry::class.java)
             val source = ctx.getBean(OAuthProviderSource::class.java)
-            assertEquals(BUNDLE_ID, source.providersFor(registry.projects.first { it.id == "a" }).single().publicClientId)
+            assertNull(source.providersFor(registry.projects.first { it.id == "a" }).single().publicClientId)
             assertTrue(source.providersFor(registry.projects.first { it.id == "b" }).isEmpty())
         }
     }

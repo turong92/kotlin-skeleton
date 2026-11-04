@@ -39,7 +39,6 @@ class AppleOAuthProvider(
     override val providerId: String = "apple"
     override val nonce: NonceMode = NonceMode.REQUIRED
     override val autoEnabled: Boolean = true
-    override val publicClientId: String get() = properties.clientId
     override val nativeToken: NativeTokenKind = NativeTokenKind.ID_TOKEN
 
     private val base = properties.baseUrl.trimEnd('/')
