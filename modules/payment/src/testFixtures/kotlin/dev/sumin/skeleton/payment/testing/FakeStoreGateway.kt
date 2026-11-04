@@ -18,7 +18,13 @@ class FakeStoreGateway(providerId: String = "appstore") : FakePushGateway(provid
     val known = ConcurrentHashMap<String, StorePurchase>()
     val acknowledged = CopyOnWriteArrayList<StorePurchase>()
 
-    override fun fetch(claim: StoreClaim): StorePurchase? = known[claim.reference]
+    /** 있으면 [fetch] 가 이것을 던진다 - 스토어가 안 받는 때(타임아웃 · 429 · 5xx)의 대역. */
+    @Volatile var fetchFailure: RuntimeException? = null
+
+    override fun fetch(claim: StoreClaim): StorePurchase? {
+        fetchFailure?.let { throw it }
+        return known[claim.reference]
+    }
 
     override fun afterGrant(purchase: StorePurchase) {
         acknowledged += purchase
