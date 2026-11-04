@@ -111,6 +111,7 @@ fails when this table and the prefixes found in module code differ.
 | `auth-mfa` | `skeleton.auth-mfa` |
 | `auth-session` | `skeleton.auth-session` |
 | `auth-social` | `skeleton.auth-social` |
+| `auth-social-apple` | `skeleton.auth-social-apple` |
 | `auth-social-oidc` | `skeleton.auth-social-oidc` |
 | `auth-social-x` | `skeleton.auth-social-x` |
 | `auth-web-handoff` | `skeleton.auth-web-handoff` |
@@ -200,6 +201,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `auth-social-google` / `-kakao` / `-naver` | off until `skeleton.auth-social.providers.<x>.enabled=true` | nothing | client id / secret |
 | `auth-social-oidc` | off until `skeleton.auth-social-oidc.providers.<code>.client-id` is set (LINE: code `line`, preset) | nothing | client id / secret per provider |
 | `auth-social-x` | off until `skeleton.auth-social-x.client-id` is set | nothing | client id / secret |
+| `auth-social-apple` | off until `skeleton.auth-social-apple.client-id` is set (iOS app only) | nothing | bundle id, team id, key id, `.p8` private key |
 | `auth-web-handoff` | off until `enabled=true` | `account` (declared dependency); `auth-session` to close open codes on session revoke | a module that issues codes (`payment-iap`) |
 | `async` | yes | nothing | — |
 | `async-notification` | yes | `notification` (declared dependency) | — |

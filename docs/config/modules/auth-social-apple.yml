@@ -1,0 +1,8 @@
+# auth-social-apple — Sign in with Apple (iOS 앱). client-id 가 비어 있으면 모듈은 꺼져 있다 (별도 enabled 없음).
+skeleton:
+  auth-social-apple:
+    client-id: ""                        # iOS 앱의 번들 id (예: com.example.app). 비우면 아무것도 만들지 않는다
+    team-id: ""                          # 애플 개발자 계정의 Team ID (10자)
+    key-id: ""                           # Sign in with Apple 키의 Key ID (10자)
+    private-key: ""                      # 그 키의 .p8 파일 내용(PKCS#8 PEM). 환경변수로만 넣는다 (운영자 비밀) — 줄바꿈이 \n 두 글자로 와도 된다
+    base-url: https://appleid.apple.com  # ID 토큰의 iss · client_secret 의 aud · /auth/keys · /auth/token · /auth/revoke 의 호스트 (테스트 · 프록시용)

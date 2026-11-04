@@ -667,6 +667,49 @@
       }
     },
     {
+      "id": "auth-social-apple",
+      "kind": "module",
+      "module": "auth-social-apple",
+      "path": "modules/auth-social-apple",
+      "status": "stable",
+      "summary": "Apple 로그인 제공자(iOS 앱) — 앱의 identityToken(JWKS · RS256 · nonce 필수) 또는 authorizationCode(client_secret JWT 교환)를 검증하고, 탈퇴 때 사용자 토큰을 철회한다(POST /api/v1/auth/social/apple/revoke). client-id 를 적으면 켜진다. 웹 리다이렉트는 없다.",
+      "starter": false,
+      "newProjectFlag": "--modules auth-social-apple",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.auth-social-apple"],
+        "snippet": "docs/config/modules/auth-social-apple.yml"
+      },
+      "basePaths": ["/api/v1/auth/social/apple"],
+      "secrets": [
+        {
+          "env": [
+            "<P>_AUTH_SOCIAL_APPLE_CLIENT_ID",
+            "<P>_AUTH_SOCIAL_APPLE_TEAM_ID",
+            "<P>_AUTH_SOCIAL_APPLE_KEY_ID",
+            "<P>_AUTH_SOCIAL_APPLE_PRIVATE_KEY"
+          ],
+          "whenMissing": "client id 가 비면 제공자는 없는 것(아무 일도 없다). id 만 있고 team-id · key-id · private-key 가 비거나 키가 PKCS#8 PEM 타원곡선 키가 아니면 기동 실패 (메시지에 키 값은 없다)"
+        }
+      ],
+      "docs": ["docs/modules/auth-social-apple.md"],
+      "frontend": null,
+      "notFor": [
+        "auth-social 없이는 쓰지 않는다(따라온다)",
+        "웹 · 안드로이드의 애플 로그인(Services ID · form_post 콜백) — 이번 범위가 아니다(iOS 앱만)",
+        "애플 서버 간 알림(이메일 전달 끔 · 동의 철회) 수신 — 하지 않는다"
+      ],
+      "keywords": {
+        "ko": ["애플 로그인", "Apple 로그인", "Sign in with Apple", "iOS 소셜 로그인", "탈퇴 철회", "소셜 로그인"],
+        "en": ["apple login", "sign in with apple", "ios social login", "revoke apple token", "social login"]
+      }
+    },
+    {
       "id": "auth-social-google",
       "kind": "module",
       "module": "auth-social-google",
@@ -4368,6 +4411,7 @@
         "auth-magic-link",
         "auth-mfa",
         "auth-mfa-jdbc",
+        "auth-social-apple",
         "auth-social-google",
         "auth-social-kakao",
         "auth-social-naver",
@@ -4508,6 +4552,7 @@
         "auth-magic-link",
         "auth-mfa",
         "auth-mfa-jdbc",
+        "auth-social-apple",
         "auth-social-google",
         "auth-social-kakao",
         "auth-social-naver",

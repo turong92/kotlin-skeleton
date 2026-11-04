@@ -14,6 +14,7 @@
 | `account-jdbc` | 계정 · 로그인 수단 · 토큰 · 감사 저장소 (PostgreSQL · MySQL) | [account-jdbc](account-jdbc.md) |
 | `auth-magic-link` | 메일 링크 로그인 (같은 계정에 얹는 로그인 수단) | [auth-magic-link](auth-magic-link.md) |
 | `auth-social` | 제공자 중립 소셜 로그인 계약과 엔드포인트 | [auth-social](auth-social.md) |
+| `auth-social-apple` | Apple 로그인 제공자 (iOS 앱 토큰 검증 · 탈퇴 철회) | [auth-social-apple](auth-social-apple.md) |
 | `auth-social-google` | Google OAuth 제공자 | [auth-social-google](auth-social-google.md) |
 | `auth-social-kakao` | Kakao OAuth 제공자 | [auth-social-kakao](auth-social-kakao.md) |
 | `auth-social-naver` | Naver OAuth 제공자 | [auth-social-naver](auth-social-naver.md) |

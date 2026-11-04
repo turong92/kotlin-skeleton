@@ -93,6 +93,7 @@
 - auth-session: 로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 ·… [세션, 리프레시 토큰]
 - auth-session-jdbc: auth-session 의 세션 · 리프레시 토큰 저장을… [세션 저장, 세션 DB]
 - auth-social: 소셜 로그인의 제공자 중립 계약 [소셜 로그인, 간편 로그인]
+- auth-social-apple: Apple 로그인 제공자(iOS 앱) [애플 로그인, Apple 로그인]
 - auth-social-google: 구글 OAuth 제공자 [구글 로그인, 구글 소셜 로그인]
 - auth-social-kakao: 카카오 OAuth 제공자 [카카오 로그인, 카카오 소셜 로그인]
 - auth-social-naver: 네이버 OAuth 제공자 [네이버 로그인, 네이버 소셜 로그인]

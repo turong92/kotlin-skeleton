@@ -43,6 +43,7 @@ dependencies {
     implementation(project(":modules:auth-social-naver"))
     implementation(project(":modules:auth-social-oidc"))   // 범용 OpenID Connect (LINE 프리셋 포함)
     implementation(project(":modules:auth-social-x"))      // X(Twitter) OAuth 2.0 + PKCE
+    implementation(project(":modules:auth-social-apple"))  // Apple 로그인(iOS 앱) — 꺼진 채 시작한다: SKELETON_AUTH_SOCIAL_APPLE_{CLIENT_ID,TEAM_ID,KEY_ID,PRIVATE_KEY}
     implementation(project(":modules:notification-push"))      // 푸시 알림: 알림이 받는 사람의 기기로도 간다 (+ push: /api/v1/push). 켜기·종류는 application.yml - 문서 docs/modules/notification-push.md
     implementation(project(":modules:notification-push-jdbc")) // 푸시 기기 · 「푸시만 끄기」 저장 + 발송 작업을 job-queue-jdbc 에 얹는다 (notification-push 는 저장소를 모른다)
     implementation(project(":modules:notification-webpush"))   // 웹 푸시(VAPID) 전달 수단 - 브라우저 구독. 키(SKELETON_NOTIFICATION_WEBPUSH_VAPID_*)가 없으면 로컬은 센더가 없고, 보호 환경은 기동 실패. docs/modules/notification-webpush.md

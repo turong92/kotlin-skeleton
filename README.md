@@ -78,6 +78,7 @@ modules/                # grouped by area; a module's store / provider clients s
      |- auth-social-kakao   # optional Kakao OAuth provider client
      |- auth-social-naver   # optional Naver OAuth provider client
      |- auth-social-x       # optional X (Twitter) OAuth 2.0 + PKCE provider client
+     |- auth-social-apple   # optional Sign in with Apple (iOS app tokens, account-deletion revoke)
      `- auth-social-oidc    # optional generic OpenID Connect provider (several by properties, LINE preset)
   account               # account lifecycle: sign-up, email verification, reset, change, sign-in methods, deletion, login ID, admin
   `- account-jdbc       # account store for PostgreSQL / MySQL

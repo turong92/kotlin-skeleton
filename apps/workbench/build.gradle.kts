@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":modules:auth-social-naver"))
     implementation(project(":modules:auth-social-oidc"))
     implementation(project(":modules:auth-social-x"))
+    implementation(project(":modules:auth-social-apple"))
     implementation(project(":modules:async-notification"))
     implementation(project(":modules:config-aws-ssm"))
     implementation(project(":modules:crypto"))
