@@ -79,7 +79,22 @@ class StorePurchasesTest {
         assertEquals(PaymentMode.LIVE, order.providerMode)
         assertEquals(1, orders().size)
         assertEquals(1, kit.listener.paid.size)
-        assertEquals(1, gateway.acknowledged.size, "afterGrant runs once, after the grant is committed")
+        assertEquals(2, gateway.acknowledged.size, "afterGrant runs after the grant is committed and again for the already recorded purchase - it is idempotent")
+    }
+
+    @Test
+    fun `a failed store acknowledgement is tried again when the app confirms the already recorded purchase`() {
+        gateway.afterGrantFailure = IllegalStateException("store unavailable")
+        val first = record(oneTime(), cheer)
+        assertEquals(StoreRecordOutcome.RECORDED, first.outcome, "the grant stands even though the acknowledgement failed")
+        assertEquals(0, gateway.acknowledged.size)
+
+        gateway.afterGrantFailure = null
+        val again = record(oneTime(), cheer)
+
+        assertEquals(StoreRecordOutcome.ALREADY_RECORDED, again.outcome)
+        assertEquals(1, gateway.acknowledged.size, "afterGrant also runs for a purchase that is already recorded")
+        assertEquals(1, kit.listener.paid.size, "and the grant itself stays single")
     }
 
     @Test

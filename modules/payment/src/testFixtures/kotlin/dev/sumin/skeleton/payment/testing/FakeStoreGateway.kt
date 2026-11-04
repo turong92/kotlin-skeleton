@@ -21,12 +21,16 @@ class FakeStoreGateway(providerId: String = "appstore") : FakePushGateway(provid
     /** 있으면 [fetch] 가 이것을 던진다 - 스토어가 안 받는 때(타임아웃 · 429 · 5xx)의 대역. */
     @Volatile var fetchFailure: RuntimeException? = null
 
+    /** 있으면 [afterGrant] 가 이것을 던진다(승인 통지가 5xx · 시간 초과로 실패하는 때의 대역) - 던진 호출은 [acknowledged] 에 남지 않는다. */
+    @Volatile var afterGrantFailure: RuntimeException? = null
+
     override fun fetch(claim: StoreClaim): StorePurchase? {
         fetchFailure?.let { throw it }
         return known[claim.reference]
     }
 
     override fun afterGrant(purchase: StorePurchase) {
+        afterGrantFailure?.let { throw it }
         acknowledged += purchase
     }
 }

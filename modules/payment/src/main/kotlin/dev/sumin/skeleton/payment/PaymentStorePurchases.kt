@@ -60,7 +60,7 @@ data class StoreRecordResult(val outcome: StoreRecordOutcome, val orderId: Strin
  * - **모드**: 주문 · 구독 줄의 모드는 구매의 [StorePurchase.mode] 다 - 테스트 결제는 `TEST` 로 박혀 대시보드 매출에서 빠진다.
  * - **자리 충돌**: 이미 살아 있는 구독이 있는 계정이 구독을 샀다면 돈은 장부에(주문 `PAID` + `SUBSCRIPTION_SEAT_TAKEN`) 남기고 지급은 하지 않는다. 구독 줄은 `PENDING`(자리 없음)으로 남아 이후 사건이 같은 줄을 찾는다.
  *
- * 스토어 호출은 이 안에 없다([PaymentStoreGateway.fetch] 는 호출한 쪽이 락 밖에서 했다). 지급이 커밋된 뒤에야 [PaymentStoreGateway.afterGrant] 를 한 번 부르고(실패해도 지급은 그대로), 주문 지급을 한 번 시도한다
+ * 스토어 호출은 이 안에 없다([PaymentStoreGateway.fetch] 는 호출한 쪽이 락 밖에서 했다). 지급이 커밋된 뒤에야 [PaymentStoreGateway.afterGrant] 를 부르고(새 지급 뒤, 그리고 이미 기록된 구매를 다시 확인할 때도 - 실패해도 지급은 그대로), 주문 지급을 한 번 시도한다
  * (실패하면 지급 작업이 재시도한다). 동시에 같은 구매가 오면 진 쪽은 다시 읽어 [StoreRecordOutcome.ALREADY_RECORDED] 를 받는다.
  *
  * @param lifecycle 구독을 켠 조립에서만 - 없으면 구독 구매는 [IllegalStateException].
@@ -108,15 +108,16 @@ class PaymentStorePurchases(
                 null
             }
             if (attempt != null) {
-                attempt.granted?.let { afterCommit(gateway, purchase, it) }
+                attempt.granted?.let { fulfillment?.tryFulfil(it) }
+                // 이미 기록된 구매에도 부른다 - 앞선 승인 통지가 실패했거나 커밋과 통지 사이에 서버가 내려갔다면 앱이 다시 보낼 때가 유일한 재시도다
+                if (attempt.granted != null || attempt.result.outcome == StoreRecordOutcome.ALREADY_RECORDED) acknowledge(gateway, purchase, attempt.result.orderId)
                 return attempt.result
             }
         }
         error("the store purchase could not be recorded: the ledger kept changing under it")
     }
 
-    private fun afterCommit(gateway: PaymentStoreGateway, purchase: StorePurchase, orderId: String) {
-        fulfillment?.tryFulfil(orderId)
+    private fun acknowledge(gateway: PaymentStoreGateway, purchase: StorePurchase, orderId: String?) {
         try {
             gateway.afterGrant(purchase)
         } catch (e: Exception) {

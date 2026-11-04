@@ -16,7 +16,8 @@ interface PaymentStoreGateway : PaymentGateway {
     fun fetch(claim: StoreClaim): StorePurchase?
 
     /**
-     * 지급이 **커밋된 뒤** 한 번 부른다(구글 승인 통지: 3일 안에 하지 않으면 자동 환불). 실패해도 지급은 되돌리지 않는다 - 던져도 호출한 쪽이 로그만 남긴다. 기본은 아무것도 안 한다.
+     * 지급이 **커밋된 뒤** 부른다(구글 승인 통지: 3일 안에 하지 않으면 자동 환불). 실패해도 지급은 되돌리지 않는다 - 던져도 호출한 쪽이 로그만 남긴다. 기본은 아무것도 안 한다.
+     * **멱등이어야 하고 이미 기록된 구매에도 불린다**: 앞선 통지가 실패했거나 커밋과 통지 사이에 서버가 내려갔다면, 앱이 같은 구매를 다시 확인할 때(`ALREADY_RECORDED`)가 유일한 재시도다.
      */
     fun afterGrant(purchase: StorePurchase) = Unit
 }

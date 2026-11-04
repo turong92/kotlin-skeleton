@@ -109,7 +109,7 @@ class StorePurchasesDbTest {
         assertEquals(15, results.count { it.outcome == StoreRecordOutcome.ALREADY_RECORDED })
         assertEquals(1, orderRows())
         assertEquals(1, kit.listener.paid.size)
-        assertEquals(1, gateway.acknowledged.size)
+        assertEquals(16, gateway.acknowledged.size, "every confirmation tells the store - once new, fifteen times already recorded")
     }
 
     @Test
