@@ -18,6 +18,7 @@ import java.sql.ResultSet
 import java.time.Instant
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
 
 /** 영상 저장 — 상태를 바꾸는 쓰기는 모두 한 문장의 조건부 갱신이라 동시에 온 호출 중 하나만 이긴다 */
@@ -26,6 +27,14 @@ class JdbcVideoStore(
     private val dialect: SqlDialect,
     private val transactions: TransactionTemplate,
 ) : VideoStore {
+    /**
+     * 집기 전용 트랜잭션 - READ COMMITTED. MySQL 기본(REPEATABLE READ)은 `FOR UPDATE` 가 훑은 인덱스 틈까지 잠가
+     * 동시에 집는 일꾼끼리 갱신에서 교착이 난다. READ COMMITTED 는 틈 잠금이 없어 SKIP LOCKED 가 의도대로 줄 단위로만 건너뛴다(PostgreSQL 은 원래 기본값).
+     */
+    private val claimTransaction = TransactionTemplate(transactions.transactionManager!!, transactions).apply {
+        isolationLevel = TransactionDefinition.ISOLATION_READ_COMMITTED
+    }
+
     override fun insert(video: NewVideo): Video {
         jdbc.update(
             """
@@ -105,7 +114,7 @@ class JdbcVideoStore(
 
     // ---------- 일꾼(변환) ----------
 
-    override fun claimNext(lane: VideoLane, owner: String, leaseUntil: Instant, ladderBuild: String, at: Instant): Video? = transactions.execute {
+    override fun claimNext(lane: VideoLane, owner: String, leaseUntil: Instant, ladderBuild: String, at: Instant): Video? = claimTransaction.execute {
         // 한 트랜잭션에서 잠그고(SKIP LOCKED - 다른 일꾼이 잡은 줄은 건너뛴다) 갱신한다. 두 방언 모두 같은 문법이다
         val id = jdbc.query("select id from videos where ${candidate(lane)} order by created_at, id limit 1 for update skip locked", emptyMap<String, Any>()) { rs, _ -> rs.getString(1) }
             .firstOrNull() ?: return@execute null
