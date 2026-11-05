@@ -288,14 +288,14 @@ YML
 perl -ni -e 'print unless /^include\(":tools:native-check"\)\s*$/' settings.gradle.kts
 # 샘플 앱은 기본으로 빠진다 — 앱 · 그 문서 · 실행 스크립트 · 안내 문서의 샘플 구역(<!-- sample:start --> … <!-- sample:end -->)까지. --with-sample 이면 표식 줄만 지운다
 if [ "$WITH_SAMPLE" = 1 ]; then
-  for f in CLAUDE.md README.md; do [ ! -f "$f" ] || perl -ni -e 'print unless /^<!-- sample:(start|end) -->\s*$/' "$f"; done
+  for f in AGENTS.md apps/AGENTS.md README.md; do [ ! -f "$f" ] || perl -ni -e 'print unless /^<!-- sample:(start|end) -->\s*$/' "$f"; done
 else
   rm -rf apps/sample docs/sample.md scripts/dev-sample.sh scripts/sample-e2e-backend.sh
   perl -ni -e 'print unless /^include\(":apps:sample"\)\s*$/' settings.gradle.kts
-  for f in CLAUDE.md README.md; do [ ! -f "$f" ] || perl -0pi -e 's/<!-- sample:start -->.*?<!-- sample:end -->\n?//gs' "$f"; done
+  for f in AGENTS.md apps/AGENTS.md README.md; do [ ! -f "$f" ] || perl -0pi -e 's/<!-- sample:start -->.*?<!-- sample:end -->\n?//gs' "$f"; done
 fi
 # 스켈레톤 레포 자체를 고칠 때의 지침(<!-- skeleton-only:start --> … <!-- skeleton-only:end -->)은 옵션과 무관하게 표식째 뺀다 — 찍은 프로젝트는 뼈대가 아니다
-for f in CLAUDE.md README.md; do [ ! -f "$f" ] || perl -0pi -e 's/<!-- skeleton-only:start -->.*?<!-- skeleton-only:end -->\n*//gs' "$f"; done
+for f in AGENTS.md apps/AGENTS.md README.md; do [ ! -f "$f" ] || perl -0pi -e 's/<!-- skeleton-only:start -->.*?<!-- skeleton-only:end -->\n*//gs' "$f"; done
 while IFS= read -r m; do
   [ -n "$m" ] || continue
   rm -rf "modules/$m" "docs/config/modules/$m.yml" "docs/modules/$m.md"

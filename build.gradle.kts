@@ -63,7 +63,7 @@ configure(subprojects.filter { it.buildFile.isFile }) {
 // 네이티브 이미지는 **선택 빌드**다 — `-Pnative` 를 줄 때만 부트 앱에 GraalVM 플러그인을 건다. 안 주면 이 블록은 아무 일도 하지 않는다(기본 JVM 빌드는 그대로).
 //   ./gradlew :apps:api:nativeCompile -Pnative -PjavaToolchain=25     (보통 scripts/native-build.sh · Dockerfile.native 가 GraalVM 25 컨테이너에서 부른다)
 // 루트가 모든 서브프로젝트에 java-library 를 걸어서 플러그인이 기본으로 공유 라이브러리(--shared)를 고르므로 실행 파일로 돌려놓는다.
-// 라이브러리 설정은 플러그인의 reachability metadata 저장소가 대고, 이 레포의 코드가 필요로 하는 것은 모듈이 RuntimeHintsRegistrar 로 직접 낸다 (CLAUDE.md "네이티브 리플렉션 규칙").
+// 라이브러리 설정은 플러그인의 reachability metadata 저장소가 대고, 이 레포의 코드가 필요로 하는 것은 모듈이 RuntimeHintsRegistrar 로 직접 낸다 (apps/AGENTS.md "새 기능 추가 시" 11).
 if (providers.gradleProperty("native").isPresent) {
     subprojects {
         pluginManager.withPlugin("org.springframework.boot") {

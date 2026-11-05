@@ -65,7 +65,7 @@ Spring AOT 는 `@ConditionalOnProperty` · `@ConditionalOnBean` 같은 **조건�
 | `platform` (`ConfigurationPropertiesBindingAotProcessor`) | 모든 `@ConfigurationProperties` 클래스와 그 중첩 타입 · 맵 값 타입 | 코틀린 기본 인자 data class 의 중첩 설정(`StorageWebProperties` …)을 kotlin-reflect 가 못 찾는다 |
 | `platform` (`ApiResponseEnvelopeAotProcessor`) | `@ApiResponseEnvelope(value = X::class)` 의 `X` | 컨트롤러가 `Any` 를 돌려줘도(저장소 presign) 응답 타입이 이 어노테이션에 있다 |
 
-**새 코드를 쓸 때의 규칙** (`CLAUDE.md` 에도 한 줄):
+**새 코드를 쓸 때의 규칙** (`apps/AGENTS.md` 에도 한 줄):
 
 1. **컨트롤러 밖에서 JSON 으로 바꾸는 타입은 등록 표시를 한다** — 작업 큐 일감 본문, 웹훅 본문, JSON 컬럼에 저장하는 값, 이벤트 페이로드. 컨트롤러의 `@RequestBody` · 반환 타입은 AOT 가 알아서 찾는다.
    그 밖의 타입은 쓰는 빈에 `@RegisterReflectionForBinding(Type::class)` 을 단다. (직접 확인: 표시가 없으면 네이티브에서 `KotlinReflectionInternalError: Unresolved class` 로 500 이다.)

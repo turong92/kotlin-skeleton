@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component
 
 /**
  * 첨부 키는 호출자 자신이 올린 것이어야 한다 — 소유 판정은 storage 모듈의 [StorageKeyOwnership] 이 한다(`key-owner` 방식에 맞는 구현: 접두사 비교든 OPAQUE 의 MAC 이든 앱은 모른다).
- * 구조 규칙은 제약으로 선언한다(CLAUDE.md): 어긴 값은 400 `errors[{field: "attachmentKey"}]` 로 나간다.
+ * 구조 규칙은 제약으로 선언한다(AGENTS.md): 어긴 값은 400 `errors[{field: "attachmentKey"}]` 로 나간다.
  */
 @Target(AnnotationTarget.FIELD)
 @Retention(AnnotationRetention.RUNTIME)

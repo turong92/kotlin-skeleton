@@ -67,8 +67,8 @@
       "summary": "레포 개요 · 새 프로젝트 3단계"
     },
     {
-      "path": "CLAUDE.md",
-      "summary": "에이전트 규칙(모듈 규칙 · 문서 가드 · 패키지 구조)"
+      "path": "AGENTS.md",
+      "summary": "에이전트 규칙(모듈 규칙 · 문서 가드 · 컨벤션; 폴더별은 modules/ · apps/ 의 AGENTS.md)"
     }
   ],
   "capabilities": [
