@@ -8,6 +8,8 @@ import dev.sumin.skeleton.auth.social.oauth.NativeTokenKind
 import dev.sumin.skeleton.auth.social.oauth.NonceMode
 import dev.sumin.skeleton.auth.social.oauth.OAuthIdTokenInvalidException
 import dev.sumin.skeleton.auth.social.oauth.OAuthNativeToken
+import dev.sumin.skeleton.auth.social.oauth.OAuthProviderNotFoundException
+import dev.sumin.skeleton.auth.social.oauth.codeExchange
 import dev.sumin.skeleton.auth.social.testing.FakeIdp
 import java.time.Instant
 import kotlin.test.AfterTest
@@ -86,6 +88,18 @@ class GoogleNativeTokenTest {
         assertFailsWith<OAuthIdTokenInvalidException> { verify(token(aud = listOf("someone-elses-client", "yet-another"))) }
         assertFailsWith<OAuthIdTokenInvalidException> { verify(token(iss = "https://evil.example.com")) }
         assertFailsWith<OAuthIdTokenInvalidException> { verify(token(exp = Instant.now().minusSeconds(3600))) }
+    }
+
+    @Test
+    fun `an app-only backend needs no client secret - the id token verifies and the code flow is closed`() {
+        val appOnly = GoogleOAuthProvider(
+            FakeIdp.httpClient(),
+            AuthSocialProperties.Provider(enabled = true, clientId = webClientId, apiBaseUrl = idp.base),
+        )
+        assertEquals("g-sub-1", appOnly.verifyNativeToken(OAuthNativeToken(token(), null)).providerUserId)
+        assertFalse(appOnly.codeFlow)
+        assertFailsWith<OAuthProviderNotFoundException> { appOnly.codeExchange("code", null, null, null) }
+        assertTrue(provider.codeFlow)
     }
 
     @Test

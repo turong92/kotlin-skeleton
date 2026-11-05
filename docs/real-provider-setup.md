@@ -97,7 +97,7 @@
      ```
      규칙: https 만(localhost 는 http 허용), 와일드카드 · 프래그먼트(`#`) 불가, 끝의 `/` 하나도 다르면 `redirect_uri_mismatch`.
    - 만들면 **클라이언트 ID**(`…apps.googleusercontent.com`)와 **클라이언트 보안 비밀**이 나온다. 보안 비밀은 다시 볼 수 있는 화면도 있고 아닌 화면도 있으니 바로 복사해 둔다.
-6. 값을 넣을 곳 (§6 표): `SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_ID` · `…_CLIENT_SECRET` · `…_REDIRECT_URI` · `…_ENABLED=true`. **클라이언트 ID 는 비밀이 아니다**(인가 URL 에 그대로 실린다), 보안 비밀은 비밀.
+6. 값을 넣을 곳 (§6 표): `SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_ID` · `…_CLIENT_SECRET` · `…_REDIRECT_URI` · `…_ENABLED=true`. **클라이언트 ID 는 비밀이 아니다**(인가 URL 에 그대로 실린다), 보안 비밀은 비밀. **앱 SDK 토큰 로그인만 쓰면 `…_CLIENT_SECRET` 은 비워도 된다**(웹 client id 만 넣는다) — 시크릿은 웹 리다이렉트(인가 코드) 흐름에만 필요하고, 비면 그 흐름은 닫힌다.
 
 **코드에서 확인한 Google 의 동작** (`GoogleOAuthProvider`)
 - 토큰 교환은 `application/x-www-form-urlencoded` 폼 POST. `redirect_uri` 는 **프런트가 인가 요청에 실은 값을 그대로** 받아 같이 보낸다(없으면 `…_REDIRECT_URI`). 인가 요청의 값과 다르면 구글이 `redirect_uri_mismatch`/`invalid_grant`.
@@ -177,7 +177,7 @@
 2. **앱 키의 REST API 키** → 이것이 `…_KAKAO_CLIENT_ID`(32자). 네이티브 · JavaScript · Admin 키가 아니다(`KOE101`).
 3. **카카오 로그인 사용 설정을 켠다 — 스위치가 두 군데일 수 있다.** 공식 문서(<https://developers.kakao.com/docs/ko/kakaologin/prerequisite>)는 "**[카카오 로그인] > [사용 설정]의 [상태]를 ON**" 이라고 쓴다. 주인이 겪은 콘솔에는 활성화 스위치가 두 곳이었다 — 한 곳만 켜면 토큰 요청이 `invalid_client` / **`KOE004`** ("To use Kakao account login, user management has to be configured.")로 거절된다. 콘솔 개편으로 메뉴 이름과 위치가 바뀔 수 있어 이 레포는 정확한 두 번째 위치를 단정하지 않는다 — **`check-real-providers.sh` 가 KOE004 를 말하면 카카오 로그인 화면의 모든 활성화(사용 설정) 스위치가 ON 인지 본다.** (OpenID Connect 활성화는 별개의 선택 기능이다 — 이 레포는 쓰지 않는다.)
 4. **Redirect URI 등록** (카카오 로그인 화면): `http://localhost:5173/auth/callback` · `http://localhost:5173/account/link-callback` · `https://<도메인>/auth/callback` · `https://<도메인>/account/link-callback` (각각 글자 그대로 — 틀리면 `KOE006`).
-5. **Client Secret**: 공식 문서: REST API 키에는 Client Secret 기능이 **기본으로 켜져** 있어 토큰 요청에 `client_secret` 을 넣어야 한다(없거나 틀리면 `KOE010`). 이 레포는 비어 있으면 기동을 막으므로(`client secret must not be blank`) **발급해서** `…_KAKAO_CLIENT_SECRET` 에 넣는다.
+5. **Client Secret**: 공식 문서: REST API 키에는 Client Secret 기능이 **기본으로 켜져** 있어 토큰 요청에 `client_secret` 을 넣어야 한다(없거나 틀리면 `KOE010`). 웹 리다이렉트(인가 코드)를 쓰면 **발급해서** `…_KAKAO_CLIENT_SECRET` 에 넣는다. 앱 토큰(`app-id`)만 쓰면 비워도 된다 - 비면 코드 흐름만 닫힌다(404).
 6. **동의항목 — 닉네임(`profile_nickname`)을 켠다.** 동의항목 화면의 기본 상태는 **사용 안 함**이다 — 켜지 않으면 카카오가 이름을 주지 않아 **이름 없는 계정**이 만들어진다(주인이 실제로 겪었다). 필수 동의로 설정한다(선택으로 두면 사용자가 끌 수 있다). 단 `apps/sample` 은 제공자 이름을 닉네임으로 **가져오지 않는다**(`skeleton.account.social.import-display-name: false`) — 이름 없는 계정이 되는 것은 그 앱에서는 의도다. 제공자 이름으로 닉네임을 채우는 앱(기본값 `true`)에서만 이 항목이 결과를 바꾼다.
 7. **이메일(`account_email`)은 비즈 앱 뒤에만** 쓸 수 있다 — 개인 개발자는 "본인인증 → 비즈 앱으로 전환(개인 개발자 비즈 앱)" 경로가 있다(공식 문서 <https://developers.kakao.com/docs/ko/kakaologin/utilize> 의 동의항목 표는 이메일을 "비즈 앱" 대상으로 적는다; 전환 절차의 메뉴는 콘솔에서 확인). 켜지 않으면 계정은 **"이메일 없는 계정"**이 된다.
 8. **이미 만들어진 계정은 콘솔을 고쳐도 이름이 자동으로 채워지지 않는다.** 이름은 **가입 때 한 번**만 쓰이고 재로그인은 계정 이름을 건드리지 않는다. 시험 계정이 이름 없이 만들어졌다면 그 계정을 지우고(계정 삭제) 다시 가입하거나, 사용자가 닉네임을 직접 정한다.
@@ -199,7 +199,7 @@
 ### Naver (선택)
 > 이 절의 콘솔 항목(별명 · 개발 중 상태의 테스터)은 네이버 개발자센터(developers.naver.com)의 공식 문서 원문을 이 환경의 도구로는 열 수 없어 **조사 문서로 확인하지 못했다** — 아래는 주인의 시험에서 알려진 동작이고 콘솔 화면으로 확인한다.
 
-1. <https://developers.naver.com/apps/> 에서 애플리케이션 등록 → **네이버 로그인** API 를 고른다. **서비스 URL · Callback URL**(위 Kakao 와 같은 4개)을 등록하고 Client ID / Secret 을 `…_NAVER_*` 에 넣는다.
+1. <https://developers.naver.com/apps/> 에서 애플리케이션 등록 → **네이버 로그인** API 를 고른다. **서비스 URL · Callback URL**(위 Kakao 와 같은 4개)을 등록하고 Client ID / Secret 을 `…_NAVER_*` 에 넣는다. 앱 토큰만 쓰면 Secret 은 비워도 된다(코드 흐름만 닫힌다).
 2. **제공 정보(사용자 정보 동의 항목)에서 별명(nickname)을 필수로 설정한다** — 체크하지 않으면 프로필에 `nickname` 이 오지 않아 이름이 없다. 이름(`name`)·이메일은 선택 항목이다. 제공자 이름을 닉네임으로 가져오는 앱(기본값 `import-display-name: true`)에서만 이것이 결과를 바꾼다 — `apps/sample` 은 가져오지 않는다.
 3. **애플리케이션 상태가 "개발 중"이면 멤버 관리에 등록한 계정(테스터)만 로그인된다.** 시험할 네이버 계정을 **멤버 관리**에 추가한다. 일반 사용자에게 열려면 검수를 받아 서비스 상태로 바꾼다.
 4. 이미 만들어진 계정은 콘솔을 고쳐도 이름이 자동으로 채워지지 않는다(가입 때 한 번만 쓰인다) — Kakao 8번과 같다.

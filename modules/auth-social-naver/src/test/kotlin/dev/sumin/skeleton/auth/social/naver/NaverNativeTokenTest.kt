@@ -7,6 +7,8 @@ import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
 import dev.sumin.skeleton.auth.social.oauth.NativeTokenKind
 import dev.sumin.skeleton.auth.social.oauth.OAuthAccessTokenInvalidException
 import dev.sumin.skeleton.auth.social.oauth.OAuthNativeToken
+import dev.sumin.skeleton.auth.social.oauth.OAuthProviderNotFoundException
+import dev.sumin.skeleton.auth.social.oauth.codeExchange
 import dev.sumin.skeleton.auth.social.testing.FakeIdp
 import dev.sumin.skeleton.common.http.ExternalHttpStatusException
 import org.slf4j.LoggerFactory
@@ -16,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** 앱 SDK 의 네이버 액세스 토큰 검증 (스펙 §3, 결정됨 2) — 진짜 네이버 없이 FakeIdp 로 */
 class NaverNativeTokenTest {
@@ -48,6 +51,18 @@ class NaverNativeTokenTest {
         assertEquals("Naver User", profile.displayName)
         val request = idp.requests.single { it.path == "/v1/nid/me" }
         assertEquals("Bearer $secretToken", request.headers.entries.first { it.key.equals("authorization", true) }.value.single())
+    }
+
+    @Test
+    fun `an app-only backend needs no client secret - the token verifies and the code flow is closed`() {
+        val appOnly = NaverOAuthProvider(
+            FakeIdp.httpClient(),
+            AuthSocialProperties.Provider(enabled = true, clientId = "naver-client", apiBaseUrl = idp.base),
+        )
+        assertEquals("naver-id-1", appOnly.verifyNativeToken(OAuthNativeToken(secretToken, null)).providerUserId)
+        assertFalse(appOnly.codeFlow)
+        assertFailsWith<OAuthProviderNotFoundException> { appOnly.codeExchange("code", null, null, null) }
+        assertTrue(provider.codeFlow)
     }
 
     @Test

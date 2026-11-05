@@ -34,8 +34,10 @@ class GoogleOAuthProvider(
 
     init {
         require(properties.clientId.isNotBlank()) { "Google OAuth clientId must not be blank" }
-        require(properties.clientSecret.isNotBlank()) { "Google OAuth clientSecret must not be blank" }
     }
+
+    /** client secret 은 인가 코드 교환에만 쓴다 — 비어 있으면(앱 전용 백엔드) ID 토큰 검증만 열리고 코드 흐름은 없다 */
+    override val codeFlow: Boolean get() = properties.clientSecret.isNotBlank()
 
     /** Google 은 웹 서버 앱에서도 `code_verifier` 를 받는다 — 있으면 보낸다 (client secret 은 그대로 필요). 근거: docs/modules/auth-social-google.md (확인 필요 표시) */
     override val pkce: PkceMode = PkceMode.SUPPORTED

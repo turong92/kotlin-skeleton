@@ -22,8 +22,10 @@ class KakaoOAuthProvider(
 
     init {
         require(properties.clientId.isNotBlank()) { "Kakao OAuth clientId must not be blank" }
-        require(properties.clientSecret.isNotBlank()) { "Kakao OAuth clientSecret must not be blank" }
     }
+
+    /** client secret 은 인가 코드 교환에만 쓴다 — 비어 있으면(앱 전용 백엔드) 액세스 토큰 검증만 열리고 코드 흐름은 없다 */
+    override val codeFlow: Boolean get() = properties.clientSecret.isNotBlank()
 
     override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile {
         val token = exchangeToken(authorizationCode, redirectUri)

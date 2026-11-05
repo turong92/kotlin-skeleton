@@ -53,6 +53,24 @@ class SocialMethodsProjectTest {
     }
 
     @Test
+    fun `a provider without a code flow tells the web nothing to draw a code button from`() {
+        val appOnly = object : OAuthProvider {
+            override val providerId = "google"
+            override val autoEnabled = true
+            override val codeFlow = false
+            override val publicClientId = "web-client"
+            override val publicRedirectUri = "https://app.test/cb"
+            override val authorize = dev.sumin.skeleton.auth.social.oauth.OAuthAuthorizeInfo("https://idp.test/auth", listOf("openid"))
+            override val nativeToken = dev.sumin.skeleton.auth.social.oauth.NativeTokenKind.ID_TOKEN
+            override fun fetchProfile(authorizationCode: String, redirectUri: String?) = error("unused")
+        }
+        val source = AccountSocialWebAutoConfiguration().socialMethodsSource(OAuthProviderRegistry(listOf(appOnly), AuthSocialProperties()))
+        val view = source.enabled().single()
+        assertEquals(Triple(null, null, null), Triple(view.clientId, view.redirectUri, view.authorize))
+        assertEquals("id_token", view.nativeToken)
+    }
+
+    @Test
     fun `the sign-in method codes are known app-wide at start - the union of the projects' providers, no project needed`() {
         val source = AccountSocialAutoConfiguration().socialSignInMethodSource(registry)
         assertEquals(listOf("kakao", "naver"), source.methods().map { it.code }.sorted())

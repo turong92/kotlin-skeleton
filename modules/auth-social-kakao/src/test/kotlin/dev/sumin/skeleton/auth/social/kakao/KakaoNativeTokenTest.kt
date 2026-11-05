@@ -8,6 +8,7 @@ import dev.sumin.skeleton.auth.social.oauth.NativeTokenKind
 import dev.sumin.skeleton.auth.social.oauth.OAuthAccessTokenInvalidException
 import dev.sumin.skeleton.auth.social.oauth.OAuthNativeToken
 import dev.sumin.skeleton.auth.social.oauth.OAuthProviderNotFoundException
+import dev.sumin.skeleton.auth.social.oauth.codeExchange
 import dev.sumin.skeleton.auth.social.testing.FakeIdp
 import dev.sumin.skeleton.common.http.ExternalHttpStatusException
 import org.slf4j.LoggerFactory
@@ -63,6 +64,18 @@ class KakaoNativeTokenTest {
         assertTrue(profile.emailVerified)
         val info = idp.requests.first { it.path == "/v1/user/access_token_info" }
         assertEquals("Bearer $secretToken", info.headers.entries.first { it.key.equals("authorization", true) }.value.single())
+    }
+
+    @Test
+    fun `an app-only backend needs no client secret - the token verifies and the code flow is closed`() {
+        val appOnly = KakaoOAuthProvider(
+            FakeIdp.httpClient(),
+            AuthSocialProperties.Provider(enabled = true, clientId = "kakao-client", appId = appId, apiBaseUrl = idp.base),
+        )
+        assertEquals("12345", appOnly.verifyNativeToken(OAuthNativeToken(secretToken, null)).providerUserId)
+        assertFalse(appOnly.codeFlow)
+        assertFailsWith<OAuthProviderNotFoundException> { appOnly.codeExchange("code", null, null, null) }
+        assertTrue(provider.codeFlow)
     }
 
     @Test

@@ -19,7 +19,7 @@ Google OAuth 토큰 교환 · 프로필 조회 HTTP 클라이언트를 `auth-soc
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | 없음 (설정은 `auth-social` 블록의 providers.google 아래) — [auth-social 블록](../config/modules/auth-social.yml) |
 | 기본 동작 | 꺼짐. `skeleton.auth-social.providers.google.enabled=true` 로 켠다. |
-| 부팅에 필요한 것 | 없음. 클라이언트 id · secret 은 켤 때 필요하다. |
+| 부팅에 필요한 것 | 없음. 클라이언트 id 는 켤 때 필요하다. secret 은 웹 리다이렉트(인가 코드) 흐름에만 쓴다 — 앱 SDK 토큰 로그인만 쓰면 비워도 된다(코드 로그인 · 코드 연결은 404, `GET /auth/methods` 는 `clientId` · `redirectUri` · `authorize` 를 비운다). |
 | 교체 지점 | `GoogleOAuthProvider` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/auth` |

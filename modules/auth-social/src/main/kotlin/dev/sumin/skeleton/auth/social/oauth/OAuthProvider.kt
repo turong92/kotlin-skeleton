@@ -61,6 +61,12 @@ interface OAuthProvider {
 
     val authorize: OAuthAuthorizeInfo? get() = null
 
+    /**
+     * false 면 인가 코드 흐름이 없다 (client secret 이 비어 앱 SDK 토큰 입구만 쓰는 제공자) — 코드 로그인 · 코드 연결은 [OAuthProviderNotFoundException] (404),
+     * `GET /auth/methods` 는 client id · redirect URI · authorize 를 비워 웹이 코드 흐름 단추를 그리지 않게 한다. 기본 true — 기존 제공자는 그대로
+     */
+    val codeFlow: Boolean get() = true
+
     fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile
 
     /** PKCE · nonce 를 아는 제공자는 이것을 구현한다. 기본은 옛 두 인자 메서드 (검증기 · nonce 를 쓰지 않는다) */
@@ -103,6 +109,7 @@ fun OAuthProvider.codeExchange(
     nonce: String?,
     state: String? = null,
 ): OAuthCodeExchange {
+    if (!codeFlow) throw OAuthProviderNotFoundException(providerId)
     val verifier = codeVerifier?.takeIf { it.isNotEmpty() }
     if (verifier != null && !VERIFIER_FORMAT.matches(verifier)) throw OAuthPkceException(providerId)
     if (pkce == PkceMode.REQUIRED && verifier == null) throw OAuthPkceException(providerId)

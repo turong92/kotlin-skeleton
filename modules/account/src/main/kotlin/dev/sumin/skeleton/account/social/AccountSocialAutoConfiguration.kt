@@ -67,12 +67,13 @@ class AccountSocialWebAutoConfiguration {
                 val p = registry.settings(it.providerId)
                 dev.sumin.skeleton.account.web.SocialMethodView(
                     provider = it.providerId.trim().lowercase(),
-                    clientId = it.publicClientId?.takeIf { c -> c.isNotBlank() } ?: p?.clientId?.takeIf { c -> c.isNotBlank() },
-                    redirectUri = it.publicRedirectUri ?: p?.redirectUri,
+                    // 코드 흐름이 없는 제공자(시크릿 없이 앱 토큰만)는 웹이 단추를 그릴 재료를 주지 않는다
+                    clientId = if (it.codeFlow) it.publicClientId?.takeIf { c -> c.isNotBlank() } ?: p?.clientId?.takeIf { c -> c.isNotBlank() } else null,
+                    redirectUri = if (it.codeFlow) it.publicRedirectUri ?: p?.redirectUri else null,
                     pkce = it.pkce.name,
                     nonce = it.nonce.name,
                     nativeToken = it.nativeToken?.wire,
-                    authorize = it.authorize?.let { a -> dev.sumin.skeleton.account.web.SocialAuthorizeView(a.url, a.scopes, a.params) },
+                    authorize = it.authorize?.takeIf { _ -> it.codeFlow }?.let { a -> dev.sumin.skeleton.account.web.SocialAuthorizeView(a.url, a.scopes, a.params) },
                 )
             }
         }
