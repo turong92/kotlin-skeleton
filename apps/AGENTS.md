@@ -1,6 +1,6 @@
 # apps/ — 실행 앱 규칙
 
-- Two executable Spring Boot applications, both in a sub-package of the root so `@SpringBootApplication` scans only app code (`dev.sumin.skeleton.app.api`, `dev.sumin.skeleton.app.workbench`):
+- Spring Boot applications, each in a sub-package of the root so `@SpringBootApplication` scans only app code (`dev.sumin.skeleton.app.api`, `dev.sumin.skeleton.app.workbench`); `apps/video-worker` is not one of them — a small standalone Kotlin worker with no server code dependency (`apps/video-worker/README.md`):
   - `apps/api` is the **starter**: the minimal composition with real accounts (`platform`, `auth`, `account-jdbc`, `auth-session-jdbc`, `legal-jdbc`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time`) with one `HelloController`. New projects start here; its tests are the proof that a small composition boots without Redis/Kafka/S3/mail.
   - `apps/workbench` is the **demo**: every module plus the sample controllers under `/api/v1/skeleton/**` and `/api/v1/examples/**` (the react-skeleton workbench UI calls them — do not change paths or shapes) and the integration tests proving the modules coexist.
 <!-- sample:start -->
@@ -32,7 +32,7 @@
 새 기능(엔드포인트 + 저장 + 알림 + 비동기 작업)을 만들 때는 **처음부터 짜지 말고 `apps/sample` 의 `notes` 조각을 따라 한다.** 순서와 파일별 설명은 `docs/sample.md` 의 "이 기능 조각은 이렇게 조립됐다" (1 마이그레이션 → 2 엔티티 → 3 저장소 → 4 서비스 → 5 DTO·검증 → 6 컨트롤러 → 7 알림 → 8 잡 → 9 설정 → 10 테스트).
 
 ```
-apps/sample/src/main/kotlin/dev/sumin/skeleton/app/sample/
+apps/sample/src/main/kotlin/dev/sumin/skeleton/app/sample/   # notes 조각의 주요 파일만 (같은 앱에 다른 기능 패키지도 있다: booking · orders · reviews …)
 ├── SampleApplication.kt            # 루트의 하위 패키지 — 모듈은 AutoConfiguration 으로만 붙는다
 └── notes/
     ├── Note.kt                     # Spring Data JDBC 엔티티 (JdbcAuditable + AuditTimestamps)
