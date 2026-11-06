@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.storage
 
 import dev.sumin.skeleton.common.upload.GuestUploadKeys
+import dev.sumin.skeleton.common.upload.UploadKeyOwnership
 import java.security.MessageDigest
 import java.util.UUID
 import javax.crypto.Mac
@@ -13,8 +14,8 @@ import javax.crypto.spec.SecretKeySpec
  * **업로드 HTTP(`StorageController`)의 발급 · 확인은 이 빈을 보지 않는다** — 컨트롤러는 [StorageKeyScheme] 을 직접 쓴다.
  * 그쪽 규칙을 바꾸려면 이 빈이 아니라 `StorageController` 를 교체한다.
  */
-fun interface StorageKeyOwnership {
-    fun owns(accountId: String, key: String): Boolean
+fun interface StorageKeyOwnership : UploadKeyOwnership {
+    override fun owns(accountId: String, key: String): Boolean
 }
 
 /**

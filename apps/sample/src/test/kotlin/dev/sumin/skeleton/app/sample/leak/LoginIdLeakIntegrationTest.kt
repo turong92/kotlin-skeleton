@@ -235,8 +235,22 @@ class LoginIdLeakIntegrationTest {
         assertEquals(LOGIN_ID, JsonPath.read<String>(http.post("/api/v1/account/login-id/availability", null, """{"loginId":"$LOGIN_ID"}""", record = false).ok().body, "$.value.normalized"))
     }
 
+    /**
+     * X 는 계정 사진, Y 는 자기 프로필의 사진을 하나씩 정한다 - 서명 주소를 돌려주는 GET(`/account/me/avatar` · `/author-profiles/{id}/avatar`)은 사진이 있어야 2xx 를 낸다
+     * (없으면 404 라 「어느 독자도 닿지 못한 경로」로 걸린다). 키는 본인 업로드 한 장(presign)이다.
+     */
+    private val avatars: Unit by lazy {
+        // presign 한 키를 올리지 않고 그대로 쓴다 - 소유 확인은 키의 꼴(OPAQUE 의 MAC)만 보고, 서명 주소는 저장소에 객체가 없어도 계산된다
+        val x = http.post("/api/v1/storage/presign", w.xToken, """{"fileName":"me.png","contentType":"image/png","sizeBytes":1024}""", record = false).ok().read<String>("$.value.key")
+        http.patch("/api/v1/account/me", w.xToken, """{"avatarKey":${json(x)}}""").ok()
+        val y = http.post("/api/v1/storage/presign", w.yToken, """{"fileName":"profile.png","contentType":"image/png","sizeBytes":1024}""", record = false).ok().read<String>("$.value.key")
+        http.patch("/api/v1/author-profiles/${w.yProfile.id}", w.yToken, """{"avatarKey":${json(y)}}""").ok()
+        Unit
+    }
+
     /** 독자별로 OpenAPI 의 GET 전부를 한 번씩 (한 번만 읽는다 — 아래 두 시험이 나눠 쓴다) */
     private val everyReading: Map<String, List<Reading>> by lazy {
+        avatars
         val every = resolved().values.flatten()
         val templates = resolved().keys
         listOf("/api/v1/account/me", "/api/v1/boards/{code}/posts", "/api/v1/boards/{code}/posts/{postId}", "/api/v1/boards/{code}/posts/{postId}/comments", "/api/v1/notifications", "/api/v1/author-profiles",

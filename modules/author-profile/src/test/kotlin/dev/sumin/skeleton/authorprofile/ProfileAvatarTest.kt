@@ -1,7 +1,7 @@
 package dev.sumin.skeleton.authorprofile
 
 import dev.sumin.skeleton.account.AccountAvatars
-import dev.sumin.skeleton.account.AvatarKeyOwnership
+import dev.sumin.skeleton.common.upload.UploadKeyOwnership
 import dev.sumin.skeleton.account.AccountPatch
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.FieldValidationException
@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 /** 프로필마다 따로인 사진: 설정 · 지움 · 그대로, 남의 키 · 계정 id 가 든 키 · 이미 쓰는 키 거절, 이름과 함께일 때 원자성, 기능이 꺼진 앱 */
 class ProfileAvatarTest {
     /** 키 `uploads/o/o1-<파일>`(계정 id 가 안 드러나는 OPAQUE 꼴)을 흉내 낸다 - acc_1 -> o1 */
-    private val ownership = AvatarKeyOwnership { accountId, key -> key.startsWith("uploads/o/${accountId.replace("acc_", "o")}-") || key.startsWith("uploads/$accountId/") }
+    private val ownership = UploadKeyOwnership { accountId, key -> key.startsWith("uploads/o/${accountId.replace("acc_", "o")}-") || key.startsWith("uploads/$accountId/") }
 
     private class FakePublic : PublicUploads {
         val unpublished = mutableListOf<String>()

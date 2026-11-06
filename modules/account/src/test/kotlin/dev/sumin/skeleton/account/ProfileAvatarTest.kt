@@ -4,6 +4,7 @@ import dev.sumin.skeleton.account.signin.PasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.upload.PublicUploads
+import dev.sumin.skeleton.common.upload.UploadKeyOwnership
 import dev.sumin.skeleton.common.upload.UploadedKeyUsage
 import java.util.Optional
 import kotlin.test.Test
@@ -16,7 +17,7 @@ import kotlin.test.assertTrue
 /** 프로필 사진(아바타) 키: 설정 · 지움 · 그대로, 남의 키 거절, 공개 주소, 기능이 꺼진 앱 */
 class ProfileAvatarTest {
     /** 키 `uploads/<계정 id>/<파일>` 만 그 계정의 것 - storage 의 `ACCOUNT_ID` 방식을 흉내 낸다 */
-    private val ownership = AvatarKeyOwnership { accountId, key -> key.startsWith("uploads/$accountId/") }
+    private val ownership = UploadKeyOwnership { accountId, key -> key.startsWith("uploads/$accountId/") }
 
     private class FakePublic : PublicUploads {
         val published = mutableSetOf<String>()

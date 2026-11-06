@@ -398,11 +398,11 @@ class AccountAutoConfiguration {
     @ConditionalOnMissingBean
     fun profileService(core: AccountCore, registry: SignInMethodRegistry, avatars: AccountAvatars): ProfileService = ProfileService(core, registry, avatars)
 
-    /** 프로필 사진 키 규칙 - 소유 확인([AvatarKeyOwnership])이 없으면 꺼진 채다. 공개 영역 · 서명 읽기 · 이미지 변환은 부를 때마다 찾는다 (storage 가 없으면 아무것도 없다) */
+    /** 프로필 사진 키 규칙 - 소유 확인([dev.sumin.skeleton.common.upload.UploadKeyOwnership])이 없으면 꺼진 채다. 공개 영역 · 서명 읽기 · 이미지 변환은 부를 때마다 찾는다 (storage 가 없으면 아무것도 없다) */
     @Bean
     @ConditionalOnMissingBean
     fun accountAvatars(
-        ownership: ObjectProvider<AvatarKeyOwnership>,
+        ownership: ObjectProvider<dev.sumin.skeleton.common.upload.UploadKeyOwnership>,
         publicUploads: ObjectProvider<dev.sumin.skeleton.common.upload.PublicUploads>,
         access: ObjectProvider<dev.sumin.skeleton.common.upload.PrivateUploadAccess>,
         images: ObjectProvider<dev.sumin.skeleton.common.upload.UploadImages>,

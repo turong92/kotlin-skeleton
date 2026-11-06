@@ -3,7 +3,7 @@ package dev.sumin.skeleton.authorprofile
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.account.AccountAuthorDirectory
 import dev.sumin.skeleton.account.AccountAvatars
-import dev.sumin.skeleton.account.AvatarKeyOwnership
+import dev.sumin.skeleton.common.upload.UploadKeyOwnership
 import dev.sumin.skeleton.common.upload.UploadKeyHolder
 import dev.sumin.skeleton.common.upload.UploadedKeyUsage
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
@@ -85,13 +85,13 @@ class AuthorProfileAutoConfiguration {
      * 프로필 사진 키를 `author_profiles` 에 저장하므로(사진 기능이 켜졌을 때 - 소유 확인 빈이 있을 때) storage 의 버려진 업로드 정리에 알린다: 표지 `author-profile` 과 같은 이름에 대답하는 사용처, 둘이 짝이다.
      */
     @Bean
-    @ConditionalOnBean(AvatarKeyOwnership::class)
+    @ConditionalOnBean(UploadKeyOwnership::class)
     @ConditionalOnMissingBean(name = ["authorProfileUploadKeyHolder"])
     fun authorProfileUploadKeyHolder(): UploadKeyHolder = UploadKeyHolder(UPLOAD_KEY_MODULE)
 
     /** 타입으로 비키지 않는다 - 다른 구현과 합집합으로 쓰인다 (UploadedKeyUsages) */
     @Bean
-    @ConditionalOnBean(AvatarKeyOwnership::class)
+    @ConditionalOnBean(UploadKeyOwnership::class)
     @ConditionalOnMissingBean(name = ["authorProfileUploadedKeyUsage"])
     fun authorProfileUploadedKeyUsage(repository: AuthorProfileRepository): UploadedKeyUsage = object : UploadedKeyUsage {
         override val answers: Set<String> = setOf(UPLOAD_KEY_MODULE)

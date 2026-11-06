@@ -85,15 +85,7 @@
       "needs": {
         "requires": [],
         "oneOf": [],
-        "optional": [
-          "alert",
-          "auth-social",
-          "captcha-turnstile",
-          "idempotency",
-          "job-queue-jdbc",
-          "notification-mail",
-          "storage"
-        ]
+        "optional": ["alert", "auth-social", "captcha-turnstile", "idempotency", "job-queue-jdbc", "notification-mail"]
       },
       "config": {
         "prefixes": ["skeleton.account"],

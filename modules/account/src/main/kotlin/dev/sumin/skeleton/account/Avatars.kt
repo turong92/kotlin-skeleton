@@ -7,18 +7,11 @@ import dev.sumin.skeleton.common.upload.PublicUploadImage
 import dev.sumin.skeleton.common.upload.PublicUploads
 import dev.sumin.skeleton.common.upload.UploadImageState
 import dev.sumin.skeleton.common.upload.UploadImages
+import dev.sumin.skeleton.common.upload.UploadKeyOwnership
 import dev.sumin.skeleton.common.upload.UploadVariantsPendingException
 import dev.sumin.skeleton.common.upload.UploadedKeyUsage
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
-
-/**
- * 이 계정이 이 업로드 키의 주인인가 - 프로필 사진(아바타) 키를 받을 때 쓴다. `storage` 가 클래스패스에 있으면 `StorageKeyOwnership` 으로 낸다
- * ([dev.sumin.skeleton.account.storage.AccountStorageAutoConfiguration]). **이 빈이 없으면 아바타 기능은 꺼진 채다** - 응답에 아바타 칸이 없고 `avatarKey` 를 보내면 400.
- */
-fun interface AvatarKeyOwnership {
-    fun owns(accountId: String, key: String): Boolean
-}
 
 /**
  * 남에게 보이는 아바타 - [url] 공개 주소(공개 영역이 켜졌고 복사가 끝났을 때만), [image] 변환이 끝난 이미지(`thumb` · `display` 주소),
@@ -35,7 +28,7 @@ data class SignedAvatar(val url: String, val expiresInSeconds: Long)
  * 공개 사본은 board 의 하위 접두사(`b`) 밖([SEGMENT] = `a`)에 둔다 - board 의 전체 대조가 사진 사본을 고아로 지우지 않고, 같은 키를 board 첨부와 같이 써도 서로 지우지 않는다.
  */
 class AccountAvatars(
-    private val ownership: () -> AvatarKeyOwnership? = { null },
+    private val ownership: () -> UploadKeyOwnership? = { null },
     private val publicUploads: () -> PublicUploads? = { null },
     private val access: () -> PrivateUploadAccess? = { null },
     private val images: () -> UploadImages? = { null },
