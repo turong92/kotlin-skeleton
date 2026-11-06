@@ -9,7 +9,7 @@ MySQL 의 계정 id · 출처 키는 이진 정렬이라 대소문자만 다른 
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:point-jdbc"))` |
 | 함께 오는 모듈 | `point`, `platform`, `persistence-jdbc` |
-| 컴파일 전용 | 없음 |
+| 컴파일 전용 | `job-queue-jdbc` |
 | 설정 접두사 | 없음 (설정은 point 모듈의 것) |
 | 기본 동작 | 켜짐. `DataSource` 가 있으면 `PointStore` 를 등록한다 (앱이 같은 포트의 빈을 두면 그쪽이 쓰인다) |
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마 (`spring.flyway.locations: classpath:db/migration/{vendor}`) |
