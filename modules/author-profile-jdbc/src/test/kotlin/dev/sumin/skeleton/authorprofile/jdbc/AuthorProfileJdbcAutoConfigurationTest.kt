@@ -73,7 +73,7 @@ class AuthorProfileJdbcAutoConfigurationTest {
     @Test
     fun `the author-profile module names this adapter's auto-configuration in its afterName`() {
         val afterName = AuthorProfileAutoConfiguration::class.java.getAnnotation(org.springframework.boot.autoconfigure.AutoConfiguration::class.java).afterName.toList()
-        assertEquals(listOf(AuthorProfileJdbcAutoConfiguration::class.java.name), afterName)
+        kotlin.test.assertTrue(AuthorProfileJdbcAutoConfiguration::class.java.name in afterName, afterName.toString())
     }
 }
 
@@ -93,6 +93,8 @@ private object NoRepository : AuthorProfileRepository {
     override fun rename(id: String, accountId: String, name: String, key: String, tag: String?, now: java.time.Instant): RenameResult = nope()
     override fun markDeleted(id: String, accountId: String, now: java.time.Instant) = nope()
     override fun markAdopted(accountId: String, now: java.time.Instant) = nope()
+    override fun setAvatar(id: String, accountId: String, key: String?, now: java.time.Instant) = nope()
+    override fun avatarKeysInUse(keys: Collection<String>) = nope()
     override fun deleteByAccount(accountId: String) = nope()
 }
 

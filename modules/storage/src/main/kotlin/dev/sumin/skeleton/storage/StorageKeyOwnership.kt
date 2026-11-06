@@ -63,13 +63,13 @@ class StorageKeyScheme(
     }
 
     /** 비공개 키의 공개 영역 키 `<prefix>/b/<hmac32>.<ext>` (`b/` = board 가 쓰는 하위 접두사 - 전체 대조는 그 안만 본다) - 비공개 키에서만 계산된다(대응표 없음). 확장자는 알려진 것만 남는다 */
-    fun publicKeyOf(privateKey: String): String {
+    fun publicKeyOf(privateKey: String, segment: String = BOARD_PUBLIC_SEGMENT): String {
         val pub = webOf().`public`
         val hmac = Mac.getInstance("HmacSHA256")
         hmac.init(SecretKeySpec(pub.secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
         val id = hmac.doFinal("public\n$privateKey".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }.take(MAC_LENGTH)
         val ext = privateKey.substringAfterLast('/').substringAfterLast('.', missingDelimiterValue = "").lowercase()
-        return "${pub.prefix.trim('/')}/$BOARD_PUBLIC_SEGMENT/$id" + if (ext in KNOWN_EXTENSIONS) ".$ext" else ""
+        return "${pub.prefix.trim('/')}/$segment/$id" + if (ext in KNOWN_EXTENSIONS) ".$ext" else ""
     }
 
     /** 비회원 업로드 키인가 - 꼴 + MAC. 꺼져 있으면 참이 되는 키가 없다 */

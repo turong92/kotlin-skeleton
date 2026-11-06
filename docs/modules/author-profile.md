@@ -7,6 +7,7 @@
 - **한도**: 개수 상한은 살아 있는 프로필 수(첫 프로필 포함)이고 상한 검사와 저장은 한 번에 원자적이다. **만들기 한도**는 표에서 센다(지운 것 포함, 실패한 시도는 세지 않는다 — 재시작 · 인스턴스 여럿에도 같다). **이름 바꾸기 한도**는 계정의 `display-name.change-limit`/`change-window` 숫자를 모든 프로필 합산으로 쓰되 계정 닉네임 변경과는 **따로** 센다(프로필 전용 카운터) — `AccountRateLimits` 를 쓰므로 인스턴스가 여럿이면 내구성 있는 `RateLimitStore`(예: `redis-rate-limit`)가 필요하다.
 - **지우기**는 즉시이고 되돌릴 수 없다 — 글은 "삭제된 사용자"로 남고 다른 프로필로 옮기지 않는다. 남의 · 없는 · 지워진 프로필 id 는 모두 같은 `AUTHOR_PROFILE.NOT_FOUND` 이고, `AuthorIdentities.allows` 도 같은 false 다.
 - **첫 프로필**: 계정이 처음 갖는 프로필. 계정 이름 · 꼬리표를 한 번 복사하고(이름이 없으면 이름 없는 프로필), `adopt-on-startup`(기본 켜짐)이 `AuthorAdoptionListener`(예: `board-jdbc`)가 가진 옛 글을 여기로 넘겨받는다 — 계정 id 커서로 끝까지 훑어 못 옮기는 계정이 뒤 계정을 굶기지 않고, 계정별 예외는 삼키며, 계정 id · 프로필 id 쌍을 로그에 남기지 않는다. 목록 조회가 부르는 `ensureFirstProfile` 도 같은 넘겨받기를 그 계정에 한 번 해 본다(실행기를 끈 앱).
+- **프로필 사진(`storage` 가 있을 때만)**: 프로필마다 **따로** 업로드 키 하나(`author_profiles.avatar_key`). 소유 확인 · 공개 주소 · 변환본 · 서명 주소는 `account` 의 `AccountAvatars` 를 그대로 쓴다([account](account.md) 「프로필 사진」) - 이 모듈은 규칙만 더한다: **키에 계정 id 가 들어 있으면 400**(board 의 첨부와 같다 - `key-owner: OPAQUE` 키를 쓴다), **계정의 사진 · 다른 프로필의 사진과 같은 키면 400**(같은 키는 같은 공개 주소라 둘이 이어진다). `PATCH` 는 계정 확인 -> 사진 키 검사 -> 이름 -> 쓰기 순이라 어느 단계에서 거절돼도 아무것도 바뀌지 않는다. 지운 프로필 · 탈퇴는 키를 비우고 공개 복사를 지운다. 표지 `UploadKeyHolder("author-profile")` 와 짝 `UploadedKeyUsage` 를 낸다. 계약: [author-profile-http-contract.md](../author-profile-http-contract.md) §10. 독자에게 보이는 곳(board 응답)에는 아직 사진 칸이 없다.
 - **첨부(`storage`)를 함께 쓰면** 기본 키(`<prefix>/<계정 id>/…`)가 공개 `attachments` 로 나가 두 프로필의 글을 잇는다 — `skeleton.storage.web.key-owner: OPAQUE` 로 바꾸고 비밀 `<P>_STORAGE_WEB_KEY_SECRET`(32자 이상, 배포 선언의 `secrets:`; 비면 기동 실패)을 준다. board 는 계정 id 가 든 새 첨부 키를 `400 BOARD.CONTENT_INVALID` 로 거절하는 안전망만 갖는다(`apps/sample` 이 이 선택을 켠다).
 - 넘겨받기 한계: `adopted_at` 이 채워진 계정(옛 행이 없던 계정 포함)은 목록 조회가 다시 옮기지 않는다 — `adopt-on-startup=false` 인 앱이나 모듈을 끈 기간에 `author_ref` 없는 행이 **나중에** 생기면 다음 기동의 실행기(`adopt-on-startup=true`)가 옮기고, 그 전에는 `pending:` 으로 나간다. `adopt` 가 0 을 돌려주면 "옮길 것이 없었다"로 보고 끝낸 것으로 센다.
 - 탈퇴(`AccountErasureListener`)는 그 계정의 프로필 행을 모두 지운다. 글 쪽 `author_ref` 는 건드리지 않는다.
@@ -34,9 +35,10 @@
 | 메서드 · 경로 | 하는 일 |
 |---|---|
 | `GET /config` | `{ maxPerAccount, nameMaxLength }` |
-| `GET /` | 내 살아 있는 프로필 `[{ id, name, tag, createdAt }]`(만든 순). 먼저 첫 프로필을 보장하고 그 계정의 옛 글을 넘겨받는다. `name` 은 이름 없는 첫 프로필이면 `null`, `tag` 는 꼬리표 방식이 `NONE`(또는 `UNIQUE` 의 고정 꼬리표)면 `null` |
+| `GET /` | 내 살아 있는 프로필 `[{ id, name, tag, createdAt }]` (`storage` 가 있으면 `avatarKey` · `avatar` 가 더해진다)(만든 순). 먼저 첫 프로필을 보장하고 그 계정의 옛 글을 넘겨받는다. `name` 은 이름 없는 첫 프로필이면 `null`, `tag` 는 꼬리표 방식이 `NONE`(또는 `UNIQUE` 의 고정 꼬리표)면 `null` |
 | `POST /` `{ name }` | `201` + 프로필 하나(`Location` 포함) |
-| `PATCH /{id}` `{ name }` | `200` + 프로필 하나 (과거 글에 바로 반영) |
+| `PATCH /{id}` `{ name?, avatarKey? }` | `200` + 프로필 하나 (과거 글에 바로 반영). `avatarKey` 는 `storage` 가 있을 때만(아래 「프로필 사진」) - 사진만 바꿀 때는 `name` 을 생략한다 |
+| `GET /{id}/avatar` | 내 프로필 사진의 짧은 서명 주소 `{ url, expiresInSeconds }` (공개 영역이 켜져 있을 때만 - 서명 읽기가 공개 영역과 함께 꺼진다) |
 | `DELETE /{id}` | `204` (즉시, 되돌릴 수 없다) |
 
 오류: `400` 필드 `name`(코드는 닉네임과 같다: `Required` · `Size` · `Pattern` · `Reserved`, `COMMON.VALIDATION_FAILED`) · `409 AUTHOR_PROFILE.NAME_TAKEN` · `409 AUTHOR_PROFILE.LIMIT_REACHED` · `429 AUTHOR_PROFILE.RATE_LIMITED`(`Retry-After` 헤더와 `data.retryAfterSeconds` — 계정의 `RATE_LIMITED` 와 같은 모양) ·

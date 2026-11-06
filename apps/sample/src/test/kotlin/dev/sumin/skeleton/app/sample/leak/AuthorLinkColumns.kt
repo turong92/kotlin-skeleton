@@ -50,7 +50,7 @@ object AuthorLinkColumns {
             "link", "collapse_key", "collapsed_count", "last_event_id",
         ),
         "notification_mutes" to setOf("type", "created_at"),
-        "author_profiles" to setOf("id", "name", "name_key", "tag", "status", "adopted_at", "created_at", "updated_at", "deleted_at"),
+        "author_profiles" to setOf("id", "name", "name_key", "tag", "status", "adopted_at", "created_at", "updated_at", "deleted_at", "avatar_key"),
     )
 
     private fun flat(map: Map<String, Set<String>>) = map.flatMap { (table, columns) -> columns.map { "$table.$it" } }.toSet()

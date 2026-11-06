@@ -321,4 +321,28 @@ class JdbcAuthorProfileRepositoryDbTest {
         assertEquals(CapInsert.NAME_TAKEN, repository.insertWithinCap(profile(b, key = key, tag = "0001"), 5, 0, null))
         assertEquals(1, ProfileDb.rows(b))
     }
+
+    @Test
+    fun `avatar key round-trips, is guarded by owner and status, and is emptied by markDeleted`() {
+        val acc = account()
+        val p = profile(acc, primary = true, name = "Moon", key = "moon", tag = "0042")
+        assertTrue(repository.insert(p))
+        assertNull(repository.find(p.id)!!.avatarKey)
+
+        assertTrue(repository.setAvatar(p.id, acc, "uploads/o/k1/file.png", T0))
+        assertEquals("uploads/o/k1/file.png", repository.find(p.id)!!.avatarKey)
+        assertEquals("Moon", repository.find(p.id)!!.name)
+        assertEquals(setOf("uploads/o/k1/file.png"), repository.avatarKeysInUse(listOf("uploads/o/k1/file.png", "uploads/o/zz/file.png")))
+        assertFalse(repository.setAvatar(p.id, account(), "uploads/o/k2/file.png", T0), "someone else's profile")
+        assertEquals("uploads/o/k1/file.png", repository.find(p.id)!!.avatarKey)
+
+        assertTrue(repository.setAvatar(p.id, acc, null, T0))
+        assertNull(repository.find(p.id)!!.avatarKey)
+
+        repository.setAvatar(p.id, acc, "uploads/o/k3/file.png", T0)
+        assertTrue(repository.markDeleted(p.id, acc, T0))
+        assertNull(repository.find(p.id)!!.avatarKey)
+        assertFalse(repository.setAvatar(p.id, acc, "uploads/o/k4/file.png", T0), "a deleted profile")
+        assertEquals(emptySet(), repository.avatarKeysInUse(listOf("uploads/o/k3/file.png")))
+    }
 }

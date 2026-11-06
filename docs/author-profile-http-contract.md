@@ -1,6 +1,6 @@
 # Author profiles — HTTP contract (kotlin-skeleton backend)
 
-Status: **FINAL-1** (written against the code of `author-profile`, `author-profile-jdbc`, `board`, `storage` and `account` as of 2026-10-08; the backend tests — `AuthorProfileWebTest`, `AuthorProfileWebLimitsTest`, `AuthorProfileAdminWebTest`, `BoardAuthorIdentitiesWebTest`, `BoardIntegrationTest`, `AuthorLinkLeakIntegrationTest` — are written against it).
+Status: **FINAL-2** (written against the code of `author-profile`, `author-profile-jdbc`, `board`, `storage` and `account` as of 2026-10-08; the backend tests — `AuthorProfileWebTest`, `AuthorProfileWebLimitsTest`, `AuthorProfileAdminWebTest`, `BoardAuthorIdentitiesWebTest`, `BoardIntegrationTest`, `AuthorLinkLeakIntegrationTest` — are written against it).
 Audience: the frontend (react-skeleton `@skeleton/author-profile`, `@skeleton/board`). Backend modules: `author-profile` (+ `author-profile-jdbc`), `board`, `storage`; one new account event type.
 Background, threat model and the full list of leak paths: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`. Module pages: `docs/modules/author-profile.md`, `docs/modules/board.md`. Account conventions (envelope, error body, tokens): `docs/account-http-contract.md` section 0 — unchanged here.
 
@@ -41,7 +41,7 @@ The caller's living profiles, oldest first. Creates the first profile if there i
   { "id": "prf_01k7vq9rn2d7y4c0pj8gx5e1ba", "name": "mins", "tag": "5231", "createdAt": "2026-10-08T01:10:00.000000Z" }
 ] }
 ```
-- These **four keys are all there is** — no account id, no "is first", no status, no adoption time. `createdAt` is for the owner's own list only.
+- These **four keys are all there is** - no account id, no "is first", no status, no adoption time - plus, on an app with the `storage` module only, `avatarKey` and `avatar` (section 10). `createdAt` is for the owner's own list only.
 - `name: null` only for an unnamed first profile (an account that had no nickname). Show a "name this profile" prompt; a null name never appears for a profile created with `POST`.
 - `tag: null` when the app has no tags.
 - A suspended account that already has profiles can still read the list; an account that has never had one gets `404 AUTHOR_PROFILE.NOT_FOUND` (nothing is created for a non-active account).
@@ -168,6 +168,17 @@ Deleted profiles are included (`status: DELETED`, no name). Errors: `401`, `403`
 
 Posts written before the switch carried the **account id** as their public author id. Those ids were public, so after the switch the old posts are tied to the **first profile** and nothing can undo that. A user who needs secrecy must use a **new** profile for new activity. An app that can start with the module on from its first deploy has no such history. (Spec §11; changelog entry.)
 
+## 10. Profile picture (only on an app with the `storage` module)
+
+Each profile has its **own** picture. The feature exists when `storage` is on the classpath (the same switch as the account picture, [account contract](account-http-contract.md) section H); **without it nothing below appears and `avatarKey` on `PATCH` is `400`.**
+
+- `PATCH /{id}` body `{ "name"?: …, "avatarKey"?: … }`. `avatarKey`: a string sets, `null` clears, a missing field keeps. **`name` may be left out when `avatarKey` is sent** (a body with neither is the usual `400 Required` on `name`). The check order is: the profile is the caller's living one (else `404 AUTHOR_PROFILE.NOT_FOUND`) -> the picture key (`400`) -> the name (`400` / `409` / `429`) -> the write. A refusal at the picture or name check changes nothing; the name and the picture are written one after the other, not in one transaction (the picture write can only fail afterwards if the profile was deleted in between).
+- `400 COMMON.VALIDATION_FAILED` for a picture key that: is not the caller's upload; **contains the caller's account id** (use the opaque `key-owner: OPAQUE` keys - the same rule as board attachments, because a key shared by two profiles would tie them); is already the picture of the account or of **another profile** (the same key is the same public address, so it would tie them); or when the app has no storage. Upload a new file per profile.
+- The profile object (`GET /`, `POST /`, `PATCH /{id}`) gains, **only when the feature is on**: `avatarKey` (`null` = none; this list is the owner's own) and, when there is a picture, `avatar = { url?, image?, pending }` - the same shape and rules as the account picture. The four original keys are unchanged. Deleting a profile clears its picture (and removes the public copy); account deletion removes them all.
+- `GET /{id}/avatar` -> `{ value: { url, expiresInSeconds } }`, the signed address for the owner; it follows the storage public area, so with the public area off it is a 404 and the feature only stores the key. Only image uploads are accepted as a picture. Another account's / missing / deleted profile and "no picture" are the same `404 AUTHOR_PROFILE.NOT_FOUND`.
+- **No board field yet**: the board responses do not carry the author's picture; a reader sees a picture only where an app shows `avatar.url` itself. Section 8 rule 1 applies: never put an account id next to a profile id, and never show the account's picture on a profile.
+
 ## Change log
 
 - **FINAL-1 (2026-10-08)** — first complete version.
+- **FINAL-2 (2026-11-06)** - profile pictures: `PATCH /{id}` takes `avatarKey`, the profile object gains `avatarKey` / `avatar`, `GET /{id}/avatar` (section 10).

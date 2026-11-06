@@ -8,3 +8,4 @@ dev.sumin.skeleton.account.social.AccountSocialAutoConfiguration
 dev.sumin.skeleton.account.social.AccountSocialWebAutoConfiguration
 dev.sumin.skeleton.account.AccountPurgeJobAutoConfiguration
 dev.sumin.skeleton.account.web.AccountLoginIdRequiredAutoConfiguration
+dev.sumin.skeleton.account.storage.AccountStorageAutoConfiguration

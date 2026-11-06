@@ -6,12 +6,14 @@ dependencies {
     // idempotency: 삭제 · 이메일 변경의 @IdempotentOperation
     // auth-social: 소셜 로그인 · 연결 (AccountOAuth* 가 OAuthAccountLinkRepository · OAuthAccountProvisioningPolicy 포트를 구현한다)
     // job-queue-jdbc: 삭제 유예가 끝난 계정을 지우는 일을 잡으로 (없으면 주기 실행기가 직접)
+    // storage: 프로필 사진(아바타) - StorageKeyOwnership 으로 키 소유를 확인한다. 없으면 사진 기능이 통째로 꺼진다
     compileOnly(project(":modules:notification-mail"))
     compileOnly(project(":modules:captcha-turnstile"))
     compileOnly(project(":modules:alert"))
     compileOnly(project(":modules:idempotency"))
     compileOnly(project(":modules:auth-social"))
     compileOnly(project(":modules:job-queue-jdbc"))
+    compileOnly(project(":modules:storage"))   // 프로필 사진 키 소유 확인 StorageKeyOwnership (AccountStorageAutoConfiguration 이 클래스패스에 있을 때만 사진 기능을 켠다)
 
     api(project(":modules:platform"))   // ApplicationException · TimeProvider · RateLimitStore 가 이 모듈의 공개 API 에 나온다
     api(project(":modules:auth"))       // AuthAccountRepository · AuthTokenResponseFactory · SessionRevoker — 의존성 한 줄로 충분하게
@@ -31,6 +33,7 @@ dependencies {
     testImplementation(project(":modules:idempotency"))
     testImplementation(project(":modules:auth-social"))
     testImplementation(project(":modules:job-queue-jdbc"))
+    testImplementation(project(":modules:storage"))
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.assertj:assertj-core")

@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.authorprofile.web
 
+import dev.sumin.skeleton.account.AccountAvatars
 import dev.sumin.skeleton.authorprofile.AuthorProfileAutoConfiguration
+import org.springframework.beans.factory.ObjectProvider
 import dev.sumin.skeleton.authorprofile.AuthorProfileProperties
 import dev.sumin.skeleton.authorprofile.AuthorProfileService
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -26,6 +28,10 @@ class AuthorProfileWebAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun authorProfileController(service: AuthorProfileService, callers: AuthorProfileCallers, properties: AuthorProfileProperties): AuthorProfileController =
-        AuthorProfileController(service, callers, properties)
+    fun authorProfileController(
+        service: AuthorProfileService,
+        callers: AuthorProfileCallers,
+        properties: AuthorProfileProperties,
+        avatars: ObjectProvider<AccountAvatars>,
+    ): AuthorProfileController = AuthorProfileController(service, callers, properties, avatars.getIfAvailable { AccountAvatars.NONE })
 }

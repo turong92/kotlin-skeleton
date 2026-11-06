@@ -396,7 +396,21 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun profileService(core: AccountCore, registry: SignInMethodRegistry): ProfileService = ProfileService(core, registry)
+    fun profileService(core: AccountCore, registry: SignInMethodRegistry, avatars: AccountAvatars): ProfileService = ProfileService(core, registry, avatars)
+
+    /** 프로필 사진 키 규칙 - 소유 확인([AvatarKeyOwnership])이 없으면 꺼진 채다. 공개 영역 · 서명 읽기 · 이미지 변환은 부를 때마다 찾는다 (storage 가 없으면 아무것도 없다) */
+    @Bean
+    @ConditionalOnMissingBean
+    fun accountAvatars(
+        ownership: ObjectProvider<AvatarKeyOwnership>,
+        publicUploads: ObjectProvider<dev.sumin.skeleton.common.upload.PublicUploads>,
+        access: ObjectProvider<dev.sumin.skeleton.common.upload.PrivateUploadAccess>,
+        images: ObjectProvider<dev.sumin.skeleton.common.upload.UploadImages>,
+        usages: ObjectProvider<dev.sumin.skeleton.common.upload.UploadedKeyUsage>,
+    ): AccountAvatars = AccountAvatars(
+        { ownership.getIfAvailable() }, { publicUploads.getIfAvailable() }, { access.getIfAvailable() }, { images.getIfAvailable() },
+        { usages.orderedStream().toList() },
+    )
 
     /**
      * 작성자 이름 조회의 기본 구현 — 닉네임 · 꼬리표를 `board` 같은 모듈에 내준다 (그쪽은 이 모듈을 모른다: [AuthorDirectory]).

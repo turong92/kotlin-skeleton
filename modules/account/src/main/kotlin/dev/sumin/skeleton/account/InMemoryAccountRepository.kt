@@ -60,11 +60,15 @@ class InMemoryAccountRepository : AccountRepository {
             deletedAt = if (patch.clearDeletion) null else patch.deletedAt ?: a.deletedAt,
             purgeAfter = if (patch.clearDeletion) null else patch.purgeAfter ?: a.purgeAfter,
             contactEmail = if (patch.clearContactEmail) null else patch.contactEmail ?: a.contactEmail,
+            avatarKey = if (patch.clearAvatar) null else patch.avatarKey ?: a.avatarKey,
             updatedAt = now,
         )
         accounts[id] = updated
         return updated
     }
+
+    @Synchronized override fun avatarKeysInUse(keys: Collection<String>): Set<String> =
+        accounts.values.filter { it.status != AccountStatus.ERASED }.mapNotNullTo(mutableSetOf()) { it.avatarKey?.takeIf { k -> k in keys } }
 
     /** (키, 꼬리표) 유니크 — 둘 중 하나라도 null 이면 겹치지 않는다 (SQL 의 NULL 은 서로 다르다) */
     private fun nameClash(id: String, key: String?, tag: String?): Boolean =
@@ -173,7 +177,7 @@ class InMemoryAccountRepository : AccountRepository {
         claimed.remove(id)
         accounts[id] = a.copy(
             email = null, emailVerified = false, status = AccountStatus.ERASED, roles = emptySet(), displayName = null, displayNameKey = null, displayTag = null, locale = null, timeZone = null,
-            lastLoginAt = null, suspendedReason = null, purgeAfter = null, erasedAt = now, updatedAt = now, contactEmail = null, loginId = null,
+            lastLoginAt = null, suspendedReason = null, purgeAfter = null, erasedAt = now, updatedAt = now, contactEmail = null, loginId = null, avatarKey = null,
         )
         return true
     }

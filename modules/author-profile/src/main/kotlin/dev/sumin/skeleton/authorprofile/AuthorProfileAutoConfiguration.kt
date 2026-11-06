@@ -2,6 +2,11 @@ package dev.sumin.skeleton.authorprofile
 
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.account.AccountAuthorDirectory
+import dev.sumin.skeleton.account.AccountAvatars
+import dev.sumin.skeleton.account.AvatarKeyOwnership
+import dev.sumin.skeleton.common.upload.UploadKeyHolder
+import dev.sumin.skeleton.common.upload.UploadedKeyUsage
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountProperties
 import dev.sumin.skeleton.account.AccountRepository
@@ -29,7 +34,10 @@ import org.springframework.context.annotation.Bean
  * HTTP(`/author-profiles`)는 [dev.sumin.skeleton.authorprofile.web.AuthorProfileWebAutoConfiguration] 이 따로 등록한다. 관리자의 연결 조회(`skeleton.author-profile.admin.enabled`)는 [dev.sumin.skeleton.authorprofile.web.AuthorProfileAdminWebAutoConfiguration] 이 따로 등록한다.
  */
 // afterName 의 클래스 이름은 author-profile-jdbc 의 자동설정 클래스와 같아야 한다 (author-profile-jdbc 의 AuthorProfileJdbcAutoConfigurationTest 가 맞춰 본다)
-@AutoConfiguration(before = [AccountAutoConfiguration::class], afterName = ["dev.sumin.skeleton.authorprofile.jdbc.AuthorProfileJdbcAutoConfiguration"])
+@AutoConfiguration(
+    before = [AccountAutoConfiguration::class],
+    afterName = ["dev.sumin.skeleton.authorprofile.jdbc.AuthorProfileJdbcAutoConfiguration", "dev.sumin.skeleton.account.storage.AccountStorageAutoConfiguration"],
+)
 @EnableConfigurationProperties(AuthorProfileProperties::class)
 class AuthorProfileAutoConfiguration {
     @Bean
@@ -43,11 +51,13 @@ class AuthorProfileAutoConfiguration {
         properties: AuthorProfileProperties,
         time: ObjectProvider<TimeProvider>,
         listeners: ObjectProvider<AuthorAdoptionListener>,
+        avatars: ObjectProvider<AccountAvatars>,
     ): AuthorProfileService = AuthorProfileService(
         repository, { accounts.getObject() },
         DisplayNames(accountProperties.displayName, rules = rules.getIfAvailable { dev.sumin.skeleton.account.DefaultDisplayNameRules }),
         limits, properties, time.getIfAvailable { TimeProvider.systemUtc() },
         { listeners.orderedStream().toList() },
+        { avatars.getIfAvailable { AccountAvatars.NONE } },
     )
 
     /** 이 모듈의 권한 — 붙으면 권한 카탈로그에 `author-profile.read` 가 나타난다 */
@@ -68,7 +78,25 @@ class AuthorProfileAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = ["authorProfileErasureListener"])   // 고리는 모듈마다 하나씩 있어 타입이 아니라 이름으로 비킨다 (BoardAccountErasureListener 와 같다)
-    fun authorProfileErasureListener(repository: AuthorProfileRepository): AccountErasureListener = AuthorProfileErasureListener(repository)
+    fun authorProfileErasureListener(repository: AuthorProfileRepository, avatars: ObjectProvider<AccountAvatars>): AccountErasureListener =
+        AuthorProfileErasureListener(repository) { avatars.getIfAvailable { AccountAvatars.NONE } }
+
+    /**
+     * 프로필 사진 키를 `author_profiles` 에 저장하므로(사진 기능이 켜졌을 때 - 소유 확인 빈이 있을 때) storage 의 버려진 업로드 정리에 알린다: 표지 `author-profile` 과 같은 이름에 대답하는 사용처, 둘이 짝이다.
+     */
+    @Bean
+    @ConditionalOnBean(AvatarKeyOwnership::class)
+    @ConditionalOnMissingBean(name = ["authorProfileUploadKeyHolder"])
+    fun authorProfileUploadKeyHolder(): UploadKeyHolder = UploadKeyHolder(UPLOAD_KEY_MODULE)
+
+    /** 타입으로 비키지 않는다 - 다른 구현과 합집합으로 쓰인다 (UploadedKeyUsages) */
+    @Bean
+    @ConditionalOnBean(AvatarKeyOwnership::class)
+    @ConditionalOnMissingBean(name = ["authorProfileUploadedKeyUsage"])
+    fun authorProfileUploadedKeyUsage(repository: AuthorProfileRepository): UploadedKeyUsage = object : UploadedKeyUsage {
+        override val answers: Set<String> = setOf(UPLOAD_KEY_MODULE)
+        override fun inUse(keys: Collection<String>): Set<String> = repository.avatarKeysInUse(keys)
+    }
 
     /** 기동할 때 옛 글을 첫 프로필로 넘겨받는다 (`skeleton.author-profile.adopt-on-startup`, 기본 켜짐) — 끄면 아무것도 하지 않는다 */
     @Bean
@@ -79,5 +107,10 @@ class AuthorProfileAutoConfiguration {
         properties: AuthorProfileProperties,
     ): ApplicationRunner = ApplicationRunner {
         if (properties.adoptOnStartup) AuthorAdoption({ listeners.orderedStream().toList() }, service).run()
+    }
+
+    private companion object {
+        /** [UploadKeyHolder.module] - `UploadedKeyUsage.answers` 가 같은 이름을 대답한다 */
+        const val UPLOAD_KEY_MODULE = "author-profile"
     }
 }

@@ -8,10 +8,15 @@ import dev.sumin.skeleton.common.erasure.ErasureRequest
  * 글 · 댓글(board)의 `author_ref` 는 건드리지 않는다 — 프로필마다 다른 id 가 남고, 디렉터리가 이제 없는 프로필 id 에 이름을 돌려주지 않을 뿐이다.
  * "삭제된 사용자" 표시는 board 의 고리가 `author_id` 에 톰스톤을 쓰는 것에서 나온다 — 두 고리는 서로의 순서에 기대지 않는다.
  */
-class AuthorProfileErasureListener(private val repository: AuthorProfileRepository) : AccountErasureListener {
+class AuthorProfileErasureListener(
+    private val repository: AuthorProfileRepository,
+    /** 지운 프로필 사진의 공개 복사를 거두는 길 - 사진 기능이 없으면 아무것도 하지 않는다 */
+    private val avatars: () -> dev.sumin.skeleton.account.AccountAvatars = { dev.sumin.skeleton.account.AccountAvatars.NONE },
+) : AccountErasureListener {
     override val name: String = "author-profile"
 
     override fun erase(request: ErasureRequest) {
+        repository.findAllOf(request.accountId).forEach { avatars().retireOrThrow(it.avatarKey, force = true) }
         repository.deleteByAccount(request.accountId)
     }
 }

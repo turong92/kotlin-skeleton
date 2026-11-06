@@ -254,4 +254,22 @@ class JdbcAccountRepositoryDbTest {
             assertEquals(1, results.count { it == GuardedResult.DONE }, results.toString())
         }
     }
+
+    @Test
+    fun `avatar key is set, cleared, looked up and emptied by erase`() {
+        assertTrue(repo.insert(account(status = AccountStatus.SUSPENDED), emptyList()))
+        assertNull(repo.findById("acc_1")!!.avatarKey)
+        assertEquals("uploads/o/k1/file.png", repo.update("acc_1", AccountPatch(avatarKey = "uploads/o/k1/file.png"), now)!!.avatarKey)
+        assertEquals(setOf("uploads/o/k1/file.png"), repo.avatarKeysInUse(listOf("uploads/o/k1/file.png", "uploads/o/other/file.png")))
+        assertEquals(emptySet(), repo.avatarKeysInUse(emptyList()))
+        // 다른 칸만 고치면 그대로
+        assertEquals("uploads/o/k1/file.png", repo.update("acc_1", AccountPatch(locale = "en"), now)!!.avatarKey)
+        assertNull(repo.update("acc_1", AccountPatch(clearAvatar = true), now)!!.avatarKey)
+        assertEquals(emptySet(), repo.avatarKeysInUse(listOf("uploads/o/k1/file.png")))
+
+        repo.update("acc_1", AccountPatch(avatarKey = "uploads/o/k2/file.png"), now)
+        assertTrue(repo.erase("acc_1", now, forced = true))
+        assertNull(repo.findById("acc_1")!!.avatarKey)
+        assertEquals(emptySet(), repo.avatarKeysInUse(listOf("uploads/o/k2/file.png")))
+    }
 }

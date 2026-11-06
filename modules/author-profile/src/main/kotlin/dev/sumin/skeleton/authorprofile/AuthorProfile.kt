@@ -29,6 +29,8 @@ data class AuthorProfile(
     val createdAt: Instant,
     val updatedAt: Instant,
     val deletedAt: Instant?,
+    /** 프로필 사진의 업로드 키 - 프로필마다 따로다(계정의 사진 · 다른 프로필의 사진과 같은 키를 쓰지 않는다). 계정 id 가 들어 있지 않은 키만 받는다. 지우면 NULL */
+    val avatarKey: String? = null,
 ) {
     /** 화면에 보일 꼬리표 (없거나 UNIQUE 의 고정값이면 null) */
     val visibleTag: String? get() = DisplayNames.visibleTag(tag)

@@ -46,12 +46,27 @@ data class MeView(
      */
     @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     val loginId: java.util.Optional<String>? = null,
+    /**
+     * 프로필 사진의 업로드 키 - **사진 기능이 꺼져 있으면(`storage` 없음) 키가 없다**(null). 켜져 있는데 아직 없으면 키가 있고 값이 `null`(빈 [java.util.Optional]).
+     * 키는 본인에게만 나간다(이 응답). 남에게 보이는 모습은 [avatar].
+     */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    val avatarKey: java.util.Optional<String>? = null,
+    /** 사진이 있고 기능이 켜졌을 때만(그 밖에는 키가 없다) - 공개 주소 · 변환본 · 변환 중 표시. 공개 영역이 꺼졌으면 세 칸이 비어 있다(서명 주소 엔드포인트로 본다) */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    val avatar: AvatarView? = null,
 )
 
-data class ProfileChange(val displayName: String? = null, val locale: String? = null, val timeZone: String? = null)
+/** [avatarKey]: null = 그대로, 빈 [java.util.Optional] = 지움, 값 = 설정 */
+data class ProfileChange(
+    val displayName: String? = null,
+    val locale: String? = null,
+    val timeZone: String? = null,
+    val avatarKey: java.util.Optional<String>? = null,
+)
 
-/** `me` — 내 프로필 읽기 · 고치기 (이름 · 로케일 · 시간대) */
-class ProfileService(private val core: AccountCore, registry: SignInMethodRegistry) {
+/** `me` — 내 프로필 읽기 · 고치기 (이름 · 로케일 · 시간대 · 사진) */
+class ProfileService(private val core: AccountCore, registry: SignInMethodRegistry, private val avatars: AccountAvatars = AccountAvatars.NONE) {
     private val identities = IdentityService(core, registry)
 
     fun me(accountId: String): MeView {
@@ -67,8 +82,14 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
             emailRequiredToWrite = if (writeMode) a.email == null else null,
             contactEmail = if (core.props.contactEmail.enabled) java.util.Optional.ofNullable(a.contactEmail) else null,
             loginId = if (core.props.loginId.enabled) java.util.Optional.ofNullable(a.loginId) else null,
+            avatarKey = if (avatars.enabled) java.util.Optional.ofNullable(a.avatarKey) else null,
+            avatar = avatars.view(a.avatarKey) { core.accounts.findById(accountId)?.avatarKey == a.avatarKey },
         )
     }
+
+    /** 내 사진을 볼 짧은 서명 주소 - 사진이 없거나 서명 읽기가 꺼졌으면 null */
+    fun avatarSigned(accountId: String): SignedAvatar? =
+        core.accounts.findById(accountId)?.takeIf { it.status != AccountStatus.ERASED }?.avatarKey?.let(avatars::signed)
 
     fun update(accountId: String, change: ProfileChange): MeView {
         // 지운 계정의 옛 액세스 토큰으로는 아무것도 쓰지 못한다 — 저장소도 같은 조건으로 막는다(검사와 쓰기 사이 틈)
@@ -77,6 +98,15 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
         val name = change.displayName?.let { core.names.accept(it, required = true, exemptReserved = core.superRole in current.roles) }
         change.locale?.let { if (ProfileRules.locale(it) == null) invalid("locale") }
         change.timeZone?.let { if (ProfileRules.timeZone(it) == null) invalid("timeZone") }
+        // 사진 키: 기능이 꺼졌거나 내 업로드가 아니면 400 - 이름 · 한도보다 먼저 거른다 (같은 키 · 지움은 쓰기 없이 지나간다)
+        val avatarChange = change.avatarKey
+        if (avatarChange != null && !avatars.enabled) invalid("avatarKey")
+        val newAvatar = avatarChange?.takeIf { it.isPresent }?.let { avatars.accept(accountId, it.get(), current = current.avatarKey) }
+        val avatarPatch = when {
+            avatarChange == null || newAvatar == current.avatarKey -> null
+            else -> newAvatar
+        }
+        val clearAvatar = avatarChange != null && !avatarChange.isPresent && current.avatarKey != null
         // 이름이 겹치면 409 — 다른 필드를 바꾸기 전에. 한도는 **값 검사를 통과한 실제 변경**만 센다 (같은 값 · 거절된 요청은 안 센다)
         if (name != null && name != current.displayName) {
             val limit = core.props.displayName
@@ -88,9 +118,12 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
         if (name != null) rename(current, name)
         core.accounts.update(
             accountId,
-            AccountPatch(locale = ProfileRules.locale(change.locale), timeZone = ProfileRules.timeZone(change.timeZone)),
+            AccountPatch(locale = ProfileRules.locale(change.locale), timeZone = ProfileRules.timeZone(change.timeZone), avatarKey = avatarPatch, clearAvatar = clearAvatar),
             core.time.now(),
         ) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
+        // 새 사진은 쓰기 직후 공개 영역에 복사하고, 바뀌거나 지워져 더 쓰이지 않는 옛 키의 공개 복사는 지운다 (다른 곳이 쓰는 키는 retire 가 남긴다)
+        if (avatarPatch != null) avatars.publish(avatarPatch) { core.accounts.findById(accountId)?.avatarKey == avatarPatch }
+        if ((avatarPatch != null || clearAvatar) && current.avatarKey != null) avatars.retire(current.avatarKey)
         return me(accountId)
     }
 

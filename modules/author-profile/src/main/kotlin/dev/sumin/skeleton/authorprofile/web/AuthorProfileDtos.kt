@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.authorprofile.web
 
+import dev.sumin.skeleton.account.AccountAvatars
+import dev.sumin.skeleton.account.AvatarView
 import dev.sumin.skeleton.authorprofile.AuthorProfile
 import java.time.Instant
 
@@ -7,7 +9,21 @@ import java.time.Instant
  * 내 작성자 프로필 — **이 네 칸이 전부다**. 계정 id · 첫 프로필 표시(`primaryOf`) · 상태 · 넘겨받은 시각은 응답에 없다 (계정과의 연결을 읽을 수 있는 칸을 만들지 않는다).
  * [name] 은 이름 없는 첫 프로필(닉네임이 없던 계정의 옛 글을 넘겨받은 것)이면 null, [tag] 는 꼬리표 방식이 꺼져 있거나(NONE) 고정 꼬리표(UNIQUE)면 null.
  */
-data class AuthorProfileResponse(val id: String, val name: String?, val tag: String?, val createdAt: Instant)
+data class AuthorProfileResponse(
+    val id: String,
+    val name: String?,
+    val tag: String?,
+    val createdAt: Instant,
+    /**
+     * 이 프로필의 사진 키 - 사진 기능이 꺼져 있으면(`storage` 없음) 키가 없고, 켜져 있는데 아직 없으면 키가 있고 값이 `null`. 주인에게만 나가는 응답이다(이 목록은 내 것뿐).
+     * 계정 id 가 들어 있지 않은 키만 저장되므로 이 값이 프로필을 계정에 잇지 않는다.
+     */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    val avatarKey: java.util.Optional<String>? = null,
+    /** 사진이 있고 기능이 켜졌을 때만 - 공개 주소 · 변환본 · 변환 중 표시 (공개 영역이 꺼졌으면 세 칸이 비어 있다 - `GET /{id}/avatar` 의 서명 주소로 본다) */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    val avatar: AvatarView? = null,
+)
 
 data class AuthorProfileConfigResponse(
     /** 계정당 살아 있는 프로필 수 상한 (첫 프로필 포함) */
@@ -17,6 +33,14 @@ data class AuthorProfileConfigResponse(
 )
 
 /** `POST` · `PATCH` 본문. 비었거나 규칙에 어긋나면 서비스가 `400`(필드 `name`)으로 거절한다 — 모르는 칸은 무시된다 */
-data class AuthorProfileNameRequest(val name: String? = null)
+data class AuthorProfileNameRequest(
+    val name: String? = null,
+    /** `PATCH` 만: 필드 없음 = 사진 그대로, `null` = 지움, 문자열 = 설정 (`name` 없이 사진만 바꿀 수 있다). 기능이 꺼진 앱 · 내 업로드가 아닌 키 · 계정 id 가 든 키 · 다른 곳에서 쓰는 키는 400 */
+    val avatarKey: java.util.Optional<String>? = null,
+)
 
-fun AuthorProfile.toResponse() = AuthorProfileResponse(id, name, visibleTag, createdAt)
+fun AuthorProfile.toResponse(avatars: AccountAvatars = AccountAvatars.NONE, stillCurrent: (AuthorProfile) -> Boolean = { true }) = AuthorProfileResponse(
+    id, name, visibleTag, createdAt,
+    avatarKey = if (avatars.enabled) java.util.Optional.ofNullable(avatarKey) else null,
+    avatar = avatars.view(avatarKey) { stillCurrent(this) },
+)

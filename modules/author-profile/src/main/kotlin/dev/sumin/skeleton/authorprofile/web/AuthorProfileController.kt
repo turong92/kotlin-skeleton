@@ -1,6 +1,10 @@
 package dev.sumin.skeleton.authorprofile.web
 
 import dev.sumin.skeleton.account.DisplayNameRules
+import dev.sumin.skeleton.account.AccountAvatars
+import dev.sumin.skeleton.account.SignedAvatar
+import dev.sumin.skeleton.authorprofile.AuthorProfileErrorCode
+import dev.sumin.skeleton.authorprofile.AuthorProfileException
 import dev.sumin.skeleton.authorprofile.AuthorProfileProperties
 import dev.sumin.skeleton.authorprofile.AuthorProfileService
 import dev.sumin.skeleton.common.DataResponse
@@ -38,6 +42,7 @@ class AuthorProfileController(
     private val service: AuthorProfileService,
     private val callers: AuthorProfileCallers,
     private val properties: AuthorProfileProperties,
+    private val avatars: AccountAvatars = AccountAvatars.NONE,
 ) {
     @Operation(summary = "Profile limits", description = "maxPerAccount (living profiles per account, first profile included) and nameMaxLength.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AuthorProfileConfigResponse::class)
@@ -56,7 +61,7 @@ class AuthorProfileController(
     fun list(authentication: Authentication?): ListResponse<AuthorProfileResponse> {
         val accountId = callers.accountId(authentication)
         service.ensureFirstProfile(accountId)
-        return Response.ok(service.list(accountId).map { it.toResponse() })
+        return Response.ok(service.list(accountId).map { it.toResponse(avatars) { p -> service.avatarCurrent(p.id, p.avatarKey) } })
     }
 
     @Operation(
@@ -68,18 +73,24 @@ class AuthorProfileController(
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AuthorProfileResponse::class)
     @PostMapping
     fun create(authentication: Authentication?, @RequestBody request: AuthorProfileNameRequest): ResponseEntity<DataResponse<AuthorProfileResponse>> {
-        val profile = service.create(callers.accountId(authentication), request.name).toResponse()
+        val profile = service.create(callers.accountId(authentication), request.name).toResponse(avatars) { p -> service.avatarCurrent(p.id, p.avatarKey) }
         return Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(profile.id).toUri(), profile)
     }
 
     @Operation(
-        summary = "Rename a profile (past posts show the new name)",
-        description = "Same errors as create. A profile that is someone else's, missing or deleted is the same 404 AUTHOR_PROFILE.NOT_FOUND.",
+        summary = "Rename a profile (past posts show the new name) and/or set its picture",
+        description = "Same errors as create. name may be left out when avatarKey is sent. avatarKey: a string sets, null clears, a missing field keeps the picture; 400 COMMON.VALIDATION_FAILED for a key that is not the caller's upload, contains the account id, is used elsewhere (the account's or another profile's picture) or when the app has no storage. A refused request changes nothing. A profile that is someone else's, missing or deleted is the same 404 AUTHOR_PROFILE.NOT_FOUND.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AuthorProfileResponse::class)
     @PatchMapping("/{id}")
     fun rename(authentication: Authentication?, @PathVariable id: String, @RequestBody request: AuthorProfileNameRequest): DataResponse<AuthorProfileResponse> =
-        Response.ok(service.rename(callers.accountId(authentication), id, request.name).toResponse())
+        Response.ok(service.update(callers.accountId(authentication), id, request.name, request.avatarKey).toResponse(avatars) { p -> service.avatarCurrent(p.id, p.avatarKey) })
+
+    @Operation(summary = "Short-lived signed address of this profile's own picture", description = "404 AUTHOR_PROFILE.NOT_FOUND for a profile that is not the caller's, missing or deleted. The same 404 when there is no picture or signed reads are off.")
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = SignedAvatar::class)
+    @GetMapping("/{id}/avatar")
+    fun avatar(authentication: Authentication?, @PathVariable id: String): DataResponse<SignedAvatar> =
+        Response.ok(service.avatarSigned(callers.accountId(authentication), id) ?: throw AuthorProfileException(AuthorProfileErrorCode.NOT_FOUND))
 
     @Operation(
         summary = "Delete a profile (immediately, for good; its posts stay as a deleted user)",

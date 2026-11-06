@@ -130,6 +130,7 @@ class JdbcAccountRepository(
         }
         if (patch.clearContactEmail) sets += "contact_email = null, contact_email_verified_at = null"
         else patch.contactEmail?.let { sets += "contact_email = :contact, contact_email_verified_at = :now"; p.addValue("contact", it) }
+        if (patch.clearAvatar) sets += "avatar_key = null" else patch.avatarKey?.let { sets += "avatar_key = :avatar"; p.addValue("avatar", it) }
         // ERASED 행에는 아무것도 다시 쓰지 않는다 — 지운 뒤 도착한 옛 토큰의 프로필 갱신 · 지우기와 겹친 정지 해제가 개인정보나 상태를 되살리지 못하게
         // 지우기를 선점한 계정([claimErasure])의 상태는 바꾸지 않는다
         val n = jdbc.update("update accounts set ${sets.joinToString(", ")} where id = :id and status <> 'ERASED'" + if (patch.status != null) " and erase_claimed_at is null" else "", p)
@@ -156,6 +157,11 @@ class JdbcAccountRepository(
                 AccountName(rs.getString("id"), AccountStatus.valueOf(rs.getString("status")), rs.getString("display_name"), rs.getString("display_tag"))
             }
         }.associateBy { it.id }
+
+    override fun avatarKeysInUse(keys: Collection<String>): Set<String> =
+        if (keys.isEmpty()) emptySet() else keys.toSet().chunked(NAMES_PER_STATEMENT).flatMapTo(mutableSetOf()) { chunk ->
+            jdbc.query("select avatar_key from accounts where avatar_key in (:keys) and status <> 'ERASED'", mapOf("keys" to chunk)) { rs, _ -> rs.getString("avatar_key") }
+        }
 
     override fun displayTagsOf(key: String): Set<String> =
         jdbc.query("select display_tag from accounts where display_name_key = :key and display_tag is not null", mapOf("key" to key)) { rs, _ -> rs.getString("display_tag") }.toSet()
@@ -294,7 +300,7 @@ class JdbcAccountRepository(
             jdbc.update("delete from account_identities where account_id = :id", p)
             scrub(id, email)
             jdbc.update(
-                "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, display_name_key = null, display_tag = null, locale = null, time_zone = null, login_id = null, " +
+                "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, display_name_key = null, display_tag = null, locale = null, time_zone = null, login_id = null, avatar_key = null, " +
                     "suspended_reason = null, last_login_at = null, contact_email = null, contact_email_verified_at = null, purge_after = null, erase_claimed_at = null, erased_at = :now, updated_at = :now where id = :id",
                 p,
             )
@@ -461,6 +467,7 @@ class JdbcAccountRepository(
         createdAt = dialect.readInstant(this, "created_at")!!, updatedAt = dialect.readInstant(this, "updated_at")!!, lastLoginAt = dialect.readInstant(this, "last_login_at"),
         suspendedReason = getString("suspended_reason"), deletedAt = dialect.readInstant(this, "deleted_at"), purgeAfter = dialect.readInstant(this, "purge_after"),
         erasedAt = dialect.readInstant(this, "erased_at"), contactEmail = getString("contact_email"), loginId = getString("login_id"),
+        avatarKey = getString("avatar_key"),
     )
 
     private fun ResultSet.identity() = Identity(

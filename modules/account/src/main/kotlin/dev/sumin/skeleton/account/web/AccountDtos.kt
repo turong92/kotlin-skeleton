@@ -157,6 +157,8 @@ data class UpdateProfileRequest(
     @field:Size(max = DISPLAY_NAME_UNITS, message = DISPLAY_NAME_SIZE_MESSAGE) val displayName: String? = null,
     @field:Size(max = 35) val locale: String? = null,
     @field:Size(max = 64) val timeZone: String? = null,
+    /** 프로필 사진 업로드 키: 필드 없음 = 그대로, `null` = 지움, 문자열 = 설정 (기능이 꺼진 앱 · 남의 키는 400) */
+    val avatarKey: java.util.Optional<String>? = null,
 )
 
 data class DeleteAccountRequest(

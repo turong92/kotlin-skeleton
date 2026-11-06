@@ -22,9 +22,15 @@ class StoragePublicUploads(
     private val images: () -> UploadImages? = { null },
     private val purger: () -> PublicUploadPurger? = { null },
 ) : PublicUploads {
+    /** 공개 키의 하위 접두사 - board 는 `b`, 프로필 사진은 `a`([scoped]). 전체 대조(board)는 자기 하위 접두사만 보므로 다른 용도의 사본을 지우지 않는다 */
+    private var segment: String = StorageKeyScheme.BOARD_PUBLIC_SEGMENT
+
+    override fun scoped(segment: String): PublicUploads =
+        if (segment == this.segment) this else StoragePublicUploads(storage, keys, images, purger).also { it.segment = segment }
+
     override fun urlOf(privateKey: String): String {
         val pub = keys.properties().`public`
-        return pub.baseUrl.trimEnd('/') + "/" + keys.publicKeyOf(privateKey)
+        return pub.baseUrl.trimEnd('/') + "/" + keys.publicKeyOf(privateKey, segment)
     }
 
     override fun enabled(): Boolean = keys.publicEnabled()
@@ -34,13 +40,13 @@ class StoragePublicUploads(
         return enabled() && (purger !is CloudflarePublicUploadPurger || keys.properties().`public`.purge.cloudflare.enabled)
     }
 
-    override fun publicKeyOf(privateKey: String): String = keys.publicKeyOf(privateKey)
+    override fun publicKeyOf(privateKey: String): String = keys.publicKeyOf(privateKey, segment)
 
     /** 이미지 모듈이 있으면 키만으로 정해지는 모든 사본의 이름 - 있을 수 있는 것 전부(WebP 사본이 실제로 있는지는 묻지 않는다). 전체 대조가 이것으로 「줄이 가리키는 공개 객체」를 세므로 모자라면 사본을 고아로 지우고, [unpublish] 가 이것을 지우므로 모자라면 사본이 남는다 */
     override fun publicKeysOf(privateKey: String): List<String> =
         if (images() != null && isImageKey(privateKey)) {
-            listOf(keys.publicKeyOf(privateKey), thumbKeyOf(privateKey), altKeyOf(privateKey, thumb = false), altKeyOf(privateKey, thumb = true))
-        } else listOf(keys.publicKeyOf(privateKey))
+            listOf(keys.publicKeyOf(privateKey, segment), thumbKeyOf(privateKey), altKeyOf(privateKey, thumb = false), altKeyOf(privateKey, thumb = true))
+        } else listOf(keys.publicKeyOf(privateKey, segment))
 
     override fun imagesOf(privateKeys: Collection<String>): PublicImages {
         val module = images() ?: return PublicImages()
@@ -88,7 +94,7 @@ class StoragePublicUploads(
         storage.copy(
             CopyObjectRequest(
                 sourceKey = ObjectKey(privateKey),
-                destinationKey = ObjectKey(keys.publicKeyOf(privateKey)),
+                destinationKey = ObjectKey(keys.publicKeyOf(privateKey, segment)),
                 contentType = type,
                 cacheControl = pub.cacheControl,
             ),
@@ -109,7 +115,7 @@ class StoragePublicUploads(
             UploadImageState.REJECTED, UploadImageState.UNSUPPORTED, UploadImageState.FAILED, UploadImageState.NOT_IMAGE -> return false
         }
         val display = status.variants[UploadImages.DISPLAY] ?: return false
-        copyVariant(display, keys.publicKeyOf(privateKey), cacheControl)
+        copyVariant(display, keys.publicKeyOf(privateKey, segment), cacheControl)
         val thumb = status.variants[UploadImages.THUMB]
         thumb?.let { copyVariant(it, thumbKeyOf(privateKey), cacheControl) }
         // 같은 그림의 WebP - 정적 CDN 은 Accept 를 못 보므로 별도 사본으로 두고 화면이 고른다. 둘 다 있을 때만(썸네일만 있는 짝 없는 사본은 만들지 않는다)
@@ -128,7 +134,7 @@ class StoragePublicUploads(
 
     /** WebP 사본 - 공개 키의 확장자 자리를 `.alt.webp` 로 (`<hmac32>.alt.webp`, 썸네일은 `<hmac32>.thumb.alt.webp`). 원본이 `.webp` 여도 본 사본(`<hmac32>.webp`)과 겹치지 않는다 */
     private fun altKeyOf(privateKey: String, thumb: Boolean): String {
-        val publicKey = keys.publicKeyOf(privateKey)
+        val publicKey = keys.publicKeyOf(privateKey, segment)
         val dot = publicKey.lastIndexOf('.')
         val head = if (dot > publicKey.lastIndexOf('/')) publicKey.substring(0, dot) else publicKey
         return head + (if (thumb) ".thumb" else "") + ".alt.webp"
@@ -136,7 +142,7 @@ class StoragePublicUploads(
 
     /** 공개 키 꼬리의 확장자 앞에 `.thumb` - 비공개 키에서만 계산된다 */
     private fun thumbKeyOf(privateKey: String): String {
-        val publicKey = keys.publicKeyOf(privateKey)
+        val publicKey = keys.publicKeyOf(privateKey, segment)
         val dot = publicKey.lastIndexOf('.')
         return if (dot > publicKey.lastIndexOf('/')) publicKey.substring(0, dot) + ".thumb" + publicKey.substring(dot) else "$publicKey.thumb"
     }
@@ -155,7 +161,7 @@ class StoragePublicUploads(
 
     override fun listPublicKeys(): List<String> {
         // board 가 쓰는 하위 접두사 안만 본다 - 같은 공개 접두사를 다른 용도가 써도 전체 대조가 지우지 않는다
-        val prefix = keys.properties().`public`.prefix.trim('/') + "/" + StorageKeyScheme.BOARD_PUBLIC_SEGMENT + "/"
+        val prefix = keys.properties().`public`.prefix.trim('/') + "/" + segment + "/"
         val found = mutableListOf<String>()
         var token: String? = null
         do {

@@ -37,6 +37,22 @@ class NoOptionalModulesTest {
     }
 
     @Test
+    fun `without storage the avatar feature is absent - no avatarKey on me and a PATCH carrying one is refused`() {
+        assertTrue(runCatching { Class.forName("dev.sumin.skeleton.storage.StorageKeyOwnership") }.isFailure)
+        runner.withPropertyValues("skeleton.account.password.bcrypt-strength=4").run { ctx ->
+                assertTrue(ctx.startupFailure == null, ctx.startupFailure?.toString())
+                assertTrue(ctx.getBeansOfType(dev.sumin.skeleton.account.AvatarKeyOwnership::class.java).isEmpty())
+                val now = java.time.Instant.parse("2026-11-06T00:00:00Z")
+                check(ctx.getBean(AccountRepository::class.java).insert(dev.sumin.skeleton.account.Account("acc_1", "a@example.com", true, dev.sumin.skeleton.account.AccountStatus.ACTIVE, setOf("USER"), "Ann", null, null, now, now), emptyList()))
+                val profile = ctx.getBean(dev.sumin.skeleton.account.ProfileService::class.java)
+                assertTrue(profile.me("acc_1").avatarKey == null && profile.me("acc_1").avatar == null)
+                kotlin.test.assertFailsWith<dev.sumin.skeleton.common.ApplicationException> {
+                    profile.update("acc_1", dev.sumin.skeleton.account.ProfileChange(avatarKey = java.util.Optional.of("uploads/acc_1/a.png")))
+                }
+            }
+    }
+
+    @Test
     fun `the module starts, serves its controllers and falls back to log-only mail without them`() {
         runner.withPropertyValues("skeleton.account.password.bcrypt-strength=4").run { ctx ->
             assertTrue(ctx.startupFailure == null, ctx.startupFailure?.toString())

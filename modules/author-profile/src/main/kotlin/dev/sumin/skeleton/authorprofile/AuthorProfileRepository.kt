@@ -72,6 +72,14 @@ interface AuthorProfileRepository {
      */
     fun markDeleted(id: String, accountId: String, now: Instant): Boolean
 
+    /**
+     * 살아 있는 [accountId] 의 프로필 [id] 의 사진 키를 [key] 로 바꾼다(null 이면 비운다). 바꿨으면 true, 남의 · 없는 · 지워진 프로필이면 false. 이름 · 꼬리표는 건드리지 않는다.
+     */
+    fun setAvatar(id: String, accountId: String, key: String?, now: Instant): Boolean
+
+    /** [keys] 중 어느 살아 있는 프로필의 사진으로 쓰이는 것 - storage 의 버려진 업로드 정리가 「쓰이는 파일은 지우지 않는다」를 지키려고 묻는다 */
+    fun avatarKeysInUse(keys: Collection<String>): Set<String>
+
     /** 계정의 첫 프로필이 옛 글을 넘겨받았다고 표시한다 — `adopted_at` 이 비어 있을 때만 [now] 로 채운다(이미 있으면 그대로, false) */
     fun markAdopted(accountId: String, now: Instant): Boolean
 

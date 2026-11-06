@@ -124,10 +124,21 @@ class JdbcAuthorProfileRepository(
 
     override fun markDeleted(id: String, accountId: String, now: Instant): Boolean =
         jdbc.update(
-            "update author_profiles set status = 'DELETED', name = null, name_key = null, tag = null, deleted_at = :now, updated_at = :now " +
+            "update author_profiles set status = 'DELETED', name = null, name_key = null, tag = null, avatar_key = null, deleted_at = :now, updated_at = :now " +
                 "where id = :id and account_id = :account and status = 'ACTIVE'",
             MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("id", id).addValue("account", accountId),
         ) > 0
+
+    override fun setAvatar(id: String, accountId: String, key: String?, now: Instant): Boolean =
+        jdbc.update(
+            "update author_profiles set avatar_key = :key, updated_at = :now where id = :id and account_id = :account and status = 'ACTIVE'",
+            MapSqlParameterSource().addValue("key", key).addValue("now", dialect.instantParam(now)).addValue("id", id).addValue("account", accountId),
+        ) > 0 || ownLiving(id, accountId)   // 값이 같은 갱신이 0 행으로 세는 드라이버 설정(useAffectedRows)에서도 있는 줄이면 true
+
+    override fun avatarKeysInUse(keys: Collection<String>): Set<String> =
+        if (keys.isEmpty()) emptySet() else keys.toSet().chunked(CHUNK).flatMapTo(mutableSetOf()) { chunk ->
+            jdbc.queryForList("select avatar_key from author_profiles where avatar_key in (:keys) and status = 'ACTIVE'", mapOf("keys" to chunk), String::class.java).filterNotNull()
+        }
 
     override fun markAdopted(accountId: String, now: Instant): Boolean =
         jdbc.update(
@@ -162,7 +173,7 @@ class JdbcAuthorProfileRepository(
                 .addValue("name", profile.name).addValue("name_key", profile.nameKey).addValue("tag", profile.tag)
                 .addValue("status", profile.status.name).addValue("adopted_at", dialect.instantParam(profile.adoptedAt))
                 .addValue("created_at", dialect.instantParam(profile.createdAt)).addValue("updated_at", dialect.instantParam(profile.updatedAt))
-                .addValue("deleted_at", dialect.instantParam(profile.deletedAt)),
+                .addValue("deleted_at", dialect.instantParam(profile.deletedAt)).addValue("avatar_key", profile.avatarKey),
         )
         // 갱신 행 수로는 못 가른다 (MySQL) — 방금 넣은 id 가 이 계정 줄로 있으면 우리가 넣은 것이다 (id 는 무작위 128비트)
         return (jdbc.queryForObject("select count(*) from author_profiles where id = :id and account_id = :account", mapOf("id" to profile.id, "account" to profile.accountId), Int::class.java) ?: 0) > 0
@@ -188,10 +199,11 @@ class JdbcAuthorProfileRepository(
         createdAt = dialect.readInstant(this, "created_at")!!,
         updatedAt = dialect.readInstant(this, "updated_at")!!,
         deletedAt = dialect.readInstant(this, "deleted_at"),
+        avatarKey = getString("avatar_key"),
     )
 
     private companion object {
-        const val COLUMNS = "id, account_id, primary_of, name, name_key, tag, status, adopted_at, created_at, updated_at, deleted_at"
+        const val COLUMNS = "id, account_id, primary_of, name, name_key, tag, status, adopted_at, created_at, updated_at, deleted_at, avatar_key"
         const val SELECT = "select $COLUMNS from author_profiles"
 
         /** `in (…)` 한 번에 넣는 id 수 — 두 DB 의 바인드 변수 한도보다 훨씬 작다 */

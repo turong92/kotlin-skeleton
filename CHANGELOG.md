@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 프로필 사진(아바타) - account · author-profile (2026-11-06)
+
+- **account**: 계정에 사진 키 하나(`accounts.avatar_key`, nullable, 새 Flyway `V20261106030000__account_avatar_key.sql` 두 방언). `PATCH /api/v1/account/me` 에 `avatarKey`(문자열 = 설정, `null` = 지움, 필드 없음 = 그대로), 응답 `GET`/`PATCH /account/me` 에 `avatarKey`(본인) · `avatar { url?, image?, pending }`, 새 `GET /api/v1/account/me/avatar`(서명 주소 `{ url, expiresInSeconds }`). 남의 키 · 내 업로드가 아닌 키는 `400 COMMON.VALIDATION_FAILED`(다른 칸도 쓰지 않는다). **`storage` 가 없으면 이 기능 전체가 꺼진다**(응답에 칸이 없고 `avatarKey` 를 보내면 400) - `storage` 는 account 의 `compileOnly` 이고 `AccountStorageAutoConfiguration`(`@ConditionalOnClass(StorageKeyOwnership)`, review 의 `ReviewStorageAutoConfiguration` 과 같은 방식)이 소유 확인 포트 `AvatarKeyOwnership` 을 낸다. 공개 영역이 켜졌으면 읽을 때 공개 영역에 복사해(멱등) 공개 주소 · 변환본을 내고(board 의 `attachmentUrls` · `attachmentImages` 와 같은 규칙), 바뀌거나 지워지면 옛 키의 공개 복사를 지운다. 표지 `UploadKeyHolder("account")` + 짝 `UploadedKeyUsage`(`AccountRepository.avatarKeysInUse`)로 storage 의 버려진 업로드 정리가 사진을 지우지 않는다. 탈퇴는 키를 비우고 공개 복사를 지운다.
+- **사진 공개 사본의 자리**: platform `PublicUploads.scoped(segment)`(기본은 자기 자신)가 새로 생겼고 storage 는 하위 접두사만 바꾼 구현을 돌려준다 - 사진 사본은 `<공개 접두사>/a/` 에 두어 board 전체 대조(`b/` 만 본다)가 지우지 않는다. 사진은 이미지 확장자만 받고, 같은 키를 계정·프로필·board 등 다른 곳이 쓰면 거절하며(`UploadedKeyUsage` 합집합), 복사는 쓴 직후에 하고(읽기는 변환 중일 때만 다시) 복사하는 사이 바뀐 사진은 사본을 거둔다. 탈퇴·삭제 고리는 공개 사본 삭제 실패를 던져 다시 시도하게 한다. 공개 영역이 꺼지면 서명 읽기도 꺼져 사진 기능은 키만 저장한다.
+- **깨지는 변경(저장소 구현을 직접 둔 앱)**: `AccountRepository` 에 `avatarKeysInUse(keys)`, `AuthorProfileRepository` 에 `setAvatar` · `avatarKeysInUse` 가 더해졌다(기본 구현 없음 - 안 알리면 정리가 사진을 지울 수 있어서). `Account` · `AuthorProfile` 데이터 클래스 끝에 `avatarKey` 가 더해졌고 `AuthorProfileService` 생성자 끝에 `avatars` 가 더해졌다(기본값이 있어 위치 인자 호출은 그대로, 끝 람다 호출은 `adoptionListeners =` 이름 인자로).
+- **author-profile**: 프로필마다 **따로인** 사진(`author_profiles.avatar_key`, `V20261106030100__author_profile_avatar_key.sql` 두 방언). `PATCH /author-profiles/{id}` 가 `{ name?, avatarKey? }`(사진만 바꿀 때 `name` 생략), 프로필 객체에 `avatarKey` · `avatar`(사진 기능이 켜졌을 때만 - 원래 네 칸은 그대로), 새 `GET /author-profiles/{id}/avatar`. 키에 계정 id 가 들어 있으면 400(board 첨부와 같은 규칙), 계정의 사진 · 다른 프로필의 사진과 같은 키여도 400(같은 키는 같은 공개 주소라 두 프로필이 이어진다). 이름과 사진을 함께 보내면 둘 다 되거나 둘 다 안 된다. board 응답에는 아직 사진 칸이 없다.
+- 문서: `docs/modules/account.md` · `docs/modules/author-profile.md` · `docs/modules/storage.md` · `docs/account-http-contract.md`(H) · `docs/author-profile-http-contract.md`(§10, FINAL-2) · `capabilities.json`(account 의 선택 통합에 storage, 키워드).
+
 ### 앱 소셜 로그인 - 토큰 교환 (2026-11-04)
 
 - **앱 전용 백엔드는 client secret 없이 켠다**: 구글 · 카카오 · 네이버의 `client-secret` 이 비어도 기동한다(전에는 `clientSecret must not be blank` 로 실패). 비면 앱 SDK 토큰 로그인만 열리고 인가 코드 흐름은 닫힌다 - 코드 로그인 · 코드 연결은 `404`(제공자 없음과 같은 응답), `GET /auth/methods` 의 그 항목은 `clientId` · `redirectUri` · `authorize` 가 null. `OAuthProvider.codeFlow`(기본 true) 가 더해졌다. 시크릿이 있으면 동작은 그대로다.

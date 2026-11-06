@@ -70,7 +70,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 | id | 요약 | 켜는 조각 | 키워드 (한국어 / 영어) | 짝 프런트 |
 |---|---|---|---|---|
-| `account` | 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐 · `required-when=WRITE` 면 읽기는 통과하고 쓰기에서만 막는다), 로그인 아이디(이메일이 바뀌어도 안 바뀌는 비공개 간판 — 아이디 또는 이메일로 로그인 · 실시간 중복 확인 POST /account/login-id/availability · 아이디 정하기 게이트 POST /account/login-id · 아이디 찾기 메일 POST /account/login-id/forgot · 탈퇴해도 재사용 금지(해시), 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 로그인 아이디, 아이디 찾기, 관리자 도구, 계정 정지, 프로필 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, login id, username login, find my id, admin tools, suspend account, profile | `@skeleton/auth` |
+| `account` | 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐 · `required-when=WRITE` 면 읽기는 통과하고 쓰기에서만 막는다), 로그인 아이디(이메일이 바뀌어도 안 바뀌는 비공개 간판 — 아이디 또는 이메일로 로그인 · 실시간 중복 확인 POST /account/login-id/availability · 아이디 정하기 게이트 POST /account/login-id · 아이디 찾기 메일 POST /account/login-id/forgot · 탈퇴해도 재사용 금지(해시), 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 로그인 아이디, 아이디 찾기, 관리자 도구, 계정 정지, 프로필, 프로필 사진, 아바타 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, login id, username login, find my id, admin tools, suspend account, profile, profile picture, avatar | `@skeleton/auth` |
 | `account-jdbc` | account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일 · 닉네임 키를 utf8mb4_bin 으로 정확 일치, 닉네임 방식 셋을 유니크 (키, 꼬리표) 하나로). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법. | 스타터(apps/api)에 기본 포함 | 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration | `@skeleton/auth` |
 | `alert` | 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. | 스타터(apps/api)에 기본 포함 | 경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림, 에러 수집, 5xx 알림 / owner alert, error reporting, discord webhook, incident alert, 5xx alert, sentry alternative | — |
 | `alert-jdbc` | 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL). | `--modules alert-jdbc` | 경보 기록, 경보 중복 접기, 경보 DB / alert ledger, alert dedupe, alert database | — |
@@ -263,7 +263,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 소셜 제공자 클라이언트는 auth-social-google | -kakao | -naver
   - 리프레시 토큰 · 세션 목록은 auth-session, 링크 로그인은 auth-magic-link
   - 소셜 로그인을 계정으로 이어 주는 것은 켜진 auth-social 과 skeleton.account.social.* 설정(모듈 기본은 가입 · 병합 모두 꺼짐)
-- 키워드: 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 로그인 아이디, 아이디 찾기, 관리자 도구, 계정 정지, 프로필 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, login id, username login, find my id, admin tools, suspend account, profile
+- 키워드: 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 로그인 아이디, 아이디 찾기, 관리자 도구, 계정 정지, 프로필, 프로필 사진, 아바타 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, login id, username login, find my id, admin tools, suspend account, profile, profile picture, avatar
 
 ### `account-jdbc` — account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일 · 닉네임 키를 utf8mb4_bin 으로 정확 일치, 닉네임 방식 셋을 유니크 (키, 꼬리표) 하나로). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법.
 
@@ -580,7 +580,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 쓰지 않는 경우:
   - 저장소를 모른다 — author-profile-jdbc 를 같이 고른다(없으면 시작에 실패한다). 다른 DB(JPA · jOOQ)로 저장하려면 포트 AuthorProfileRepository 를 앱이 구현한다
   - account 위에 얹힌 모듈이다 — account 없이 자기 AuthAccountRepository 만 쓰는 앱에는 맞지 않는다
-  - 아바타 · 소개글 · 프로필 공개 페이지 · '이 프로필의 글 모아 보기'는 없다
+  - 소개글 · 프로필 공개 페이지 · '이 프로필의 글 모아 보기'는 없다(프로필마다 따로인 사진은 storage 가 있을 때 PATCH /author-profiles/{id} 의 avatarKey 로 — 계정의 사진과 다른 키여야 한다)
   - storage(첨부)를 함께 쓰면 키에 계정 id 가 들어 두 프로필의 글이 이어진다 — skeleton.storage.web.key-owner: OPAQUE 와 비밀 <P>_STORAGE_WEB_KEY_SECRET(32자 이상, 선언의 secrets:)이 필요하다(docs/modules/author-profile.md)
 - 키워드: 작성자 프로필, 닉네임 여러 개, 부캐, 익명 프로필, 프로필 선택, 글마다 닉네임 / author profile, multiple nicknames, pseudonym, alias, persona, unlinkable identities
 

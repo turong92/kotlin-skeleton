@@ -72,9 +72,18 @@ class FakeAuthorProfileRepository : AuthorProfileRepository {
 
     @Synchronized override fun markDeleted(id: String, accountId: String, now: Instant): Boolean {
         val row = rows[id]?.takeIf { it.accountId == accountId && it.status == AuthorProfileStatus.ACTIVE } ?: return false
-        rows[id] = row.copy(status = AuthorProfileStatus.DELETED, name = null, nameKey = null, tag = null, deletedAt = now, updatedAt = now)
+        rows[id] = row.copy(status = AuthorProfileStatus.DELETED, name = null, nameKey = null, tag = null, avatarKey = null, deletedAt = now, updatedAt = now)
         return true
     }
+
+    @Synchronized override fun setAvatar(id: String, accountId: String, key: String?, now: Instant): Boolean {
+        val row = rows[id]?.takeIf { it.accountId == accountId && it.status == AuthorProfileStatus.ACTIVE } ?: return false
+        rows[id] = row.copy(avatarKey = key, updatedAt = now)
+        return true
+    }
+
+    @Synchronized override fun avatarKeysInUse(keys: Collection<String>): Set<String> =
+        rows.values.filter { it.status == AuthorProfileStatus.ACTIVE }.mapNotNullTo(mutableSetOf()) { it.avatarKey?.takeIf { k -> k in keys } }
 
     @Synchronized override fun markAdopted(accountId: String, now: Instant): Boolean {
         val row = rows.values.firstOrNull { it.primaryOf == accountId && it.adoptedAt == null } ?: return false
@@ -124,7 +133,7 @@ class Harness(
     )
     private val store = InMemoryFixedWindowRateLimitStore()
     val limits = AccountRateLimits({ store }, time)
-    val service = AuthorProfileService(repository, { accounts }, names, limits, properties, time) { adoptionListeners.toList() }
+    val service = AuthorProfileService(repository, { accounts }, names, limits, properties, time, adoptionListeners = { adoptionListeners.toList() })
 
     /** 계정을 만든다. [name] 이 있으면 닉네임 · 비교용 키 · [tag] 까지 저장한 상태로 */
     fun account(id: String, name: String? = null, tag: String? = null, status: AccountStatus = AccountStatus.ACTIVE): Account {

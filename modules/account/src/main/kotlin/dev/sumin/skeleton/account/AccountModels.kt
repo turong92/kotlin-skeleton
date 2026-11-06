@@ -56,6 +56,8 @@ data class Account(
     val contactEmail: String? = null,
     /** 로그인 아이디 — 소문자로 정규화한 값([LoginIds.normalize]). 아직 안 정했거나 기능을 껐거나 지워졌으면 null. 정하면 바꾸지 못한다 (`skeleton.account.login-id`) */
     val loginId: String? = null,
+    /** 프로필 사진(아바타)의 업로드 키 - 없으면 null. 지워지면(ERASED) 같이 비워진다 */
+    val avatarKey: String? = null,
 ) {
     /** 화면에 보일 꼬리표 (없거나 UNIQUE 의 고정값이면 null) */
     val visibleTag: String? get() = DisplayNames.visibleTag(displayTag)
@@ -95,6 +97,9 @@ data class AccountPatch(
     /** 연락 이메일을 이 값으로 (확인을 마친 주소) */
     val contactEmail: String? = null,
     val clearContactEmail: Boolean = false,
+    /** 아바타 키를 이 값으로 / 지운다 */
+    val avatarKey: String? = null,
+    val clearAvatar: Boolean = false,
 )
 
 data class AccountPage(val items: List<Account>, val total: Long)
@@ -185,6 +190,9 @@ interface AccountRepository {
      * **ERASED 행에는 쓰지 않는다**([SetNameResult.NOT_FOUND]). 꼬리표가 null 이면 비운다(NONE)
      */
     fun setDisplayName(id: String, name: String, key: String, tag: String?, now: Instant): SetNameResult
+
+    /** [keys] 중 어느 살아 있는 계정의 아바타로 쓰이는 것 - storage 의 버려진 업로드 정리가 「쓰이는 파일은 지우지 않는다」를 지키려고 묻는다 */
+    fun avatarKeysInUse(keys: Collection<String>): Set<String>
 
     /** 계정 id → 이름 줄 — **쿼리 한 번**(`where id in (…)`, 아주 많으면 덩어리로). 없는 id 는 결과에 없다 */
     fun namesOf(ids: Collection<String>): Map<String, AccountName>

@@ -38,6 +38,24 @@ class StoragePublicUploadsTest {
     }
 
     @Test
+    fun `a scoped copy lives outside the board sub-prefix, so the board full pass never lists it`() {
+        val storage = Recording()
+        val scheme = StorageKeyScheme(web())
+        val board = StoragePublicUploads(storage, scheme)
+        val avatars = board.scoped("a")
+        val key = scheme.issue("acc_a", "a.png")
+
+        assertTrue(avatars.publicKeyOf(key).startsWith("public/a/"), avatars.publicKeyOf(key))
+        assertNotEquals(board.publicKeyOf(key), avatars.publicKeyOf(key))
+        assertTrue(board.listPublicKeys().none { it.startsWith("public/a/") }, "the board listing is limited to public/b/")
+        avatars.publish(key)
+        assertEquals(avatars.publicKeyOf(key), storage.copies.single().destinationKey.value)
+        avatars.unpublish(key)
+        assertEquals(listOf(avatars.publicKeyOf(key)), storage.deleted, "only its own copy is removed")
+        assertTrue(board === board.scoped("b"))
+    }
+
+    @Test
     fun `nobody owns the public area, and its prefix cannot overlap the upload prefix`() {
         val scheme = StorageKeyScheme(web())
         assertFalse(scheme.owns("acc_a", scheme.publicKeyOf(scheme.issue("acc_a", "a.png"))))

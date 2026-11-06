@@ -18,7 +18,8 @@
 | `POST /api/v1/account/login-id` | 아이디 정하기(한 번, 바꾸기 없음) — 이메일 없이도 된다. 아이디 게이트(`403 ACCOUNT.LOGIN_ID_REQUIRED`)가 풀리는 길 (`login-id.enabled=true` 일 때만) | 로그인 |
 | `POST /api/v1/account/email/change` · `POST /api/v1/account/email/change/confirm` | 새 주소로 코드(202) · 같은 세션에서 코드 입력하면 바뀜(옛 주소에 알림) | 로그인 |
 | `POST /api/v1/account/contact-email` · `…/confirm` · `DELETE …` | 연락받을 이메일(계정 이메일과 별개, 로그인 · 복구 수단 아님) 등록 코드 · 확인 · 삭제 (`skeleton.account.contact-email.enabled=true` 일 때만 — docs/accounts.md "연락 이메일") | 로그인 |
-| `GET` · `PATCH /api/v1/account/me` | 프로필(닉네임 · 꼬리표 `displayTag` · 로케일 · 시간대 · 켠 앱에서만 `loginId` · `emailRequired` · `emailRequiredToWrite`) · 로그인 수단 목록. 닉네임이 겹치면 `409 ACCOUNT.DISPLAY_NAME_TAKEN` (`uniqueness=UNIQUE`) | 로그인 |
+| `GET` · `PATCH /api/v1/account/me` | 프로필(닉네임 · 꼬리표 `displayTag` · 로케일 · 시간대 · 켠 앱에서만 `loginId` · `emailRequired` · `emailRequiredToWrite` · **`storage` 가 있을 때만 프로필 사진 `avatarKey` · `avatar`**) · 로그인 수단 목록. 닉네임이 겹치면 `409 ACCOUNT.DISPLAY_NAME_TAKEN` (`uniqueness=UNIQUE`) | 로그인 |
+| `GET /api/v1/account/me/avatar` | 내 프로필 사진을 볼 짧은 서명 주소 `{ url, expiresInSeconds }` - 사진이 없거나 서명 읽기가 꺼졌으면(공개 영역이 꺼지면 함께 꺼진다) 404 | 로그인 |
 | `GET /api/v1/account/identities` · `DELETE …/{id}` · `POST …/social/{provider}` | 수단 목록 · 해제(다시 인증, 마지막은 409) · 소셜 연결(`auth-social` 이 있을 때) | 로그인 |
 | `POST /api/v1/account/reauth/confirmation` | 비밀번호 없는 계정의 다시 인증 코드(6자리, 이 세션에서만) | 로그인 |
 | `POST /api/v1/account/delete/confirmation` · `POST /api/v1/account/delete` | 삭제 확인 코드(비밀번호 없는 계정) · 삭제 예약(202, 다시 인증). 정지된 계정은 403 | 로그인 |
@@ -27,6 +28,8 @@
 
 **닉네임**(`skeleton.account.display-name.*`): `uniqueness`(`NONE` 기본 · `UNIQUE` · `TAGGED` 꼬리표) · `required-on-sign-up` · `fallback`(`GENERATED` → `user-1a2b3c`) · `reserved`. 규칙(`DisplayNameRules` — 같은 타입의 빈으로 **교체 가능**, 기본 `DefaultDisplayNameRules`: 1..60자 · 보이지 않는 문자(이모지의 ZWJ · 변형 선택자만 허용) · `#` `@` · `deleted:` 거부 · NFKC+소문자+보이지 않는 글자 무시 비교 키)은 가입 · 프로필 수정 · 제공자 이름이 모두 거친다. `change-limit`(기본 10/일)이 닉네임 변경 횟수를 묶는다.
 스키마(`accounts.display_name_key` · `display_tag` · 유니크 `(키, 꼬리표)`)는 방식과 무관하다 — 방식을 바꾸는 법 · 탈퇴 때의 풀림: [docs/accounts.md](../accounts.md) "닉네임".
+**프로필 사진(아바타)**: 계정 행에 업로드 키 하나(`accounts.avatar_key`, nullable). `storage` 가 클래스패스에 있고 `StorageKeyOwnership` 빈이 있으면 켜진다(`AccountStorageAutoConfiguration`, 소유 확인 포트 `AvatarKeyOwnership` - 앱이 같은 타입의 빈을 두면 그것이 이긴다) - **없으면 응답에 `avatarKey` · `avatar` 키가 없고 `PATCH` 의 `avatarKey` 는 400**. `PATCH /account/me` 의 `avatarKey`: 문자열 = 설정, `null` = 지움, 필드 없음 = 그대로(같은 키는 쓰기 없이 통과). 남의 키 · 내 업로드가 아닌 키 · 빈 문자열 · 512자 초과는 한 가지 `400 COMMON.VALIDATION_FAILED`(다른 칸도 쓰지 않는다). 응답 `me.avatarKey`(본인에게만, 없으면 `null`)와 `me.avatar`(`{ url?, image?, pending }` - board 의 `attachmentUrls` · `attachmentImages` 와 같은 규칙: 공개 영역이 켜졌으면 읽을 때 공개 영역에 복사해(멱등) 공개 주소 · 변환 끝난 `thumb`/`display`, 변환 중이면 `pending: true`, 공개 영역이 꺼졌으면 세 칸이 비고 서명 읽기도 함께 꺼져 키만 저장한다. 공개 사본은 쓴 직후 만들고(변환 중이면 읽을 때 다시) board 의 `b/` 밖인 `<공개 접두사>/a/` 에 둬서 board 전체 대조가 지우지 않는다. 이미지 확장자만 받는다). 바뀌거나 지워지면 옛 키의 공개 복사를 지우고(다른 곳이 같은 키를 쓰면 남긴다 - 같은 키는 애초에 거절된다), 원본은 storage 의 버려진 업로드 정리가 거둔다 - 그래서 이 모듈이 표지 `UploadKeyHolder("account")` 와 `avatarKeysInUse` 로 대답하는 `UploadedKeyUsage` 를 짝으로 낸다(정리를 켜도 기동이 막히지 않는다). 탈퇴하면 키를 비우고 공개 복사를 지운다. 작성자 프로필(`author-profile`)의 사진은 이것과 **다른 키**를 프로필마다 따로 둔다 - 같은 키는 같은 공개 주소라 둘이 이어진다.
+
 **작성자 이름**: 기본 구현 `AccountAuthorDirectory`(platform 의 `AuthorDirectory`, `@ConditionalOnMissingBean`)가 닉네임 · 꼬리표를 쿼리 한 번으로 board 같은 모듈에 낸다 — board 는 이 모듈을 모르고 이 모듈도 board 를 모른다. 앱이 같은 타입의 빈을 두면 물러난다(돌판마다 다른 닉네임 등).
 
 **2단계 인증 자리**(구현은 `auth-mfa`, 이 모듈은 자리만): 이벤트 `MFA_ENABLED` · `MFA_DISABLED` · `MFA_RESET_BY_ADMIN` · `MFA_RECOVERY_CODES_REGENERATED` · `MFA_RECOVERY_CODE_USED` · `MFA_VERIFIED` · `MFA_FAILED` · `MFA_THROTTLED`(detail 에 코드 · 비밀 없음), 메일 `MailKind.MFA_NOTICE`(`vars["change"]` = `enabled` · `disabled` · `reset` · `recovery_code_used` · `throttled`, 그 밖의 값은 일반 문구 — 계정 이메일로만, **`AccountMailTemplates` 를 바꿔 끼운 앱은 이 종류도 처리**해야 한다), 챌린지 용도 `ChallengePurposes.MFA_LOGIN`, 다른 모듈이 계정 id 만으로 다시 인증을 확인하는 `Reauth.check(accountId, input, sessionId)`. 이메일도 비밀번호도 없는 소셜 전용 계정의 다시 인증은 `ReauthInput.social`(방금 새로 받은 **이미 연결된** 제공자의 인가 코드 — 다른 계정 · 연결 안 된 제공자 · 한 번 쓴 코드는 `REAUTH_FAILED`)이다. 탈퇴 취소(`/account/delete/cancel`)도 로그인이라 2단계 고리가 차면 `403 AUTH.MFA_REQUIRED`(첫 단계는 `LOGIN_SUCCESS` 로 남는다).
@@ -41,12 +44,12 @@
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:account"))` |
 | 함께 오는 모듈 | `platform`, `auth` |
-| 컴파일 전용 | `notification-mail`, `captcha-turnstile`, `alert`, `idempotency`, `auth-social`, `job-queue-jdbc` |
+| 컴파일 전용 | `notification-mail`, `captcha-turnstile`, `alert`, `idempotency`, `auth-social`, `job-queue-jdbc`, `storage` |
 | 설정 접두사 | `skeleton.account` — [docs/config/modules/account.yml](../config/modules/account.yml) |
 | 기본 동작 | 켜짐. 가입 · 확인 · 재설정 · 변경 · 삭제 HTTP 와 로그인 시도 제한이 켜지고, 관리자 HTTP · 소셜 가입 · 병합 · 시드 계정 · 첫 관리자 · 링크 로그는 꺼져 있다. 저장은 메모리(로컬) — 운영은 `account-jdbc`. 메일 모듈이 없으면 보내지 않고 알린다. |
 | 부팅에 필요한 것 | 로컬 · 시험: 없음. stage · prod(`skeleton.env` 또는 auth 의 보호 프로필): 저장소 · 토큰 저장소 · 챌린지 저장소(`account-jdbc`), 메일 발송기(`notification-mail`), `skeleton.account.mail.link-base-url`, 로그인 아이디를 켰다면 `skeleton.account.blocks.secret` — 없으면 `DeployGuard`(`account`)가 기동을 막고 시드 계정 · 링크 로그 켬도 막는다. |
-| 교체 지점 | `AccountRepository`, `AccountLabels`, `OneTimeTokenStore`, `ChallengeStore`, `CodeHasher`, `SocialReauthVerifier`, `PasswordPolicy`, `BreachedPasswordCheck`, `PasswordEncoder`, `AccountMailTemplates`, `AccountMailLayout`, `AccountMailTransport`, `AccountMailer`, `AccountTaskRunner`, `AccountCaptcha`, `AccountEventPublisher`, `AccountEventListener`, `SignInMethod`, `AccountTransaction`, `AccountBlockStore`, `AccountBlocks`, `AccountMaintenanceLease`, `MagicLinkIssuer`, `DisplayNameRules`, `AuthorDirectory`, `AccountCallers`, `AccountPublicController`, `AccountController`, `AdminAccountController`, `AccountDeployGuard` |
-| 마이그레이션 | 없음 (스키마는 `account-jdbc` — 로그인 아이디의 `accounts.login_id` 열과 `account_used_login_ids` 표도 설정과 무관하게 생긴다, 값은 꺼진 동안 비어 있다) |
+| 교체 지점 | `AccountRepository`, `AvatarKeyOwnership`, `AccountLabels`, `OneTimeTokenStore`, `ChallengeStore`, `CodeHasher`, `SocialReauthVerifier`, `PasswordPolicy`, `BreachedPasswordCheck`, `PasswordEncoder`, `AccountMailTemplates`, `AccountMailLayout`, `AccountMailTransport`, `AccountMailer`, `AccountTaskRunner`, `AccountCaptcha`, `AccountEventPublisher`, `AccountEventListener`, `SignInMethod`, `AccountTransaction`, `AccountBlockStore`, `AccountBlocks`, `AccountMaintenanceLease`, `MagicLinkIssuer`, `DisplayNameRules`, `AuthorDirectory`, `AccountCallers`, `AccountPublicController`, `AccountController`, `AdminAccountController`, `AccountDeployGuard` |
+| 마이그레이션 | 없음 (스키마는 `account-jdbc` — 로그인 아이디의 `accounts.login_id` 열과 `account_used_login_ids` 표도 설정과 무관하게 생긴다, 값은 꺼진 동안 비어 있다, 프로필 사진의 `accounts.avatar_key` 열도 같다) |
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/account/src/test`, `modules/account/src/noOptionalTest` (선택 통합이 클래스패스에 없을 때) |
 

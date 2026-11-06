@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.authorprofile
 
+import dev.sumin.skeleton.account.AccountAvatars
 import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.DisplayNames
@@ -30,6 +31,8 @@ class AuthorProfileService(
     private val time: TimeProvider,
     /** 첫 프로필을 보장할 때 그 계정의 옛 행을 바로 넘겨받게 한다 (실행기를 끈 앱 · 실행 사이의 틈) */
     private val adoptionListeners: () -> List<AuthorAdoptionListener> = { emptyList() },
+    /** 프로필 사진 규칙 - 소유 확인이 없으면(`storage` 없음) 꺼진 채다 */
+    private val avatars: () -> AccountAvatars = { AccountAvatars.NONE },
 ) {
     private val naming = ProfileNaming(names, accounts, repository)
 
@@ -99,11 +102,31 @@ class AuthorProfileService(
         }
     }
 
+    /**
+     * 이름 · 사진을 함께 고친다 - [avatar]: null = 사진 그대로(이름만 바꾸는 [rename] 과 같다), 빈 Optional = 지움, 값 = 설정. [rawName] 이 null 이면 이름은 그대로(사진만 바꿀 때).
+     * 순서: 내 살아 있는 프로필(아니면 404) → 사진 키 검사(400, 쓰지 않는다) → 이름(400 · 409 · 429) → 사진 쓰기. 사진 키 검사와 이름 검사에서 거절되면 아무것도 바뀌지 않는다(이름 쓰기와 사진 쓰기는 한 트랜잭션이 아니다 - 이름을 쓴 뒤 사진 쓰기만 실패하는 건 그 사이 프로필이 지워진 경쟁뿐이고 그때도 프로필이 없어진 것이다).
+     * 사진 키는 계정 id 가 들어 있지 않아야 하고(키로 두 프로필이 이어지면 안 된다 - board 의 첨부와 같은 규칙), 계정의 사진 · 다른 프로필의 사진과 같은 키일 수 없다(같은 키는 같은 공개 주소다).
+     */
+    fun update(accountId: String, id: String, rawName: String?, avatar: java.util.Optional<String>?): AuthorProfile {
+        if (avatar == null) return rename(accountId, id, rawName)
+        val current = ownLiving(accountId, id)
+        if (!avatars().enabled) throw invalidAvatar()
+        val key = avatar.takeIf { it.isPresent }?.let { avatars().accept(accountId, it.get(), opaque = true, current = current.avatarKey) }
+        if (key != null && key != current.avatarKey && (repository.avatarKeysInUse(listOf(key)).isNotEmpty() || accounts().avatarKeysInUse(listOf(key)).isNotEmpty())) throw invalidAvatar()
+        if (rawName != null) rename(accountId, id, rawName)
+        if (key == current.avatarKey) return repository.find(id) ?: throw notFound()
+        if (!repository.setAvatar(id, accountId, key, time.now())) throw notFound()
+        if (key != null) avatars().publish(key) { repository.find(id)?.avatarKey == key }
+        avatars().retire(current.avatarKey)
+        return repository.find(id) ?: throw notFound()
+    }
+
     /** 즉시 지운다 — 되돌릴 수 없다. 글 · 댓글은 그대로 남고 디렉터리가 `deleted` 카드를 돌려줄 뿐이다. 다른 프로필로 옮기지 않는다 */
     fun delete(accountId: String, id: String) {
         // 정확히 같은 id 의 살아 있는 내 줄만 — 대소문자만 다른 변형 id 가 (MySQL 의 느슨한 비교로) 남의 줄에 닿지 못하게 rename 처럼 먼저 읽어 거른다
-        ownLiving(accountId, id)
+        val current = ownLiving(accountId, id)
         if (!repository.markDeleted(id, accountId, time.now())) throw notFound()
+        avatars().retire(current.avatarKey)
     }
 
     /**
@@ -181,6 +204,14 @@ class AuthorProfileService(
     private fun createRateLimited() = RateLimitedException(properties.createWindow.seconds.coerceAtLeast(1), AuthorProfileErrorCode.RATE_LIMITED)
 
     private fun notFound() = AuthorProfileException(AuthorProfileErrorCode.NOT_FOUND)
+
+    private fun invalidAvatar() = dev.sumin.skeleton.common.ApplicationException("Invalid avatarKey", dev.sumin.skeleton.common.PlatformErrorCode.VALIDATION_FAILED)
+
+    /** 내 프로필의 사진을 볼 짧은 서명 주소 - 사진이 없거나 서명 읽기가 꺼졌으면 null (남의 · 없는 프로필은 404) */
+    /** [key] 가 아직 이 프로필의 사진인가 - 읽다가 복사한 사본이 그 사이 바뀐 사진의 것이면 거두려고 묻는다 */
+    fun avatarCurrent(id: String, key: String?): Boolean = repository.find(id)?.avatarKey == key
+
+    fun avatarSigned(accountId: String, id: String): dev.sumin.skeleton.account.SignedAvatar? = ownLiving(accountId, id).avatarKey?.let { avatars().signed(it) }
 
     private fun spend(scope: String, accountId: String, capacity: Int, window: java.time.Duration) {
         val allowance = limits.acquire("author-profile:$scope", accountId, capacity, window)

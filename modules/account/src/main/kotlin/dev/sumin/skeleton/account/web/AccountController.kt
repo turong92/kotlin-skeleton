@@ -7,6 +7,7 @@ import dev.sumin.skeleton.account.PasswordService
 import dev.sumin.skeleton.account.ProfileChange
 import dev.sumin.skeleton.account.ProfileService
 import dev.sumin.skeleton.account.Reauth
+import dev.sumin.skeleton.account.SignedAvatar
 import dev.sumin.skeleton.account.signin.IdentityService
 import dev.sumin.skeleton.account.signin.IdentityView
 import dev.sumin.skeleton.common.DataResponse
@@ -51,12 +52,20 @@ class AccountController(
     fun me(authentication: Authentication?): DataResponse<MeView> = Response.ok(profile.me(callers.require(authentication).accountId))
 
     @Operation(
-        summary = "Update display name, locale or time zone",
-        description = "400 with errors[].field=displayName for a name the rules refuse (Size, Pattern, Reserved); 409 ACCOUNT.DISPLAY_NAME_TAKEN when the display-name mode forbids the clash. A refused update changes nothing.",
+        summary = "Update display name, locale, time zone or profile picture",
+        description = "400 with errors[].field=displayName for a name the rules refuse (Size, Pattern, Reserved); 409 ACCOUNT.DISPLAY_NAME_TAKEN when the display-name mode forbids the clash. avatarKey: a string sets, null clears, a missing field keeps the picture; a key that is not the caller's upload, or any avatarKey in an app without storage, is 400 COMMON.VALIDATION_FAILED. A refused update changes nothing.",
     )
     @PatchMapping("/me")
     fun update(authentication: Authentication?, @Valid @RequestBody request: UpdateProfileRequest): DataResponse<MeView> =
-        Response.ok(profile.update(callers.require(authentication).accountId, ProfileChange(request.displayName, request.locale, request.timeZone)))
+        Response.ok(profile.update(callers.require(authentication).accountId, ProfileChange(request.displayName, request.locale, request.timeZone, request.avatarKey)))
+
+    @Operation(
+        summary = "Short-lived signed address of my own profile picture",
+        description = "404 when there is no picture or signed reads are off (same answer; the display variant when the image module is on, 404 while it is still converting).",
+    )
+    @GetMapping("/me/avatar")
+    fun avatar(authentication: Authentication?): DataResponse<SignedAvatar> =
+        Response.ok(profile.avatarSigned(callers.require(authentication).accountId) ?: throw dev.sumin.skeleton.account.AccountException(dev.sumin.skeleton.account.AccountErrorCode.NOT_FOUND))
 
     @Operation(
         summary = "Change the password (or set a first one)",

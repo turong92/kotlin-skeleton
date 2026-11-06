@@ -34,6 +34,19 @@ class NoOptionalIdempotencyTest {
     }
 
     @Test
+    fun `without storage a profile has no avatar keys and a PATCH carrying avatarKey is 400`() {
+        val id = "acc_no_storage"
+        check(accounts.insert(Account(id, "$id@example.com", true, AccountStatus.ACTIVE, setOf("USER"), "Mina", null, null, T0, T0, displayNameKey = "mina", displayTag = null), emptyList()))
+        val auth = authentication(TestingAuthenticationToken(id, "n/a", "ROLE_USER"))
+        val body = mvc.perform(post("/api/v1/author-profiles").with(auth).contentType(MediaType.APPLICATION_JSON).content("""{"name":"Owl"}"""))
+            .andExpect(status().isCreated).andExpect(jsonPath("$.value.avatarKey").doesNotExist()).andExpect(jsonPath("$.value.avatar").doesNotExist())
+            .andReturn().response.contentAsString
+        val profileId = Regex("\"id\":\"(prf_[^\"]+)\"").find(body)!!.groupValues[1]
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/v1/author-profiles/$profileId").with(auth).contentType(MediaType.APPLICATION_JSON).content("""{"avatarKey":"uploads/o/x/file.png"}"""))
+            .andExpect(status().isBadRequest)
+    }
+
+    @Test
     fun `creating works without an Idempotency-Key`() {
         val id = "acc_no_optional"
         check(accounts.insert(Account(id, "$id@example.com", true, AccountStatus.ACTIVE, setOf("USER"), "Mina", null, null, T0, T0, displayNameKey = "mina", displayTag = null), emptyList()))
