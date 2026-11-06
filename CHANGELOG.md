@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### point - 작업 기록 `PointOperations` (2026-11-07)
+
+- 새 선택 층 `PointOperations`(`spend` · `earn` · `cancelSpend` · `resolve` · `abandon`, 구현 `JdbcPointOperations`): 작업(= `(sourceType, sourceRef)` 키 하나)마다 접수 영수증 · 시도 · 결과 전이를 남긴다. 새 표 `point_operations` · `point_operation_attempts`(마이그레이션 `V20261107000000__point_operations`, 두 방언; 행위자 · 종류 · 금액 · 접수 · 시도 · 완료 시각 · 안전한 결과 코드 · 원 작업 연결뿐이고 토큰 · 결제 키 · 본문 · 사유 칸은 없다). 상태 `ACCEPTED/PROCESSING/SUCCEEDED/FAILED/UNKNOWN/ABANDONED`, 원 작업의 보상 상태 `NONE/REQUESTED/DONE/FAILED`.
+- **경계**: `PointOperations` 는 활성 트랜잭션 안에서 부르면 `IllegalStateException` 으로 거절한다(합류하면 자기 교착 · 커넥션 둘 · 낡은 스냅샷 - 한 트랜잭션으로 묶어야 하면 `PointWallet`). 영수증 · 시도 · 실패 표시는 각자 짧은 트랜잭션이라 원장 트랜잭션이 실패해도 남고, 영수증을 못 쓰면 원장에 닿기 전에 던진다. 성공 표시(취소면 원 작업의 보상 완료까지)는 원장 쓰기와 같은 트랜잭션 — 롤백된 쓰기를 성공으로 적지 않는다. `setCompensation` 은 `DONE` 이 되면 바뀌지 않는다. `actor` 는 서비스 이름이다. 확정 실패는 던지지 않고 `FAILED` + `POINT.*` 코드로 돌려주며(호출자 트랜잭션을 롤백 전용으로 만들지 않는다), 같은 키에 다른 요청은 `409 POINT.SOURCE_CONFLICT`(기록 불변). 응답을 못 받은 예외는 `UNKNOWN`(확정 실패가 아니다) — 같은 키 재시도는 원 작업의 시도로 이어 붙고 두 번째 차감은 생기지 않는다.
+- **불명 건 조회**: `job-queue-jdbc` 가 있으면 영수증과 같은 트랜잭션에서 `point.op.resolve` 작업이 예약돼 원장으로 가른다. 설정 `skeleton.point.operations.reconcile.first-delay`(기본 60s) · `max-attempts`(기본 12) — payment 의 `reconcile` 과 같은 이름. 시도를 다 쓰면 `ABANDONED`, **포기한 뒤 원장 줄이 나타나도 `resolve` 를 부르면 `SUCCEEDED` 로 바로잡는다**(같은 키 재시도 - 영수증을 이번에 만들지 않은 호출 - 가 시도를 열면 조회 작업을 다시 건다). `point-jdbc` 는 `job-queue-jdbc` 를 `compileOnly` 로 쓴다(없으면 조회는 앱이 `resolve` 를 부른다).
+- **보상은 확인된 건에만**: `cancelSpend` 는 원 차감이 이 층의 작업이면 연결하고(`originOperationId`), 원 작업이 원장에 있다고 확인되기 전에는(불명 · 포기) `resolve` 로 먼저 본 뒤 그래도 없으면 `POINT.ORIGIN_UNRESOLVED` 의 `UNKNOWN` 으로 기다린다 - 원장에 쓰지 않는다. 원 작업이 확정 실패면 `FAILED`(`POINT.SPEND_NOT_FOUND`).
+- 보관 기간 기본값은 없다(앱이 정한다). 계정 삭제 고리 `pointErasure` 가 작업 기록도 함께 지운다. 이 층을 거치도록 강제하지 않는다 - 지갑 직접 호출은 그대로다. 문서: `docs/modules/point.md`(「작업 기록」 · 「앱의 보상 흐름」을 `PointOperations` 기준으로 고쳤다), `docs/modules/point-jdbc.md`, `docs/config/modules/point.yml`.
+
 ### point - 사용 취소(환원) (2026-11-06)
 
 - `PointWallet.cancelSpend(accountId, spendSourceType, spendSourceRef, amount?, sourceType, sourceRef)`(`PointStore.cancelSpend` 포함): 차감을 되돌린다 - `amount` 가 null 이면 아직 안 되돌린 전부, 부분 취소를 여러 번 해도 된다. 포인트는 그 차감이 뺀 **원래 묶음에 원래 유효기간으로** 돌아간다(유효기간이 늦은 묶음부터). 그 사이 유효기간이 지난 묶음 몫은 같은 시각의 `EXPIRE` 줄이 바로 닫는다(내역에 환원 줄 + 소멸 줄). 자기 `(sourceType, sourceRef)` 로 멱등이고 같은 키에 다른 요청은 `409 POINT.SOURCE_CONFLICT`. 새 오류: `404 POINT.SPEND_NOT_FOUND`(원 차감 없음 · 적립 키 · 옛 차감) · `409 POINT.CANCEL_EXCEEDED`(취소 합계가 원 차감 초과). 직렬로 들어온 요청만 트랜잭션 밖에서 던지고(호출자 트랜잭션이 롤백 전용이 되지 않는다), 동시 요청 · 옛 스냅샷 경로 · 다른 계정의 차감(`IllegalStateException`)은 예외로 롤백되니 다시 부르면 된다. `amount` 를 null 로 다시 부르는 것은 금액을 대조하지 않으니 취소 키마다 한 가지 뜻으로만 쓴다. 잠금은 `spend` 와 같다(잔액 줄 `for update`).

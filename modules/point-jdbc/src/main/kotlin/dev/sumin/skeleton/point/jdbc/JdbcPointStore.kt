@@ -210,6 +210,9 @@ class JdbcPointStore(
             // 할당 · 환원 연결은 원장 줄이 지워지기 전에 (줄 id 로 찾는다)
             jdbc.update("delete from point_spend_allocations where spend_entry_id in (select id from point_entries where account_id = :a)", mapOf("a" to accountId))
             jdbc.update("delete from point_restore_links where restore_entry_id in (select id from point_entries where account_id = :a)", mapOf("a" to accountId))
+            // 작업 기록(영수증 · 시도)도 같이 - 계정을 지우면 그 계정의 기록도 남기지 않는다
+            jdbc.update("delete from point_operation_attempts where operation_id in (select operation_id from point_operations where account_id = :a)", mapOf("a" to accountId))
+            jdbc.update("delete from point_operations where account_id = :a", mapOf("a" to accountId))
             jdbc.update("delete from point_entries where account_id = :a", mapOf("a" to accountId))
             jdbc.update("delete from point_balances where account_id = :a", mapOf("a" to accountId))
         }

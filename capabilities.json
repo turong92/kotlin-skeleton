@@ -3413,7 +3413,7 @@
       "needs": {
         "requires": [],
         "oneOf": [],
-        "optional": []
+        "optional": ["job-queue-jdbc"]
       },
       "config": null,
       "basePaths": [],

@@ -1,1 +1,2 @@
 dev.sumin.skeleton.point.jdbc.PointJdbcAutoConfiguration
+dev.sumin.skeleton.point.jdbc.PointOperationJobsAutoConfiguration

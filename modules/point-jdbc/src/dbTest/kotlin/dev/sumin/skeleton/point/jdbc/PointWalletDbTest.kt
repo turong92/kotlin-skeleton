@@ -28,16 +28,19 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager
 import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.springframework.transaction.support.TransactionTemplate
 
-private object PointDb {
+internal object PointDb {
     val dataSource = DbTestDatabase.dataSource().let { source ->
         source as DriverManagerDataSource
         HikariDataSource().apply { jdbcUrl = source.url; username = source.username; password = source.password; maximumPoolSize = 12 }
     }.also { Flyway.configure().dataSource(it).locations("classpath:db/migration/${DbTestDatabase.vendor}").load().migrate() }
     val jdbc = NamedParameterJdbcTemplate(dataSource)
-    val tx = TransactionTemplate(DataSourceTransactionManager(dataSource))
+    val txManager = DataSourceTransactionManager(dataSource)
+    val tx = TransactionTemplate(txManager)
     var now: Instant = Instant.parse("2026-10-28T03:00:00.123456Z")
     val time = TimeProvider { now }
     val store = JdbcPointStore(jdbc, tx, DbTestDatabase.dialect)
+    val log = JdbcPointOperationLog(jdbc, txManager, DbTestDatabase.dialect)
+    val operations = JdbcPointOperations(store, log, txManager, time)
     val wallet: PointWallet = StorePointWallet(store, time)
 }
 
@@ -53,6 +56,8 @@ class PointWalletDbTest {
         PointDb.now = Instant.parse("2026-10-28T03:00:00.123456Z")
         jdbc.update("delete from point_spend_allocations", emptyMap<String, Any>())
         jdbc.update("delete from point_restore_links", emptyMap<String, Any>())
+        jdbc.update("delete from point_operation_attempts", emptyMap<String, Any>())
+        jdbc.update("delete from point_operations", emptyMap<String, Any>())
         jdbc.update("delete from point_entries", emptyMap<String, Any>())
         jdbc.update("delete from point_balances", emptyMap<String, Any>())
     }
