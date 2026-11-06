@@ -38,7 +38,7 @@ sealed interface OAuthCredential {
 /**
  * 요청의 토큰 필드를 이 제공자의 규칙에 맞춰 검사해 [OAuthCredential.Native] 를 만든다. 제공자를 부르기 **전**(그리고 다시 인증 증거를 쓰기 전)에 불러야 한다 — 틀리면 아무것도 쓰이지 않는다.
  * - 토큰 입구가 없는 제공자: [OAuthProviderNotFoundException] (404)
- * - [NativeTokenKind] 에 맞는 필드가 없거나 다른 필드도 왔다: [FieldValidationException] (`400 COMMON.VALIDATION_FAILED`)
+ * - [NativeTokenKind] 에 맞는 필드가 없거나 8192자를 넘거나 다른 필드도 왔다: [FieldValidationException] (`400 COMMON.VALIDATION_FAILED`)
  * - nonce 모양이 틀리거나 REQUIRED 인데 없다: [OAuthNonceException] (400). 제공자가 nonce 를 쓰지 않으면(UNSUPPORTED) 버린다
  */
 fun OAuthProvider.nativeCredential(
@@ -55,6 +55,7 @@ fun OAuthProvider.nativeCredential(
         NativeTokenKind.ACCESS_TOKEN -> Quad("accessToken", access, "idToken", id)
     }
     if (token == null) throw FieldValidationException(expectedField, "Required", "$expectedField is required for this provider")
+    if (token.length > MAX_NATIVE_TOKEN_LENGTH) throw FieldValidationException(expectedField, "TooLong", "$expectedField must be at most $MAX_NATIVE_TOKEN_LENGTH characters")
     if (other != null) throw FieldValidationException(otherField, "NotAllowed", "$otherField is not accepted by this provider: send only $expectedField")
     val n = checkedNonce(nonce)
     return OAuthCredential.Native(
@@ -65,6 +66,9 @@ fun OAuthProvider.nativeCredential(
         ),
     )
 }
+
+/** 8KB — 서버 · 프록시의 요청 헤더 상한이 보통 8KB 라 JWT 도 그 안쪽이다(구글 ID 토큰은 1~2KB). 제공자를 부르기 전에 끊는 방어선 */
+private const val MAX_NATIVE_TOKEN_LENGTH = 8192
 
 private data class Quad(val expectedField: String, val token: String?, val otherField: String, val other: String?)
 

@@ -83,6 +83,18 @@ class OAuthNativeTokenLoginTest {
     }
 
     @Test
+    fun `a token longer than 8192 characters is refused before the provider is called`() {
+        val idp = IdTokenProvider()
+        val s = service(idp, AccessTokenProvider())
+
+        assertEquals("idToken", assertFailsWith<FieldValidationException> { s.loginWithNativeToken("idp", "x".repeat(8193), null, null, null) }.field)
+        assertEquals("accessToken", assertFailsWith<FieldValidationException> { s.loginWithNativeToken("acc", null, "x".repeat(8193), null, null) }.field)
+        assertTrue(idp.seen.isEmpty())
+        s.loginWithNativeToken("idp", "x".repeat(8192), null, null, null)   // 상한 자체는 받는다
+        assertEquals(1, idp.seen.size)
+    }
+
+    @Test
     fun `the field that matches the provider's token kind is required and the other one is refused`() {
         val s = service(IdTokenProvider(), AccessTokenProvider())
 
