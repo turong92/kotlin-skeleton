@@ -8,6 +8,7 @@ import dev.sumin.skeleton.point.PointEntry
 import dev.sumin.skeleton.point.PointEntryKind
 import dev.sumin.skeleton.point.PointExpiring
 import dev.sumin.skeleton.point.PointInsufficientException
+import dev.sumin.skeleton.point.PointSourceConflictException
 import dev.sumin.skeleton.point.PointStore
 import java.sql.ResultSet
 import java.time.Instant
@@ -42,13 +43,18 @@ class JdbcPointStore(
         now: Instant,
     ): PointEntry? {
         require(kind == PointEntryKind.EARN || kind == PointEntryKind.ADJUST) { "an addition is EARN or ADJUST" }
-        return tx.execute {
+        val outcome = tx.execute {
             lockBalance(accountId, now)
-            if (existing(accountId, sourceType, sourceRef) != null) return@execute null
+            existing(accountId, sourceType, sourceRef)?.let { return@execute if (sameRequest(it, kind, amount)) Repeat else Conflict }
             val entry = PointEntry(ids.newId("pt_"), accountId, amount, kind, amount, expiresAt, sourceType, sourceRef, reason, now)
             insert(entry)
             changeBalance(accountId, amount, now)
-            entry
+            Earned(entry)
+        }
+        return when (outcome) {
+            is Earned -> outcome.entry
+            Repeat, null -> null
+            Conflict -> throw PointSourceConflictException()   // 트랜잭션 밖에서 - 호출자 트랜잭션을 롤백 전용으로 만들지 않는다
         }
     }
 
@@ -64,7 +70,7 @@ class JdbcPointStore(
         require(kind == PointEntryKind.SPEND || kind == PointEntryKind.ADJUST) { "a deduction is SPEND or ADJUST" }
         val outcome = tx.execute {
             val balance = lockBalance(accountId, now)
-            existing(accountId, sourceType, sourceRef)?.let { return@execute Spent(it) }
+            existing(accountId, sourceType, sourceRef)?.let { return@execute if (sameRequest(it, kind, -amount)) Spent(it) else Conflict }
             val available = balance - dueRemaining(accountId, now)
             if (amount > available) return@execute Short(available)
             expireAccount(accountId, now)
@@ -77,6 +83,7 @@ class JdbcPointStore(
         return when (outcome) {
             is Spent -> outcome.entry
             is Short -> throw PointInsufficientException(amount, outcome.available)
+            Conflict -> throw PointSourceConflictException()
         }
     }
 
@@ -220,9 +227,18 @@ class JdbcPointStore(
         createdAt = dialect.readInstant(rs, "created_at")!!,
     )
 
+    /** 같은 키의 다시 부름이 진짜 같은 요청인가 - 종류와 부호 있는 금액이 같아야 한다(유효기간 차이는 보지 않는다) */
+    private fun sameRequest(found: PointEntry, kind: PointEntryKind, delta: Long) = found.kind == kind && found.delta == delta
+
+    private sealed interface EarnOutcome
     private sealed interface SpendOutcome
+    private class Earned(val entry: PointEntry) : EarnOutcome
+    private data object Repeat : EarnOutcome
     private class Spent(val entry: PointEntry) : SpendOutcome
     private class Short(val available: Long) : SpendOutcome
+
+    /** 같은 키에 다른 요청 - 적립 · 차감 모두 트랜잭션 밖에서 [PointSourceConflictException] 으로 던진다 */
+    private data object Conflict : EarnOutcome, SpendOutcome
 
     private companion object {
         const val EXPIRE_SOURCE = "EXPIRE"

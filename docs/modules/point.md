@@ -1,7 +1,7 @@
 # point
 
 포인트 **원장**: 적립(유효기간 선택) · 소멸이 가까운 묶음부터 차감 · 하루 한 번 소멸 · 운영자 조정. 보상 지급기(`RewardIssuer`, 종류 `point`)를 내서 이벤트(`campaign`)·`reward` 가 「포인트 n점」을 줄 수 있고, 단독으로도 돈다(`reward` 를 몰라도 된다).
-쓰는 쪽(내부 서비스)은 서버 API `PointWallet` 하나만 안다 — 적립 `earn(accountId, amount, expiresAt, sourceType, sourceRef)` · 차감 `spend(accountId, amount, sourceType, sourceRef)` · 조정 `adjust` · 잔액 `balance`. **포인트 사용에는 HTTP 가 없다.** 둘 다 `(sourceType, sourceRef)` 로 멱등이다: 같은 지급 건(`GRANT`, 지급 건 id)·같은 주문을 두 번 처리해도 한 번만 반영되고(`earn` 은 null, `spend` 는 처음 줄을 돌려준다), 잔액보다 큰 차감은 409 `POINT.INSUFFICIENT` 로 거절되며 아무것도 바뀌지 않는다(호출자 트랜잭션도 롤백 전용이 되지 않는다). 유효기간 기본값은 없다 — 보상 설정(`expiresInDays`) · 운영자 조정에서 고른다.
+쓰는 쪽(내부 서비스)은 서버 API `PointWallet` 하나만 안다 — 적립 `earn(accountId, amount, expiresAt, sourceType, sourceRef)` · 차감 `spend(accountId, amount, sourceType, sourceRef)` · 조정 `adjust` · 잔액 `balance`. **포인트 사용에는 HTTP 가 없다.** 둘 다 `(sourceType, sourceRef)` 로 멱등이다: 같은 지급 건(`GRANT`, 지급 건 id)·같은 주문을 두 번 처리해도 한 번만 반영되고(`earn` 은 null, `spend` 는 처음 줄을 돌려준다), **같은 키에 다른 요청**(적립 ↔ 차감, 다른 금액; 유효기간 차이는 보지 않는다)은 409 `POINT.SOURCE_CONFLICT` 로 거절되고(첫 줄을 돌려주면 호출자가 이번 요청이 반영됐다고 믿는다) 아무것도 바뀌지 않으며(직렬로 들어온 요청만 트랜잭션 밖에서 409 · 첫 줄로 답한다 - 동시 요청이나 옛 스냅샷 경로는 예외로 롤백되니 다시 부르면 409 · 첫 줄을 받는다), 잔액보다 큰 차감은 409 `POINT.INSUFFICIENT` 로 거절되며 아무것도 바뀌지 않는다(호출자 트랜잭션도 롤백 전용이 되지 않는다). 유효기간 기본값은 없다 — 보상 설정(`expiresInDays`) · 운영자 조정에서 고른다.
 저장소(`PointStore`)는 이 모듈에 없다 — `point-jdbc` 를 붙이면 지갑 · 지급기 · 소멸 작업 · 계정 삭제 고리가 선다(저장소가 없으면 권한 선언 말고는 빈이 늘지 않는다). 소멸 작업은 `scheduler` 모듈이 있을 때 매일 03:30 에 돈다(없으면 앱이 `PointWallet.expireDue` 를 부른다) — 늦어도 안전하다: 유효기간이 지난 묶음은 잔액에서 이미 빠지고 쓸 수도 없다.
 
 | 메서드 · 경로 | 하는 일 | 필요한 권한 |

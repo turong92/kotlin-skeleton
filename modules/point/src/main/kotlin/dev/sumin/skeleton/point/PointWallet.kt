@@ -7,15 +7,15 @@ import java.time.Instant
 
 /**
  * 포인트 지갑. 쓰는 쪽(내부 서비스)은 이 인터페이스만 안다 — 포인트 **사용**은 HTTP 없이 [spend] 뿐이다.
- * 적립 · 차감은 `(sourceType, sourceRef)` 로 멱등이다: 같은 지급 건 · 같은 주문을 두 번 처리해도 한 번만 반영된다.
+ * 적립 · 차감은 `(sourceType, sourceRef)` 로 멱등이다: 같은 지급 건 · 같은 주문을 두 번 처리해도 한 번만 반영된다. 같은 키에 **다른 요청**(적립 ↔ 차감, 다른 금액)이 오면 거절한다 - [PointSourceConflictException].
  */
 interface PointWallet {
     fun balance(accountId: String): PointBalance
 
-    /** 같은 `(sourceType, sourceRef)` 가 이미 있으면 null */
+    /** 같은 `(sourceType, sourceRef)` 가 이미 있으면 null(같은 금액일 때만 - 금액이 다르거나 차감이 쓴 키면 [PointSourceConflictException]) */
     fun earn(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String): PointEntry?
 
-    /** 잔액보다 크면 [PointInsufficientException]. 같은 `(sourceType, sourceRef)` 를 다시 부르면 처음 줄을 돌려주고 또 빼지 않는다 */
+    /** 잔액보다 크면 [PointInsufficientException]. 같은 `(sourceType, sourceRef)` 를 같은 금액으로 다시 부르면 처음 줄을 돌려주고 또 빼지 않는다 - 금액이 다르거나 적립이 쓴 키면 [PointSourceConflictException] */
     fun spend(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointEntry
 
     /** 운영자 조정 — 양수는 적립(유효기간 선택), 음수는 차감(잔액보다 크면 [PointInsufficientException]). [reason] 은 필수 */

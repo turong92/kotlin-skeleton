@@ -9,7 +9,7 @@ import java.time.Instant
  */
 interface PointStore {
     /**
-     * 적립 묶음 하나를 더한다([kind] 는 `EARN` 또는 `ADJUST`). 같은 `(sourceType, sourceRef)` 가 이미 있으면 아무것도 하지 않고 null.
+     * 적립 묶음 하나를 더한다([kind] 는 `EARN` 또는 `ADJUST`). 같은 `(sourceType, sourceRef)` 가 이미 있으면 아무것도 하지 않고 null - 단 **같은 요청일 때만**(종류와 금액이 같다, 유효기간 차이는 보지 않는다). 종류나 금액이 다르면 [PointSourceConflictException] 이고 아무것도 바뀌지 않는다.
      * 이미 있는 줄이 다른 계정의 것이면 [IllegalStateException].
      */
     fun earn(
@@ -25,7 +25,7 @@ interface PointStore {
 
     /**
      * [amount] 를 소멸이 가까운 묶음부터(유효기간 없는 것은 맨 뒤) 뺀다([kind] 는 `SPEND` 또는 `ADJUST`).
-     * 잔액이 모자라면 [PointInsufficientException] 이고 아무것도 바뀌지 않는다. 같은 `(sourceType, sourceRef)` 가 이미 있으면 그 줄을 돌려준다(두 번 빼지 않는다).
+     * 잔액이 모자라면 [PointInsufficientException] 이고 아무것도 바뀌지 않는다. 같은 `(sourceType, sourceRef)` 가 이미 있으면 그 줄을 돌려준다(두 번 빼지 않는다) - 단 같은 요청일 때만(종류와 금액이 같다); 다르면 [PointSourceConflictException]. 두 예외 모두 트랜잭션 밖에서 던진다.
      */
     fun spend(
         accountId: String,

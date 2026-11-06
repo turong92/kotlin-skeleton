@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### point - 같은 키에 다른 요청은 거절한다 (2026-11-06)
+
+- `PointWallet.earn` · `spend`(`PointStore` 포함)가 같은 `(sourceType, sourceRef)` 로 **종류나 금액이 다른** 요청을 받으면 `409 POINT.SOURCE_CONFLICT`(`PointSourceConflictException`)로 거절한다 - 아무것도 바뀌지 않고 트랜잭션 밖에서 던져 호출자 트랜잭션을 롤백 전용으로 만들지 않는다(`POINT.INSUFFICIENT` 와 같다). 전에는 `spend(4)` 뒤 같은 키의 `spend(40)` 이 첫 줄(4)을 조용히 돌려줘 호출자가 40 이 빠졌다고 믿을 수 있었고, 적립과 차감이 같은 키를 쓰면 반대 종류의 줄을 돌려줬다. 진짜 같은 재호출(같은 종류 · 같은 금액)은 그대로 첫 줄(`earn` 은 null)이고, 유효기간 차이는 보지 않는다. 다른 계정의 키는 전과 같이 `IllegalStateException`(롤백된다). 직렬로 들어온 요청만 트랜잭션 밖에서 409 · 첫 줄로 답한다 - 동시 요청이나 옛 스냅샷 경로(MySQL 반복 읽기의 바깥 트랜잭션)는 예외로 롤백되니 다시 부르면 409 · 첫 줄을 받는다. 오류 메시지에는 키를 싣지 않는다.
+
 ### 프로필 사진(아바타) - account · author-profile (2026-11-06)
 
 - **account**: 계정에 사진 키 하나(`accounts.avatar_key`, nullable, 새 Flyway `V20261106030000__account_avatar_key.sql` 두 방언). `PATCH /api/v1/account/me` 에 `avatarKey`(문자열 = 설정, `null` = 지움, 필드 없음 = 그대로), 응답 `GET`/`PATCH /account/me` 에 `avatarKey`(본인) · `avatar { url?, image?, pending }`, 새 `GET /api/v1/account/me/avatar`(서명 주소 `{ url, expiresInSeconds }`). 남의 키 · 내 업로드가 아닌 키는 `400 COMMON.VALIDATION_FAILED`(다른 칸도 쓰지 않는다). **`storage` 가 없으면 이 기능 전체가 꺼진다**(응답에 칸이 없고 `avatarKey` 를 보내면 400) - platform 의 새 포트 `UploadKeyOwnership`(storage 의 `StorageKeyOwnership` 이 확장한다 - `GuestUploadKeys` 와 같은 방식)가 소유 확인을 맡아 account 는 `storage` 를 컴파일에 끌어오지 않는다(새 프로젝트의 모듈 닫힘에 storage 가 따라오지 않는다). 그 빈이 있을 때만 `AccountStorageAutoConfiguration` 이 켜진다. 공개 영역이 켜졌으면 읽을 때 공개 영역에 복사해(멱등) 공개 주소 · 변환본을 내고(board 의 `attachmentUrls` · `attachmentImages` 와 같은 규칙), 바뀌거나 지워지면 옛 키의 공개 복사를 지운다. 표지 `UploadKeyHolder("account")` + 짝 `UploadedKeyUsage`(`AccountRepository.avatarKeysInUse`)로 storage 의 버려진 업로드 정리가 사진을 지우지 않는다. 탈퇴는 키를 비우고 공개 복사를 지운다.

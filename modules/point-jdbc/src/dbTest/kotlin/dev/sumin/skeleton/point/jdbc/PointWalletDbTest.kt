@@ -5,6 +5,7 @@ import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.point.PointCursor
 import dev.sumin.skeleton.point.PointEntryKind
 import dev.sumin.skeleton.point.PointInsufficientException
+import dev.sumin.skeleton.point.PointSourceConflictException
 import dev.sumin.skeleton.point.PointWallet
 import dev.sumin.skeleton.point.StorePointWallet
 import java.time.Duration
@@ -110,6 +111,45 @@ class PointWalletDbTest {
         val again = wallet.spend("a1", 30, "ORDER", "o1")
         assertEquals(spent.id, again.id)
         assertEquals(70, wallet.balance("a1").balance)
+    }
+
+    @Test
+    fun `the same key with a different amount is refused, for a deduction and for a grant, and nothing changes`() {
+        wallet.earn("a1", 100, null, "GRANT", "g1")
+        val spent = wallet.spend("a1", 4, "ORDER", "o1")
+
+        // 40 이 빠졌다고 믿는 호출자에게 4 짜리 첫 줄을 돌려주면 안 된다
+        assertFailsWith<PointSourceConflictException> { wallet.spend("a1", 40, "ORDER", "o1") }
+        assertFailsWith<PointSourceConflictException> { wallet.earn("a1", 500, null, "GRANT", "g1") }
+        assertEquals(96, wallet.balance("a1").balance)
+        assertEquals(2, entryCount("a1"))
+        assertEquals(spent.id, wallet.spend("a1", 4, "ORDER", "o1").id, "the true repeat still returns the first line")
+        assertNull(wallet.earn("a1", 100, Instant.parse("2027-01-01T00:00:00Z"), "GRANT", "g1"), "an expiry difference alone is not a conflict")
+    }
+
+    @Test
+    fun `an earn and a spend sharing a key are refused both ways`() {
+        wallet.earn("a1", 100, null, "GRANT", "k1")
+
+        assertFailsWith<PointSourceConflictException> { wallet.spend("a1", 100, "GRANT", "k1") }
+        wallet.spend("a1", 30, "ORDER", "k2")
+        assertFailsWith<PointSourceConflictException> { wallet.earn("a1", 30, null, "ORDER", "k2") }
+        assertEquals(70, wallet.balance("a1").balance)
+        assertEquals(2, entryCount("a1"))
+    }
+
+    @Test
+    fun `a conflicting key inside a caller transaction does not poison it`() {
+        wallet.earn("a1", 100, null, "GRANT", "g1")
+        wallet.spend("a1", 4, "ORDER", "o1")
+
+        PointDb.tx.executeWithoutResult {
+            assertFailsWith<PointSourceConflictException> { wallet.spend("a1", 40, "ORDER", "o1") }
+            assertFailsWith<PointSourceConflictException> { wallet.earn("a1", 7, null, "GRANT", "g1") }
+            wallet.spend("a1", 6, "ORDER", "o2")   // 잡고 계속한다
+        }
+
+        assertEquals(90, wallet.balance("a1").balance)
     }
 
     @Test

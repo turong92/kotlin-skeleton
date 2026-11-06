@@ -11,8 +11,18 @@ enum class PointErrorCode(
     override val title: String,
 ) : ErrorCode {
     INSUFFICIENT("POINT.INSUFFICIENT", HttpStatus.CONFLICT, "Not enough points"),
+    SOURCE_CONFLICT("POINT.SOURCE_CONFLICT", HttpStatus.CONFLICT, "Source key already used for a different request"),
 }
 
 /** 잔액보다 큰 차감(운영자 조정 포함) — 아무것도 바뀌지 않는다 */
 class PointInsufficientException(needed: Long, available: Long) :
     ApplicationException("Not enough points: needed $needed, available $available", PointErrorCode.INSUFFICIENT)
+
+/**
+ * 같은 `(sourceType, sourceRef)` 로 **다른 요청**(종류나 금액이 다름)이 왔다 - 멱등 키 규칙(같은 키에 다른 요청이면 거절). 첫 줄을 돌려주면 호출자가 이번 요청이 반영됐다고 믿는다.
+ * 아무것도 바뀌지 않고, 트랜잭션 밖에서 던진다 - 호출자 트랜잭션을 롤백 전용으로 만들지 않는다. 유효기간 차이는 보지 않는다.
+ * 직렬로 들어온 요청만 트랜잭션 밖에서 409 · 첫 줄로 답한다. 동시 요청이나 옛 스냅샷 경로는 예외로 롤백되니 다시 부르면 409 · 첫 줄을 받는다.
+ * 메시지에는 키를 싣지 않는다(`INSUFFICIENT` 처럼 일반 문구).
+ */
+class PointSourceConflictException :
+    ApplicationException("Point source key was already used for a different request", PointErrorCode.SOURCE_CONFLICT)
