@@ -11,6 +11,8 @@ enum class PointErrorCode(
     override val title: String,
 ) : ErrorCode {
     INSUFFICIENT("POINT.INSUFFICIENT", HttpStatus.CONFLICT, "Not enough points"),
+    SPEND_NOT_FOUND("POINT.SPEND_NOT_FOUND", HttpStatus.NOT_FOUND, "No such deduction to cancel"),
+    CANCEL_EXCEEDED("POINT.CANCEL_EXCEEDED", HttpStatus.CONFLICT, "Cancellation exceeds the deduction"),
     SOURCE_CONFLICT("POINT.SOURCE_CONFLICT", HttpStatus.CONFLICT, "Source key already used for a different request"),
 }
 
@@ -26,3 +28,10 @@ class PointInsufficientException(needed: Long, available: Long) :
  */
 class PointSourceConflictException :
     ApplicationException("Point source key was already used for a different request", PointErrorCode.SOURCE_CONFLICT)
+
+/** 되돌릴 차감이 없다 - 그 키의 줄이 없거나, 차감(`SPEND`)이 아니거나, 환원 기록이 생기기 전의 옛 차감이다. 아무것도 바뀌지 않는다 */
+class PointSpendNotFoundException : ApplicationException("No such deduction to cancel", PointErrorCode.SPEND_NOT_FOUND)
+
+/** 취소 합계가 원 차감을 넘는다(또는 이미 전부 되돌렸다) - 아무것도 바뀌지 않는다 */
+class PointCancelExceededException(requested: Long, cancellable: Long) :
+    ApplicationException("Cancellation exceeds the deduction: requested $requested, cancellable $cancellable", PointErrorCode.CANCEL_EXCEEDED)

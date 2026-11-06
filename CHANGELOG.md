@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### point - 사용 취소(환원) (2026-11-06)
+
+- `PointWallet.cancelSpend(accountId, spendSourceType, spendSourceRef, amount?, sourceType, sourceRef)`(`PointStore.cancelSpend` 포함): 차감을 되돌린다 - `amount` 가 null 이면 아직 안 되돌린 전부, 부분 취소를 여러 번 해도 된다. 포인트는 그 차감이 뺀 **원래 묶음에 원래 유효기간으로** 돌아간다(유효기간이 늦은 묶음부터). 그 사이 유효기간이 지난 묶음 몫은 같은 시각의 `EXPIRE` 줄이 바로 닫는다(내역에 환원 줄 + 소멸 줄). 자기 `(sourceType, sourceRef)` 로 멱등이고 같은 키에 다른 요청은 `409 POINT.SOURCE_CONFLICT`. 새 오류: `404 POINT.SPEND_NOT_FOUND`(원 차감 없음 · 적립 키 · 옛 차감) · `409 POINT.CANCEL_EXCEEDED`(취소 합계가 원 차감 초과). 직렬로 들어온 요청만 트랜잭션 밖에서 던지고(호출자 트랜잭션이 롤백 전용이 되지 않는다), 동시 요청 · 옛 스냅샷 경로 · 다른 계정의 차감(`IllegalStateException`)은 예외로 롤백되니 다시 부르면 된다. `amount` 를 null 로 다시 부르는 것은 금액을 대조하지 않으니 취소 키마다 한 가지 뜻으로만 쓴다. 잠금은 `spend` 와 같다(잔액 줄 `for update`).
+- 새 이력 종류 `PointEntryKind.RESTORE`(응답의 `kind` 에 그대로 나간다 - 사용자 이력 `GET /points/history` · 운영 화면). 새 표 `point_spend_allocations` · `point_restore_links`(마이그레이션 `V20261106040000__point_spend_allocations`, 두 방언) - 계정 삭제 고리가 같이 지운다. **이 변경 전의 차감은 할당 기록이 없어 되돌릴 수 없다**(`POINT.SPEND_NOT_FOUND`). `PointStore` · `PointWallet` 구현을 직접 둔 앱(시험 대역 포함)은 `cancelSpend` 를 더해야 한다.
+- 문서: `docs/modules/point.md` 「앱의 보상 흐름」(차감 → 확정 / 최종 실패면 취소 키로 `cancelSpend` → 모르면 같은 키로 다시; 잡이 DEAD 가 되면 `JobDeadListener` 에서 직접 부르지 않고 환원 잡을 새로 넣는다), `docs/modules/point-jdbc.md`.
+
 ### point - 같은 키에 다른 요청은 거절한다 (2026-11-06)
 
 - `PointWallet.earn` · `spend`(`PointStore` 포함)가 같은 `(sourceType, sourceRef)` 로 **종류나 금액이 다른** 요청을 받으면 `409 POINT.SOURCE_CONFLICT`(`PointSourceConflictException`)로 거절한다 - 아무것도 바뀌지 않고 트랜잭션 밖에서 던져 호출자 트랜잭션을 롤백 전용으로 만들지 않는다(`POINT.INSUFFICIENT` 와 같다). 전에는 `spend(4)` 뒤 같은 키의 `spend(40)` 이 첫 줄(4)을 조용히 돌려줘 호출자가 40 이 빠졌다고 믿을 수 있었고, 적립과 차감이 같은 키를 쓰면 반대 종류의 줄을 돌려줬다. 진짜 같은 재호출(같은 종류 · 같은 금액)은 그대로 첫 줄(`earn` 은 null)이고, 유효기간 차이는 보지 않는다. 다른 계정의 키는 전과 같이 `IllegalStateException`(롤백된다). 직렬로 들어온 요청만 트랜잭션 밖에서 409 · 첫 줄로 답한다 - 동시 요청이나 옛 스냅샷 경로(MySQL 반복 읽기의 바깥 트랜잭션)는 예외로 롤백되니 다시 부르면 409 · 첫 줄을 받는다. 오류 메시지에는 키를 싣지 않는다.

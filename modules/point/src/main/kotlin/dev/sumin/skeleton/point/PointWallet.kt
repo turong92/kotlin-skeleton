@@ -18,6 +18,14 @@ interface PointWallet {
     /** 잔액보다 크면 [PointInsufficientException]. 같은 `(sourceType, sourceRef)` 를 같은 금액으로 다시 부르면 처음 줄을 돌려주고 또 빼지 않는다 - 금액이 다르거나 적립이 쓴 키면 [PointSourceConflictException] */
     fun spend(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointEntry
 
+    /**
+     * 사용 취소(환원) - 차감 `(spendSourceType, spendSourceRef)` 를 [amount](null 이면 아직 안 되돌린 전부)만큼 되돌린다. 부분 취소를 여러 번 해도 된다.
+     * 포인트는 원래 묶음에 원래 유효기간으로 돌아가고, 그 사이 지난 묶음 몫은 바로 소멸 줄로 닫힌다. `(sourceType, sourceRef)` 로 멱등이다 -
+     * 같은 요청이면 처음 줄을 돌려주고, 다른 요청이면 [PointSourceConflictException]. 원 차감이 없으면 [PointSpendNotFoundException],
+     * 취소 합계가 원 차감을 넘으면 [PointCancelExceededException].
+     */
+    fun cancelSpend(accountId: String, spendSourceType: String, spendSourceRef: String, amount: Long?, sourceType: String, sourceRef: String): PointEntry
+
     /** 운영자 조정 — 양수는 적립(유효기간 선택), 음수는 차감(잔액보다 크면 [PointInsufficientException]). [reason] 은 필수 */
     fun adjust(accountId: String, delta: Long, reason: String, expiresAt: Instant?, operatorId: String): PointEntry
 
@@ -49,6 +57,11 @@ class StorePointWallet(
     override fun spend(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointEntry {
         requireAmount(amount)
         return store.spend(accountId, amount, PointEntryKind.SPEND, sourceType, sourceRef, null, time.now())
+    }
+
+    override fun cancelSpend(accountId: String, spendSourceType: String, spendSourceRef: String, amount: Long?, sourceType: String, sourceRef: String): PointEntry {
+        if (amount != null) requireAmount(amount)
+        return store.cancelSpend(accountId, spendSourceType, spendSourceRef, amount, sourceType, sourceRef, time.now())
     }
 
     override fun adjust(accountId: String, delta: Long, reason: String, expiresAt: Instant?, operatorId: String): PointEntry {

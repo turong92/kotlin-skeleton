@@ -2,7 +2,11 @@ package dev.sumin.skeleton.point
 
 import java.time.Instant
 
-enum class PointEntryKind { EARN, SPEND, EXPIRE, ADJUST }
+/**
+ * [RESTORE] = 사용 취소(환원): 차감을 되돌려 양수 [PointEntry.delta] 로 잔액에 더한다. 포인트는 원래 묶음에 원래 유효기간으로 돌아가고, 그 사이 유효기간이 지난 묶음 몫은 같은 시각의
+ * [EXPIRE] 줄이 바로 닫는다(사용자에게는 환원 줄 + 소멸 줄이 보인다). 환원 줄 자신은 묶음이 아니라 [PointEntry.remaining] 이 0 이다.
+ */
+enum class PointEntryKind { EARN, SPEND, EXPIRE, ADJUST, RESTORE }
 
 /**
  * 원장 한 줄. 적립 묶음(`EARN` · 양수 `ADJUST`)은 [remaining] 에 아직 안 쓴 양을 들고, 차감 · 소멸 줄은 [delta] 가 음수이고 [remaining] 은 0 이다.

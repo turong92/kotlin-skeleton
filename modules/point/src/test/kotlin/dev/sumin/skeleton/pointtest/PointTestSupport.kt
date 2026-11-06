@@ -36,6 +36,8 @@ class FakeWallet : PointWallet {
 
     override fun spend(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointEntry = error("not used")
 
+    override fun cancelSpend(accountId: String, spendSourceType: String, spendSourceRef: String, amount: Long?, sourceType: String, sourceRef: String): PointEntry = error("not used")
+
     override fun adjust(accountId: String, delta: Long, reason: String, expiresAt: Instant?, operatorId: String): PointEntry {
         if (delta < 0 && balance(accountId).balance < -delta) throw PointInsufficientException(-delta, balance(accountId).balance)
         return add(accountId, delta, PointEntryKind.ADJUST, reason, expiresAt, "ADJUST", "$operatorId:$counter")

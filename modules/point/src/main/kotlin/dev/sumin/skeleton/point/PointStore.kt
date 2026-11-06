@@ -37,6 +37,24 @@ interface PointStore {
         now: Instant,
     ): PointEntry
 
+    /**
+     * 차감 `(spendSourceType, spendSourceRef)` 를 [amount] 만큼(null 이면 아직 안 되돌린 전부) 되돌린다 - 사용 취소(환원). 부분 취소를 여러 번 해도 된다.
+     * 포인트는 그 차감이 뺀 **원래 묶음에 원래 유효기간으로** 돌아간다(유효기간이 늦은 묶음부터). 그 사이 유효기간이 지난 묶음 몫은 바로 `EXPIRE` 줄로 닫는다.
+     * 자기 `(sourceType, sourceRef)` 로 멱등이다: 같은 요청이면 처음 `RESTORE` 줄을 돌려주고, 다른 요청(다른 차감 · 다른 금액)이면 [PointSourceConflictException].
+     * 원 차감이 없으면(옛 차감 포함) [PointSpendNotFoundException], 취소 합계가 원 차감을 넘으면 [PointCancelExceededException] - 모두 트랜잭션 밖에서 던지고 아무것도 바뀌지 않는다.
+     * 다른 계정의 차감이면 [IllegalStateException]. `amount` 가 null 인 재호출은 금액을 대조하지 않는다(취소 키마다 한 가지 뜻으로만 쓴다).
+     * 직렬로 들어온 요청만 트랜잭션 밖에서 던진다 - 동시 요청 · 옛 스냅샷 경로 · 다른 계정의 차감은 예외로 롤백되니 다시 부르면 된다.
+     */
+    fun cancelSpend(
+        accountId: String,
+        spendSourceType: String,
+        spendSourceRef: String,
+        amount: Long?,
+        sourceType: String,
+        sourceRef: String,
+        now: Instant,
+    ): PointEntry
+
     fun balance(accountId: String, now: Instant, soonBefore: Instant): PointBalance
 
     /** 최신순. [after] 가 있으면 그 줄 다음부터 */

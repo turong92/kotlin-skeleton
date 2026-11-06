@@ -7,7 +7,9 @@ import dev.sumin.skeleton.point.PointCursor
 import dev.sumin.skeleton.point.PointEntry
 import dev.sumin.skeleton.point.PointEntryKind
 import dev.sumin.skeleton.point.PointExpiring
+import dev.sumin.skeleton.point.PointCancelExceededException
 import dev.sumin.skeleton.point.PointInsufficientException
+import dev.sumin.skeleton.point.PointSpendNotFoundException
 import dev.sumin.skeleton.point.PointSourceConflictException
 import dev.sumin.skeleton.point.PointStore
 import java.sql.ResultSet
@@ -74,9 +76,16 @@ class JdbcPointStore(
             val available = balance - dueRemaining(accountId, now)
             if (amount > available) return@execute Short(available)
             expireAccount(accountId, now)
-            consume(accountId, amount)
+            val taken = consume(accountId, amount)
             val entry = PointEntry(ids.newId("pt_"), accountId, -amount, kind, 0, null, sourceType, sourceRef, reason, now)
             insert(entry)
+            // 어느 묶음에서 얼마를 뺐는지 - 사용 취소(환원)가 원래 묶음에 되돌리려는 기록이다
+            taken.forEach { (bundle, take) ->
+                jdbc.update(
+                    "insert into point_spend_allocations (spend_entry_id, bundle_id, amount, restored) values (:s, :b, :amount, 0)",
+                    mapOf("s" to entry.id, "b" to bundle, "amount" to take),
+                )
+            }
             changeBalance(accountId, -amount, now)
             Spent(entry)
         }
@@ -84,6 +93,77 @@ class JdbcPointStore(
             is Spent -> outcome.entry
             is Short -> throw PointInsufficientException(amount, outcome.available)
             Conflict -> throw PointSourceConflictException()
+        }
+    }
+
+    override fun cancelSpend(
+        accountId: String,
+        spendSourceType: String,
+        spendSourceRef: String,
+        amount: Long?,
+        sourceType: String,
+        sourceRef: String,
+        now: Instant,
+    ): PointEntry {
+        val outcome = tx.execute {
+            lockBalance(accountId, now)
+            val spend = findBySource(spendSourceType, spendSourceRef)
+            existing(accountId, sourceType, sourceRef)?.let { found ->
+                val linked = jdbc.query("select spend_entry_id from point_restore_links where restore_entry_id = :id", mapOf("id" to found.id)) { rs, _ -> rs.getString(1) }.firstOrNull()
+                val same = found.kind == PointEntryKind.RESTORE && spend != null && linked == spend.id && (amount == null || found.delta == amount)
+                return@execute if (same) Restored(found) else Conflict
+            }
+            if (spend == null) return@execute NotFound
+            check(spend.accountId == accountId) { "point source $spendSourceType/$spendSourceRef belongs to another account" }
+            if (spend.kind != PointEntryKind.SPEND) return@execute NotFound
+            val allocations = jdbc.query(
+                "select a.bundle_id, a.amount, a.restored, e.expires_at from point_spend_allocations a join point_entries e on e.id = a.bundle_id " +
+                    "where a.spend_entry_id = :s order by case when e.expires_at is null then 0 else 1 end, e.expires_at desc, e.created_at desc, e.id desc",
+                mapOf("s" to spend.id),
+            ) { rs, _ -> Allocation(rs.getString("bundle_id"), rs.getLong("amount"), rs.getLong("restored"), dialect.readInstant(rs, "expires_at")) }
+            // 할당이 차감과 맞지 않으면 이 기능 이전의 차감이다 - 어느 묶음에 돌려줄지 모른다
+            if (allocations.sumOf { it.amount } != -spend.delta) return@execute NotFound
+            val cancellable = allocations.sumOf { it.amount - it.restored }
+            val target = amount ?: cancellable
+            if (target < 1 || target > cancellable) return@execute Exceeded(target, cancellable)
+            expireAccount(accountId, now)   // 지난 묶음을 먼저 닫아 둔다 - 아래에서 「이미 지난 묶음」이 남은 양 0 으로 읽힌다
+            val restoreId = ids.newId("pt_")
+            var left = target
+            val lapsed = mutableListOf<Pair<String, Long>>()
+            for (allocation in allocations) {
+                if (left == 0L) break
+                val take = minOf(left, allocation.amount - allocation.restored)
+                if (take == 0L) continue
+                val changed = jdbc.update(
+                    "update point_spend_allocations set restored = restored + :take where spend_entry_id = :s and bundle_id = :b and restored = :seen",
+                    mapOf("take" to take, "s" to spend.id, "b" to allocation.bundleId, "seen" to allocation.restored),
+                )
+                check(changed == 1) { "point allocation changed under the account lock; retry" }
+                if (allocation.expiresAt != null && !allocation.expiresAt.isAfter(now)) {
+                    lapsed += allocation.bundleId to take   // 돌려줄 곳이 이미 지났다 - 환원 줄 뒤에 바로 소멸 줄로 닫는다
+                } else {
+                    val grown = jdbc.update("update point_entries set remaining = remaining + :take where id = :id", mapOf("take" to take, "id" to allocation.bundleId))
+                    check(grown == 1) { "point bundle is gone; retry" }
+                }
+                left -= take
+            }
+            val entry = PointEntry(restoreId, accountId, target, PointEntryKind.RESTORE, 0, null, sourceType, sourceRef, null, now)
+            insert(entry)
+            jdbc.update("insert into point_restore_links (restore_entry_id, spend_entry_id) values (:r, :s)", mapOf("r" to restoreId, "s" to spend.id))
+            changeBalance(accountId, target, now)
+            lapsed.forEach { (bundle, take) ->
+                // 같은 묶음이 이미 소멸 줄을 가졌을 수 있다 - 출처 키가 겹치지 않게 환원 줄 id 를 붙인다
+                insert(PointEntry(ids.newId("pt_"), accountId, -take, PointEntryKind.EXPIRE, 0, null, EXPIRE_SOURCE, "$bundle:$restoreId", null, now))
+                changeBalance(accountId, -take, now)
+            }
+            Restored(entry)
+        }
+        return when (outcome) {
+            is Restored -> outcome.entry
+            NotFound -> throw PointSpendNotFoundException()
+            is Exceeded -> throw PointCancelExceededException(outcome.requested, outcome.cancellable)
+            Conflict -> throw PointSourceConflictException()
+            null -> error("transaction returned nothing")
         }
     }
 
@@ -127,6 +207,9 @@ class JdbcPointStore(
 
     override fun eraseAccount(accountId: String) {
         tx.executeWithoutResult {
+            // 할당 · 환원 연결은 원장 줄이 지워지기 전에 (줄 id 로 찾는다)
+            jdbc.update("delete from point_spend_allocations where spend_entry_id in (select id from point_entries where account_id = :a)", mapOf("a" to accountId))
+            jdbc.update("delete from point_restore_links where restore_entry_id in (select id from point_entries where account_id = :a)", mapOf("a" to accountId))
             jdbc.update("delete from point_entries where account_id = :a", mapOf("a" to accountId))
             jdbc.update("delete from point_balances where account_id = :a", mapOf("a" to accountId))
         }
@@ -175,13 +258,14 @@ class JdbcPointStore(
     }
 
     /** 소멸이 가까운 묶음부터(유효기간 없는 것은 맨 뒤) [amount] 만큼 덜어 낸다 */
-    private fun consume(accountId: String, amount: Long) {
+    private fun consume(accountId: String, amount: Long): List<Pair<String, Long>> {
         val bundles = jdbc.query(
             "select id, remaining from point_entries where account_id = :a and remaining > 0 " +
                 "order by case when expires_at is null then 1 else 0 end, expires_at, created_at, id",
             mapOf("a" to accountId),
         ) { rs, _ -> rs.getString("id") to rs.getLong("remaining") }
         var left = amount
+        val taken = mutableListOf<Pair<String, Long>>()
         for ((bundle, remaining) in bundles) {
             if (left == 0L) break
             val take = minOf(left, remaining)
@@ -190,9 +274,11 @@ class JdbcPointStore(
                 mapOf("take" to take, "id" to bundle, "seen" to remaining),
             )
             check(changed == 1) { "point bundle changed under the account lock; retry" }
+            taken += bundle to take
             left -= take
         }
         check(left == 0L) { "point bundles do not add up to the balance; retry" }
+        return taken
     }
 
     private fun zero(bundle: String, seen: Long) {
@@ -232,13 +318,19 @@ class JdbcPointStore(
 
     private sealed interface EarnOutcome
     private sealed interface SpendOutcome
+    private sealed interface CancelOutcome
     private class Earned(val entry: PointEntry) : EarnOutcome
     private data object Repeat : EarnOutcome
     private class Spent(val entry: PointEntry) : SpendOutcome
     private class Short(val available: Long) : SpendOutcome
 
     /** 같은 키에 다른 요청 - 적립 · 차감 모두 트랜잭션 밖에서 [PointSourceConflictException] 으로 던진다 */
-    private data object Conflict : EarnOutcome, SpendOutcome
+    private data object Conflict : EarnOutcome, SpendOutcome, CancelOutcome
+    private class Restored(val entry: PointEntry) : CancelOutcome
+    private data object NotFound : CancelOutcome
+    private class Exceeded(val requested: Long, val cancellable: Long) : CancelOutcome
+
+    private class Allocation(val bundleId: String, val amount: Long, val restored: Long, val expiresAt: Instant?)
 
     private companion object {
         const val EXPIRE_SOURCE = "EXPIRE"
