@@ -71,6 +71,8 @@ services:
       - "127.0.0.1:${S3_PORT:-8333}:8333"   # 다른 포트면 S3_PORT=18333 (서버 → 이 주소 · 브라우저 직접 업로드도 같은 주소라 서버 설정도 같은 값이어야 한다)
     volumes:
       - s3-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # 영상 일꾼(network_mode: service:s3)이 이 네트워크를 쓰므로 일꾼 자신은 extra_hosts 를 못 단다 - 여기서 달아 리눅스 엔진에서도 일꾼이 앱(host.docker.internal)에 닿게 한다. Docker Desktop 에서는 이미 있는 이름이라 무해
 
   # 버킷과 CORS(브라우저가 직접 PUT — ETag 노출)를 만들고 끝나는 1회성 작업. 이미 있으면 그대로 둔다. 로컬 전용(127.0.0.1 에만 열림)이라 origin 은 *
   # (SeaweedFS 는 `http://localhost:*` 같은 포트 와일드카드를 받지 않는다 — 실측: 프리플라이트 403)
@@ -107,7 +109,7 @@ services:
   # (손으로는 `./gradlew :apps:video-worker:installDist` 뒤 `docker compose --profile s3 --profile video up -d --build video-worker`). 로컬 일꾼 토큰은 앱의 application-local.yml
   # (skeleton.video.worker-token-sha256)이 해시로 아는 로컬 전용 값이다 - 운영 토큰은 운영자 발급 API 가 한 번 보여 준다(docs/deploy.md §7).
   # **s3 와 네트워크를 나눠 쓴다**(network_mode): 비공개 영상의 재생 목록 안 조각 주소는 서버가 서명한 저장소 주소(localhost:S3_PORT)라, 일꾼 컨테이너 안에서도 localhost:8333 이
-  # 로컬 S3 로 닿아야 한다. S3_PORT 를 8333 이 아닌 값으로 바꾸면 곁 컨테이너(s3-alias)가 그 포트를 s3 의 8333 으로 이어 준다. 앱은 호스트에서 돌아 host.docker.internal 로 닿는다(Docker Desktop 에서 확인. 리눅스 엔진은 host.docker.internal 이 기본으로 없어 직접 이어 줘야 한다 - 확인하지 않았다).
+  # 로컬 S3 로 닿아야 한다. S3_PORT 를 8333 이 아닌 값으로 바꾸면 곁 컨테이너(s3-alias)가 그 포트를 s3 의 8333 으로 이어 준다. 앱은 호스트에서 돌아 host.docker.internal 로 닿는다(Docker Desktop 에서 확인). 리눅스 엔진은 그 이름이 기본으로 없어서, 네트워크 주인인 s3 서비스의 extra_hosts(host-gateway)로 이어 준다 - 일꾼은 network_mode 라 자기 extra_hosts 를 달 수 없다(리눅스 엔진에서 일꾼이 앱에 닿는지는 직접 확인하지 않았다).
   # 격리: 비루트 · 읽기 전용 루트 · cap_drop ALL · pids 상한 · tmpfs /tmp · 쓰기는 /work 볼륨만. 자원: CPU 2 · 메모리 3GB(4K 사다리는 1GB 에서 OOM - docs/deploy.md 메모리 표) · 낮은 우선순위(nice + cpu_shares)
   video-worker:
     build: apps/video-worker
