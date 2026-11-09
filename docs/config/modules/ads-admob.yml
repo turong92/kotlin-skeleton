@@ -1,0 +1,9 @@
+# ads-admob — AdMob 보상형 광고의 서버 측 확인(SSV) 콜백 수신 (GET /api/v1/ads/admob/ssv). 기본 꺼짐.
+skeleton:
+  ads-admob:
+    enabled: false                       # true 면 경로가 선다 (꺼짐 → 404). point + point-jdbc 가 있어야 한다
+    ad-units: []                         # 포인트를 쌓아도 되는 광고 단위 - AdMob 콘솔의 광고 단위 ID(ca-app-pub-…/123)를 그대로 넣는다(콜백은 / 뒤 숫자만 보내므로 그 부분으로 맞춰 본다). 비면 모든 콜백을 거절한다 - 남의 AdMob 계정 단위가 이 주소를 콜백으로 지정해도 막는다
+    # expires-in-days: 365               # 적립한 포인트의 유효기간(일). 비우면(기본) 안 사라진다 (point 와 같은 규칙)
+    keys-url: https://www.gstatic.com/admob/reward/verifier-keys.json   # 구글의 서명 공개키 목록
+    key-cache-ttl: 24h                   # 읽어 둔 공개키를 쥐는 시간 - 24시간을 넘길 수 없다
+    key-fetch-timeout: 5s                # 공개키 목록을 읽는 한 번의 제한 시간

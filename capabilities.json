@@ -203,6 +203,46 @@
       }
     },
     {
+      "id": "ads-admob",
+      "kind": "module",
+      "module": "ads-admob",
+      "path": "modules/ads-admob",
+      "status": "experimental",
+      "summary": "AdMob 보상형 광고의 서버 측 확인(SSV) 수신 — 구글이 서명해 부르는 GET /api/v1/ads/admob/ssv 를 ECDSA 서명(구글 공개키 24시간 이하 캐시)과 허용 광고 단위 목록으로 확인하고, 같은 거래 번호는 한 번만 PointWallet.earn 으로 포인트를 쌓는다. 클라이언트가 보상을 달라고 부르는 길은 없다. 기본 꺼짐.",
+      "starter": false,
+      "newProjectFlag": "--modules ads-admob",
+      "autoIncludes": ["point", "scheduler"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.ads-admob"],
+        "snippet": "docs/config/modules/ads-admob.yml"
+      },
+      "basePaths": ["/api/v1/ads/admob"],
+      "secrets": [],
+      "docs": ["docs/modules/ads-admob.md"],
+      "frontend": null,
+      "notFor": [
+        "저장소가 없다 — point-jdbc 를 같이 고른다(포인트를 쌓는 길이 point 의 지갑이다)",
+        "배너 · 전면 광고는 이 모듈과 무관하다 — 서버가 받을 것이 없다. 보상형을 서버 포인트로 줄 때만 쓴다",
+        "AdMob 콘솔에서 광고 단위의 서버 측 확인을 켜고 콜백 주소를 정하는 일은 사람이 한다",
+        "모바일 짝은 flutter-skeleton 의 광고 패키지(ads)다"
+      ],
+      "keywords": {
+        "ko": ["애드몹 보상형 광고", "광고 보고 포인트", "리워드 광고", "광고 보상", "서버 측 확인"],
+        "en": [
+          "admob rewarded ads",
+          "server-side verification",
+          "ssv callback",
+          "ad reward points",
+          "rewarded video"
+        ]
+      }
+    },
+    {
       "id": "alert",
       "kind": "module",
       "module": "alert",
@@ -4548,6 +4588,7 @@
       "starter": false,
       "newProjectFlag": "--with-workbench",
       "autoIncludes": [
+        "ads-admob",
         "alert-jdbc",
         "api-key",
         "api-key-jdbc",

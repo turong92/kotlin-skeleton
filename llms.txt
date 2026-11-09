@@ -80,6 +80,7 @@
 
 - account: 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호… [회원가입, 가입]
 - account-jdbc: account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL… [계정 저장, 계정 DB]
+- ads-admob: AdMob 보상형 광고의 서버 측 확인(SSV) [애드몹 보상형 광고, 광고 보고 포인트]
 - alert: 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord… [경보, 주인 알림]
 - alert-jdbc: 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은… [경보 기록, 경보 중복 접기]
 - api-key: API 키(B2B 호출자용 장기 자격) [API 키, 액세스 토큰]

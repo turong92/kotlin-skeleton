@@ -72,6 +72,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 |---|---|---|---|---|
 | `account` | 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐 · `required-when=WRITE` 면 읽기는 통과하고 쓰기에서만 막는다), 로그인 아이디(이메일이 바뀌어도 안 바뀌는 비공개 간판 — 아이디 또는 이메일로 로그인 · 실시간 중복 확인 POST /account/login-id/availability · 아이디 정하기 게이트 POST /account/login-id · 아이디 찾기 메일 POST /account/login-id/forgot · 탈퇴해도 재사용 금지(해시), 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 로그인 아이디, 아이디 찾기, 관리자 도구, 계정 정지, 프로필, 프로필 사진, 아바타 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, login id, username login, find my id, admin tools, suspend account, profile, profile picture, avatar | `@skeleton/auth` |
 | `account-jdbc` | account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일 · 닉네임 키를 utf8mb4_bin 으로 정확 일치, 닉네임 방식 셋을 유니크 (키, 꼬리표) 하나로). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법. | 스타터(apps/api)에 기본 포함 | 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration | `@skeleton/auth` |
+| `ads-admob` | AdMob 보상형 광고의 서버 측 확인(SSV) 수신 — 구글이 서명해 부르는 GET /api/v1/ads/admob/ssv 를 ECDSA 서명(구글 공개키 24시간 이하 캐시)과 허용 광고 단위 목록으로 확인하고, 같은 거래 번호는 한 번만 PointWallet.earn 으로 포인트를 쌓는다. 클라이언트가 보상을 달라고 부르는 길은 없다. 기본 꺼짐. | `--modules ads-admob` | 애드몹 보상형 광고, 광고 보고 포인트, 리워드 광고, 광고 보상, 서버 측 확인 / admob rewarded ads, server-side verification, ssv callback, ad reward points, rewarded video | — |
 | `alert` | 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. | 스타터(apps/api)에 기본 포함 | 경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림, 에러 수집, 5xx 알림 / owner alert, error reporting, discord webhook, incident alert, 5xx alert, sentry alternative | — |
 | `alert-jdbc` | 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL). | `--modules alert-jdbc` | 경보 기록, 경보 중복 접기, 경보 DB / alert ledger, alert dedupe, alert database | — |
 | `api-key` | API 키(B2B 호출자용 장기 자격) — 사용자가 이름 · 범위 · 만료를 골라 발급(다시 인증)하고 본인이 회수하며, 키로 온 요청은 `@ApiKeyScope` 로 표시한 경로에 한해(기본 거부) 주인 계정으로 움직인다. 키별 한도 · 활성 키 상한 · 만료 상한은 앱이 정한다. 저장은 해시뿐. | `--modules api-key,api-key-jdbc` | API 키, 액세스 토큰, 개인 액세스 토큰, B2B API, 키 발급, 범위, 키 회수 / api key, personal access token, scoped key, api token, key revocation, per-key rate limit | — |
@@ -276,6 +277,22 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - account 없이 단독으로는 의미가 없다 — account 의 포트 구현이다
   - 다른 DB 는 AccountRepository · OneTimeTokenStore 를 앱이 직접 구현한다
 - 키워드: 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration
+
+### `ads-admob` — AdMob 보상형 광고의 서버 측 확인(SSV) 수신 — 구글이 서명해 부르는 GET /api/v1/ads/admob/ssv 를 ECDSA 서명(구글 공개키 24시간 이하 캐시)과 허용 광고 단위 목록으로 확인하고, 같은 거래 번호는 한 번만 PointWallet.earn 으로 포인트를 쌓는다. 클라이언트가 보상을 달라고 부르는 길은 없다. 기본 꺼짐.
+
+- 종류 · 상태: module · experimental — 위치 `modules/ads-admob`
+- 켜는 법: `--modules ads-admob`
+- 의존 한 줄: `implementation(project(":modules:ads-admob"))`
+- 자동으로 따라온다: `point`, `scheduler`
+- 설정 접두사 `skeleton.ads-admob` — 키와 기본값 `docs/config/modules/ads-admob.yml`
+- HTTP 경로: `/api/v1/ads/admob`
+- 문서: `docs/modules/ads-admob.md`
+- 쓰지 않는 경우:
+  - 저장소가 없다 — point-jdbc 를 같이 고른다(포인트를 쌓는 길이 point 의 지갑이다)
+  - 배너 · 전면 광고는 이 모듈과 무관하다 — 서버가 받을 것이 없다. 보상형을 서버 포인트로 줄 때만 쓴다
+  - AdMob 콘솔에서 광고 단위의 서버 측 확인을 켜고 콜백 주소를 정하는 일은 사람이 한다
+  - 모바일 짝은 flutter-skeleton 의 광고 패키지(ads)다
+- 키워드: 애드몹 보상형 광고, 광고 보고 포인트, 리워드 광고, 광고 보상, 서버 측 확인 / admob rewarded ads, server-side verification, ssv callback, ad reward points, rewarded video
 
 ### `alert` — 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답.
 
@@ -1947,7 +1964,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-apple`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `auth-web-handoff`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-appstore`, `payment-googleplay`, `payment-iap`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `ads-admob`, `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-apple`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `auth-web-handoff`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-appstore`, `payment-googleplay`, `payment-iap`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

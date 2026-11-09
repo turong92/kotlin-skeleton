@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ads-admob - AdMob 보상형 광고 SSV 수신 (2026-11-09)
+
+- 새 모듈 `ads-admob`(기본 꺼짐 `skeleton.ads-admob.enabled`): `GET /api/v1/ads/admob/ssv`(공개) 가 AdMob 의 서버 측 확인 콜백을 받는다. 받은 쿼리를 고치지 않고 `&signature=` 앞까지를 ECDSA-SHA256 으로 `key_id` 의 구글 공개키에 확인하고(키 목록은 24시간 넘게 쥐지 않고, 모르는 `key_id` 면 한 번 다시 읽되 1분 안에는 되풀이하지 않는다), `ad-units` 에 있는 광고 단위만 받고(비면 모두 거절), `PointWallet.earn(user_id, reward_amount, 유효기간, "ADMOB_SSV", transaction_id)` 로 같은 거래 번호는 한 번만 쌓는다.
+- 응답: 적립 · 이미 적립 `200` / 서명 불일치 · 허용 밖 단위 · `user_id` 없음 · 모르는 키 `400`(사유 코드만 로그) / 키 목록을 못 읽음 · DB 오류 `503`. 설정 `ad-units` · `expires-in-days` · `keys-url` · `key-cache-ttl` · `key-fetch-timeout`. 문서: `docs/modules/ads-admob.md`, `docs/config/modules/ads-admob.yml`.
+
 ### point - 작업 기록 `PointOperations` (2026-11-07)
 
 - 새 선택 층 `PointOperations`(`spend` · `earn` · `cancelSpend` · `resolve` · `abandon`, 구현 `JdbcPointOperations`): 작업(= `(sourceType, sourceRef)` 키 하나)마다 접수 영수증 · 시도 · 결과 전이를 남긴다. 새 표 `point_operations` · `point_operation_attempts`(마이그레이션 `V20261107000000__point_operations`, 두 방언; 행위자 · 종류 · 금액 · 접수 · 시도 · 완료 시각 · 안전한 결과 코드 · 원 작업 연결뿐이고 토큰 · 결제 키 · 본문 · 사유 칸은 없다). 상태 `ACCEPTED/PROCESSING/SUCCEEDED/FAILED/UNKNOWN/ABANDONED`, 원 작업의 보상 상태 `NONE/REQUESTED/DONE/FAILED`.
