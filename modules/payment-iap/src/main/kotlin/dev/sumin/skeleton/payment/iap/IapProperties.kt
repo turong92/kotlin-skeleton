@@ -62,6 +62,8 @@ data class IapProperties(
         val iosProductId: String? = null,
         val playProductId: String? = null,
         val playBasePlanId: String? = null,
+        /** 단건 줄에만 - 기본(비움) `true` = 소모성(여러 번 살 수 있다). `false` = 비소모성(1회 구매, 권리로 남는다: `GET /iap/entitlements`). 구독 줄에 적으면 기동 실패. */
+        val consumable: Boolean? = null,
     )
 
     /** 기동 때 한 번 - 잘못된 설정은 여기서 던져 앱이 뜨지 않게 한다(링크 없는 「웹 결제」 단추 · 겹치는 상품 id 가 운영에 나가지 않게). */
@@ -80,7 +82,13 @@ data class IapProperties(
             val item = !line.itemType.isNullOrBlank() && !line.itemRef.isNullOrBlank()
             val plan = !line.plan.isNullOrBlank()
             check(item != plan) { "skeleton.payment-iap.products[$index]: a line is either item-type + item-ref or plan, not both and not neither" }
+            check(!plan || line.consumable == null) { "skeleton.payment-iap.products[$index]: consumable belongs to a one-time (item-type + item-ref) line, not a subscription plan" }
             check(!line.iosProductId.isNullOrBlank() || !line.playProductId.isNullOrBlank()) { "skeleton.payment-iap.products[$index]: a line needs ios-product-id or play-product-id" }
+        }
+        products.filter { it.plan.isNullOrBlank() }.groupBy { it.itemType?.trim() to it.itemRef?.trim() }.forEach { (item, lines) ->
+            check(lines.map { it.consumable ?: true }.distinct().size == 1) {
+                "skeleton.payment-iap.products: the lines of item ${item.first}/${item.second} disagree on consumable - set the same value on the iOS line and the Play line"
+            }
         }
         check(products.mapNotNull { it.iosProductId?.takeIf(String::isNotBlank) }.let { it.size == it.toSet().size }) {
             "skeleton.payment-iap.products: ios-product-id ${products.mapNotNull { it.iosProductId?.takeIf(String::isNotBlank) }.groupingBy { it }.eachCount().filterValues { it > 1 }.keys} is used by more than one line"

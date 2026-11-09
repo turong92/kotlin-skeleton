@@ -65,6 +65,9 @@ data class OrderDiscount(
 
 enum class PaymentOrderKind { ONE_TIME, SUBSCRIPTION_INITIAL, SUBSCRIPTION_RENEWAL, SUBSCRIPTION_CHANGE }
 
+/** 주문의 품목 하나(`item_type` + `item_ref`) — 「이 계정이 이 품목을 샀는가」를 묻는 키. */
+data class OrderItemKey(val itemType: String, val itemRef: String)
+
 /** 이 주문을 만든 것. 1단계는 [CHECKOUT] 뿐이다. */
 enum class PaymentOriginType { CHECKOUT, SUBSCRIPTION }
 

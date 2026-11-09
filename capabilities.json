@@ -2958,7 +2958,7 @@
       "module": "payment-iap",
       "path": "modules/payment-iap",
       "status": "experimental",
-      "summary": "앱 인앱결제의 서버 HTTP — 설정 응답(GET /config: 지역 스위치 · 상품 지도 · 계정 토큰)과 구매 확인(POST /{store}/purchases: 스토어에 직접 물은 뒤에만 지급)을 /api/v1/payments/iap 에 연다. 지급 · 환불 회수 · 구독 상태는 결제 장부 그대로. 스토어와 말하는 일은 payment-appstore · payment-googleplay.",
+      "summary": "앱 인앱결제의 서버 HTTP — 설정 응답(GET /config: 지역 스위치 · 상품 지도 · 계정 토큰)과 구매 확인(POST /{store}/purchases: 스토어에 직접 물은 뒤에만 지급), 비소모성 상품(consumable: false, 예: 광고 제거)의 권리 조회(GET /entitlements: 장부의 PAID 단건)를 /api/v1/payments/iap 에 연다. 지급 · 환불 회수 · 구독 상태는 결제 장부 그대로. 스토어와 말하는 일은 payment-appstore · payment-googleplay.",
       "starter": false,
       "newProjectFlag": "--modules payment-iap",
       "autoIncludes": ["crypto", "payment"],

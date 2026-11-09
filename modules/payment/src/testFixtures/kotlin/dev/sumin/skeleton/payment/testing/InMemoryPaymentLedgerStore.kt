@@ -11,7 +11,9 @@ import dev.sumin.skeleton.payment.PaymentEvent
 import dev.sumin.skeleton.payment.PaymentLedgerConflictException
 import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentLedgerTx
+import dev.sumin.skeleton.payment.OrderItemKey
 import dev.sumin.skeleton.payment.PaymentOrder
+import dev.sumin.skeleton.payment.PaymentOrderKind
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentOriginType
 import dev.sumin.skeleton.payment.PaymentSubscription
@@ -84,6 +86,14 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
 
     override fun hasPaidOrder(accountId: String): Boolean =
         synchronized(commitMutex) { committed.values.any { it.accountId == accountId && it.paidAt != null && (it.paidAmount ?: it.amount.amount) > 0 && it.settlement == PaymentSettlement.PROVIDER } }
+
+    override fun paidOneTimeItems(accountId: String, items: Collection<OrderItemKey>): Set<OrderItemKey> {
+        val asked = items.toSet()
+        return synchronized(commitMutex) {
+            committed.values.filter { it.accountId == accountId && it.kind == PaymentOrderKind.ONE_TIME && it.status == PaymentOrderStatus.PAID }
+                .map { OrderItemKey(it.itemType, it.itemRef) }.filter { it in asked }.toSet()
+        }
+    }
 
     override fun findRefund(id: String): PaymentRefund? = synchronized(commitMutex) { committedRefunds[id] }
 

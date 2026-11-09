@@ -55,6 +55,11 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
         "skeleton.payment-iap.products[2].item-type=cheer",
         "skeleton.payment-iap.products[2].item-ref=cheer-retired",
         "skeleton.payment-iap.products[2].ios-product-id=com.example.cheer.retired",
+        "skeleton.payment-iap.products[3].item-type=ads-removal",
+        "skeleton.payment-iap.products[3].item-ref=v1",
+        "skeleton.payment-iap.products[3].consumable=false",
+        "skeleton.payment-iap.products[3].ios-product-id=com.example.adsfree",
+        "skeleton.payment-iap.products[3].play-product-id=ads_free",
         "skeleton.payment.subscription.enabled=true",
         "skeleton.payment.http.order-rate-limit.account-capacity=100000",
         "skeleton.payment.http.order-rate-limit.ip-capacity=100000",
@@ -83,6 +88,13 @@ class IapHttpTest {
         mode = PaymentMode.LIVE, kind = StorePurchaseKind.ONE_TIME, productId = product, providerPaymentId = txn, accountToken = token,
         amount = PaymentAmount(3_000, "KRW"), quantity = quantity, paidAt = now, state = state, familyShared = familyShared,
     )
+
+    private fun adsFree(txn: String, token: String?, product: String = "com.example.adsfree") = StorePurchase(
+        mode = PaymentMode.LIVE, kind = StorePurchaseKind.ONE_TIME, productId = product, providerPaymentId = txn, accountToken = token,
+        amount = PaymentAmount(3_300, "KRW"), quantity = 1, paidAt = now, state = StorePurchaseState.PURCHASED,
+    )
+
+    private fun entitlements(account: String?) = mvc.perform(get("$base/entitlements").let { if (account == null) it else it.asUser(account) })
 
     private fun basic(txn: String, original: String, token: String?) = StorePurchase(
         mode = PaymentMode.LIVE, kind = StorePurchaseKind.SUBSCRIPTION, productId = "com.example.basic.monthly", providerPaymentId = txn, providerSubscriptionId = original, accountToken = token,
@@ -115,6 +127,74 @@ class IapHttpTest {
             .andExpect(jsonPath("$.value.products[1].kind").value("SUBSCRIPTION"))
             .andExpect(jsonPath("$.value.products[1].plan").value("basic"))
             .andExpect(jsonPath("$.value.products[1].storeProductId").value("com.example.basic.monthly"))
+    }
+
+    @Test
+    fun `the config carries consumable on one-time lines - true unless the map says false - and not on subscriptions`() {
+        mvc.perform(get("$base/config").param("platform", "ios").asUser(account()))
+            .andExpect(jsonPath("$.value.products[0].consumable").value(true))
+            .andExpect(jsonPath("$.value.products[1].consumable").doesNotExist())
+            .andExpect(jsonPath("$.value.products[3].itemType").value("ads-removal"))
+            .andExpect(jsonPath("$.value.products[3].consumable").value(false))
+    }
+
+    // --- GET /entitlements (돈 · 권리: 장부의 PAID 단건만, 계정마다)
+
+    @Test
+    fun `a paid non-consumable purchase shows in the entitlements of the account that bought it - and of nobody else`() {
+        val owner = account()
+        val other = account()
+        entitlements(owner).andExpect(status().isOk).andExpect(jsonPath("$.values.length()").value(0))
+
+        confirm(owner, knows(adsFree(txn(), StoreAccountTokens.of(owner)))).andExpect(status().isOk)
+
+        entitlements(owner).andExpect(status().isOk)
+            .andExpect(jsonPath("$.values.length()").value(1))
+            .andExpect(jsonPath("$.values[0].itemType").value("ads-removal"))
+            .andExpect(jsonPath("$.values[0].itemRef").value("v1"))
+        entitlements(other).andExpect(status().isOk).andExpect(jsonPath("$.values.length()").value(0))
+    }
+
+    @Test
+    fun `another account's order never leaks in even when that account holds the entitlement - and the same item bought at the other store counts`() {
+        val owner = account()
+        val other = account()
+        confirm(owner, knows(adsFree(txn(), StoreAccountTokens.of(owner)))).andExpect(status().isOk)
+        val token = knows(adsFree(txn(), StoreAccountTokens.of(other), product = "ads_free"), googleplay)
+        mvc.perform(post("$base/googleplay/purchases").asUser(other).contentType(MediaType.APPLICATION_JSON).content("""{"productId":"ads_free","purchaseToken":"$token"}""")).andExpect(status().isOk)
+
+        entitlements(other).andExpect(jsonPath("$.values.length()").value(1)).andExpect(jsonPath("$.values[0].itemRef").value("v1"))
+        assertEquals(1, orders(other).size)
+        assertEquals(1, orders(owner).size)
+    }
+
+    @Test
+    fun `a refunded or partially refunded purchase gives no entitlement`() {
+        listOf(PaymentOrderStatus.REFUNDED, PaymentOrderStatus.PARTIALLY_REFUNDED).forEach { refunded ->
+            val account = account()
+            confirm(account, knows(adsFree(txn(), StoreAccountTokens.of(account)))).andExpect(status().isOk)
+            entitlements(account).andExpect(jsonPath("$.values.length()").value(1))
+
+            val order = orders(account).single()
+            ledger.inTransaction { tx -> tx.lockOrder(order.id); tx.updateOrder(order.copy(status = refunded)) }
+
+            entitlements(account).andExpect(status().isOk).andExpect(jsonPath("$.values.length()").value(0))
+        }
+    }
+
+    @Test
+    fun `a consumable line never appears in the entitlements however often it was bought`() {
+        val account = account()
+        confirm(account, knows(cheer(txn(), StoreAccountTokens.of(account)))).andExpect(status().isOk)
+        confirm(account, knows(cheer(txn(), StoreAccountTokens.of(account)))).andExpect(status().isOk)
+
+        assertEquals(2, orders(account).size)
+        entitlements(account).andExpect(status().isOk).andExpect(jsonPath("$.values.length()").value(0))
+    }
+
+    @Test
+    fun `the entitlements need a login`() {
+        entitlements(null).andExpect(status().isUnauthorized)
     }
 
     @Test

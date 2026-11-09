@@ -14,6 +14,7 @@ import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentLedgerTx
 import dev.sumin.skeleton.payment.PaymentMode
 import dev.sumin.skeleton.payment.PaymentOrder
+import dev.sumin.skeleton.payment.OrderItemKey
 import dev.sumin.skeleton.payment.PaymentOrderKind
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentOriginType
@@ -1112,6 +1113,34 @@ abstract class PaymentLedgerStoreContract {
         store.inTransaction { tx -> tx.insertOrderIfAbsent(first.copy(id = id32("ord_", 6), status = PaymentOrderStatus.PAID, paidAt = PaymentTestOrders.T0, dedupeKey = "d-real")) }
         assertTrue(store.hasPaidOrder("acc_1"))
         assertFalse(store.hasPaidOrder("acc_other"))
+    }
+
+    @Test
+    fun `paidOneTimeItems answers only this account's PAID one-time orders of the asked items - refunds, other accounts and other kinds do not count`() {
+        val store = newStore()
+        val ads = OrderItemKey("ads-removal", "v1")
+        val theme = OrderItemKey("theme", "dark")
+        fun order(n: Int, account: String = "acc_1", status: PaymentOrderStatus = PaymentOrderStatus.PAID, item: OrderItemKey = ads, kind: PaymentOrderKind = PaymentOrderKind.ONE_TIME, provider: String = "appstore") =
+            first.copy(id = id32("ord_", 100 + n), accountId = account, status = status, itemType = item.itemType, itemRef = item.itemRef, kind = kind, provider = provider, paidAt = PaymentTestOrders.T0, dedupeKey = "d-items-$n")
+        listOf(
+            order(1),                                                                                    // acc_1 의 광고 제거 (appstore)
+            order(2, account = "acc_2", item = theme),                                                   // 남의 주문
+            order(3, status = PaymentOrderStatus.REFUNDED, item = theme),                                // 전체 환불
+            order(4, status = PaymentOrderStatus.PARTIALLY_REFUNDED, item = OrderItemKey("theme", "light")),
+            order(5, status = PaymentOrderStatus.PENDING, item = OrderItemKey("theme", "pending")),
+            order(6, kind = PaymentOrderKind.SUBSCRIPTION_INITIAL, item = OrderItemKey("plan", "pro")),
+        ).forEach { o -> store.inTransaction { tx -> tx.insertOrderIfAbsent(o) } }
+        val asked = listOf(ads, theme, OrderItemKey("theme", "light"), OrderItemKey("theme", "pending"), OrderItemKey("plan", "pro"), OrderItemKey("never", "bought"))
+
+        assertEquals(setOf(ads), store.paidOneTimeItems("acc_1", asked))
+        assertEquals(setOf(theme), store.paidOneTimeItems("acc_2", asked))
+        assertEquals(emptySet(), store.paidOneTimeItems("acc_3", asked))
+        assertEquals(emptySet(), store.paidOneTimeItems("acc_1", emptyList()))
+        assertEquals(emptySet(), store.paidOneTimeItems("acc_1", listOf(OrderItemKey("ads-removal", "v2"))), "only the asked item_ref")
+
+        // 같은 품목을 다른 결제사로 또 사도 하나, 다른 결제사로 산 것도 센다
+        store.inTransaction { tx -> tx.insertOrderIfAbsent(order(7, provider = "googleplay")) }
+        assertEquals(setOf(ads), store.paidOneTimeItems("acc_1", asked))
     }
 
     @Test

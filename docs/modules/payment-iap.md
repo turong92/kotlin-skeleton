@@ -1,6 +1,6 @@
 # payment-iap
 
-앱이 App Store · Google Play 에서 산 것을 **서버가 스토어에 직접 물어 확인한 뒤에만** 지급하는 앱용 HTTP 둘 — 설정 응답(`GET /config`)과 구매 확인(`POST /{store}/purchases`). 지급 · 회수 · 구독 상태는 결제 장부 그대로(주문 줄 · 환불 줄 · 구독 줄 · `PaymentOrderListener`)라 웹(토스)과 앱(IAP)이 **권한 표 하나**를 같이 쓴다. 스토어와 말하는 일은 `payment-appstore` · `payment-googleplay` 가 `PaymentStoreGateway` 로 하고, 이 모듈은 스토어를 모른다(상품 id 를 그대로 받을 뿐). 장부(`payment-jdbc` 등 `PaymentStorePurchases` 빈)가 없으면 HTTP 는 하나도 서지 않는다.
+앱이 App Store · Google Play 에서 산 것을 **서버가 스토어에 직접 물어 확인한 뒤에만** 지급하는 앱용 HTTP 셋 — 설정 응답(`GET /config`)·구매 확인(`POST /{store}/purchases`)·비소모성 권리 조회(`GET /entitlements`). 지급 · 회수 · 구독 상태는 결제 장부 그대로(주문 줄 · 환불 줄 · 구독 줄 · `PaymentOrderListener`)라 웹(토스)과 앱(IAP)이 **권한 표 하나**를 같이 쓴다. 스토어와 말하는 일은 `payment-appstore` · `payment-googleplay` 가 `PaymentStoreGateway` 로 하고, 이 모듈은 스토어를 모른다(상품 id 를 그대로 받을 뿐). 장부(`payment-jdbc` 등 `PaymentStorePurchases` 빈)가 없으면 HTTP 는 하나도 서지 않는다.
 
 **기본 꺼짐**(`skeleton.payment-iap.enabled=false`) — 앱 yml 이 켠다. 경로는 `/api/v1/payments/iap`(= `skeleton.payment.http.base-path` + `/iap`), 로그인이 필요하다.
 
@@ -8,8 +8,10 @@
 - `channel` = 지역 스위치(`IAP_ONLY` 기본 · `IAP_AND_WEB` · `WEB_ONLY`). 나라는 `storefront`(앱이 읽은 스토어 나라 — 애플 세 글자 · 구글 두 글자, 서버가 두 글자로 바꾼다) → 접속 나라(`PaymentCountryRouting`) → 기본값 순이다. 앱이 값을 속여도 웹 결제 링크가 보일 뿐 돈 · 권한에는 길이 없다. `webCheckoutUrl` 은 채널에 웹이 들 때만 오고 바깥 브라우저로 연다(웹뷰 금지).
 - `store` = 이 플랫폼의 스토어 결제사 id, 꺼져 있거나 키가 없으면 `null`.
 - `appAccountToken` = `UUID.nameUUIDFromBytes("payment-iap:" + accountId)`(`StoreAccountTokens`) — 앱이 `PurchaseParam.applicationUserName` 에 넣는다. 개인정보도 비밀도 아니다. 만드는 법은 확장 지점이 아니다(바꾸면 이미 산 구매의 주인 확인이 깨진다).
-- `products` = 이 플랫폼에서 파는 상품(`kind`, `itemType`·`itemRef` 또는 `plan`, `storeProductId`, 구글 구독이면 `basePlanId`).
+- `products` = 이 플랫폼에서 파는 상품(`kind`, `itemType`·`itemRef` 또는 `plan`, `storeProductId`, 구글 구독이면 `basePlanId`, 단건이면 `consumable` — 지도에서 `false` 로 적은 줄만 `false`, 나머지 단건은 `true`, 구독은 `null`). 앱은 `consumable: false` 인 상품을 소모하지 않는 1회 구매로 산다.
 - `WEB_ONLY` 여도 구매 확인은 열려 있다(예전 구매의 복원).
+
+**`GET /entitlements`** — `{ values: [{ itemType, itemRef }] }` = 상품 지도에서 `consumable: false` 로 적은 단건 줄 가운데 **부른 계정에게 `PAID` 인 단건(`ONE_TIME`) 주문이 있는 것**(예: 광고 제거). 결제사는 가리지 않는다(같은 품목이면 App Store 로 샀든 Google Play 로 샀든 같다). 권리는 따로 저장하지 않고 **주문 장부에서 바로 읽는다**(`PaymentLedgerStore.paidOneTimeItems`) — 스토어 확인 · 환불 회수 · 이중 지급 방지가 이미 장부에 있어 같은 사실을 두 곳에 쓰지 않는다. 환불이 하나라도 확정되면(`PARTIALLY_REFUNDED` · `REFUNDED`) 권리가 없다 — 스토어의 환불 알림이 이미 주문을 그렇게 바꾼다(회수를 따로 만들지 않았다). 소모성(`consumable: true`) 줄은 몇 번을 사도 나오지 않고, 다른 계정의 주문은 절대 섞이지 않으며, 탈퇴로 지워진 주문은 빠진다. 로그인이 필요하다.
 
 **`POST /web-checkout-link?platform=&storefront=`** — 웹 결제로 넘어갈 때 쓰는 **한 번 쓰는 자동 로그인 주소**: `{ url }` = `web-checkout-url` + `#handoff=<1회용 코드>`. `GET /config` 와 같은 방식으로 채널을 가려 웹이 없으면(`IAP_ONLY`) `404` 이고 코드를 만들지도 않는다. 코드는 `#` 조각에 실려 서버 · 프록시 접근 로그와 Referer 에 가지 않고, 응답은 `Cache-Control: no-store` 다. 웹은 조각을 읽어 `POST /api/v1/auth/web-handoff/redeem` 으로 세션을 받고 주소에서 지운다. 코드의 수명 · 폐기는 [auth-web-handoff](auth-web-handoff.md). `auth-web-handoff` 가 꺼져 있으면 이 경로 자체가 없다.
 
@@ -25,7 +27,7 @@
 | `422 PAYMENT.IAP_PRODUCT_UNKNOWN` · `IAP_PURCHASE_REVOKED` · `IAP_PURCHASE_NOT_ELIGIBLE` | 지급 없음(지도에 없는 상품 · 종류가 지도와 다름 / 환불 · 취소 · 끝난 구독 / 가족 공유 · 수량 2 이상). 끝낸다 |
 | `429 COMMON.TOO_MANY_REQUESTS` · `503 PAYMENT.UNAVAILABLE` | 요청 수 한도(`skeleton.payment.http.order-rate-limit` — 주문 만들기와 같은 값, 별도 통) / 스토어가 안 받거나 꺼짐. **끝내지 않고** 다음 실행에 다시 보낸다 |
 
-**상품 지도**(`products`): 한 줄은 단건(`item-type` + `item-ref`) 또는 구독(`plan`) 중 하나이고 스토어 상품 id(`ios-product-id` · `play-product-id`)를 쓰는 스토어만 적는다. 같은 스토어 상품 id 가 두 줄에 있으면 **기동 실패**(구글 구독은 `play-base-plan-id` 까지 같아야 겹침). **금액의 출처는 스토어다** — 주문 금액은 스토어가 말한 값이고(정산은 스토어 보고서), `PaymentCatalog.quote` 는 주문 이름과 「살 수 있는가」를 보는 데만 쓴다: 판매가 끝난 상품이어도 이미 돈을 냈으니 지급한다(이름만 `item-ref`). 구독 줄의 플랜 · 주기는 `SubscriptionPlans.find(plan)` 값이다.
+**상품 지도**(`products`): 한 줄은 단건(`item-type` + `item-ref`) 또는 구독(`plan`) 중 하나이고 스토어 상품 id(`ios-product-id` · `play-product-id`)를 쓰는 스토어만 적는다. 같은 스토어 상품 id 가 두 줄에 있으면 **기동 실패**(구글 구독은 `play-base-plan-id` 까지 같아야 겹침). **금액의 출처는 스토어다** — 주문 금액은 스토어가 말한 값이고(정산은 스토어 보고서), `PaymentCatalog.quote` 는 주문 이름과 「살 수 있는가」를 보는 데만 쓴다: 판매가 끝난 상품이어도 이미 돈을 냈으니 지급한다(이름만 `item-ref`). **`consumable`**(단건 줄에만, 기본 `true` = 소모성): `false` 면 비소모성 1회 구매(비소모성이라는 사실은 스토어가 구매 정보로 알려 주지 않아 이 지도가 정본이다). 구독 줄에 적으면 값이 무엇이든 **기동 실패**. 구독 줄의 플랜 · 주기는 `SubscriptionPlans.find(plan)` 값이다.
 
 **지역 스위치**(`channels`): `default` + `countries.<나라>.<ios|android>` 표. 웹이 드는 값(`IAP_AND_WEB` · `WEB_ONLY`)이 하나라도 있는데 `web-checkout-url` 이 비었으면 **기동 실패**(링크 없는 「웹 결제」 단추가 나가지 않게). 나라가 두 글자가 아니거나 플랫폼이 `ios` · `android` 가 아니면 기동 실패. 켜도 웹 결제는 바깥 브라우저의 기존 `payment-toss` 다. 2026-11 기준 앱 안 링크가 자유로운 곳은 미국뿐이다 — EU · 일본 링크는 애플 신청과 외부 구매 신고가 따로라 **이 스위치만으로 켜지 않는다**, 한국은 구글 2026-12-31 시행을 본 뒤 정한다. 앱 → 웹으로 넘어갈 때의 자동 로그인은 아래 `web-checkout-link` 다(`auth-web-handoff` 를 얹었을 때만).
 

@@ -46,6 +46,12 @@ interface PaymentLedgerStore {
      */
     fun hasPaidOrder(accountId: String): Boolean
 
+    /**
+     * 이 계정이 **지금 갖고 있는** 단건 품목 — [items] 가운데 `kind = ONE_TIME` 이고 `status = PAID` 인 주문이 이 계정에 있는 것. 결제사는 가리지 않는다.
+     * 환불이 하나라도 확정된 주문(`PARTIALLY_REFUNDED` · `REFUNDED`)과 결제 전 · 실패 주문은 세지 않는다. 다른 계정의 주문은 절대 섞이지 않는다. 잠그지 않는다 — 보여 주기용(권리 조회).
+     */
+    fun paidOneTimeItems(accountId: String, items: Collection<OrderItemKey>): Set<OrderItemKey>
+
     /** 잠그지 않고 커밋된 환불 줄을 읽는다 — 어느 주문의 줄인지 알아내기 · 보여 주기용. 이 값으로 상태를 바꾸는 판단을 하지 않는다. */
     fun findRefund(id: String): PaymentRefund?
 

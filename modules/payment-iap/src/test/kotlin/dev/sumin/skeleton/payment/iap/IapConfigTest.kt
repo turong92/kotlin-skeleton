@@ -79,6 +79,28 @@ class IapConfigTest {
     }
 
     @Test
+    fun `consumable is a one-time line setting that defaults to true and a subscription line cannot carry it`() {
+        val ads = cheer.copy(itemType = "ads-removal", itemRef = "v1", iosProductId = "com.example.adsfree", playProductId = "ads_free", consumable = false)
+        val monthly = IapProperties.Product(plan = "premium-monthly", iosProductId = "com.example.premium.monthly", playProductId = "premium")
+        val products = ConfiguredIapProducts(properties(products = listOf(cheer, ads, monthly)))
+
+        assertThat(products.find("appstore", "com.example.cheer3000", null)?.consumable).isTrue()
+        assertThat(products.find("appstore", "com.example.adsfree", null)?.consumable).isFalse()
+        properties(products = listOf(cheer, ads)).validate()
+        assertThatThrownBy { properties(products = listOf(monthly.copy(consumable = false))).validate() }.hasMessageContaining("consumable")
+        assertThatThrownBy { properties(products = listOf(monthly.copy(consumable = true))).validate() }.hasMessageContaining("consumable")
+    }
+
+    @Test
+    fun `lines of one item must agree on consumable - an iOS line false and a Play line left empty fails the start`() {
+        val ios = cheer.copy(itemType = "ads-removal", itemRef = "v1", iosProductId = "com.example.adsfree", playProductId = null, consumable = false)
+        val play = ios.copy(iosProductId = null, playProductId = "ads_free", consumable = null)
+
+        assertThatThrownBy { properties(products = listOf(ios, play)).validate() }.hasMessageContaining("consumable").hasMessageContaining("ads-removal")
+        properties(products = listOf(ios, play.copy(consumable = false))).validate()
+    }
+
+    @Test
     fun `the product map finds a purchase by its store product id and tells the platforms apart`() {
         val monthly = IapProperties.Product(plan = "premium-monthly", iosProductId = "com.example.premium.monthly", playProductId = "premium", playBasePlanId = "monthly")
         val products = ConfiguredIapProducts(properties(products = listOf(cheer, monthly)))

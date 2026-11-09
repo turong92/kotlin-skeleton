@@ -73,7 +73,8 @@ class IapAutoConfiguration {
             limiter: PaymentOrderRateLimiter,
             clientIps: ObjectProvider<ClientIps>,
             properties: IapProperties,
-        ): IapController = IapController(callers, purchases, products, channels, routing, router, limiter, clientIps.getIfAvailable { ClientIps() }, properties)
+            ledger: PaymentLedgerStore,
+        ): IapController = IapController(callers, purchases, products, channels, routing, router, limiter, clientIps.getIfAvailable { ClientIps() }, properties, ledger)
     }
 
     /**

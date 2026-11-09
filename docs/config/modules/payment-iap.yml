@@ -1,7 +1,7 @@
 # payment-iap — 앱용 인앱결제 HTTP(설정 응답 + 구매 확인). 기본 꺼짐. 스토어 모듈(payment-appstore · payment-googleplay)을 같이 골라야 의미가 있다.
 skeleton:
   payment-iap:
-    enabled: false                       # true 면 GET /api/v1/payments/iap/config · POST /api/v1/payments/iap/{store}/purchases 가 선다 (장부(payment-jdbc)가 있을 때만)
+    enabled: false                       # true 면 GET /api/v1/payments/iap/config · POST /api/v1/payments/iap/{store}/purchases · GET /api/v1/payments/iap/entitlements 가 선다 (장부(payment-jdbc)가 있을 때만)
     web-checkout-url: ""                 # 웹 결제(예: payment-toss) 화면 주소, 예: https://example.com/pricing — 앱이 바깥 브라우저로 연다. 채널에 웹이 드는 값이 하나라도 있으면 비울 수 없다(기동 실패)
     channels:
       default: IAP_ONLY                  # IAP_ONLY | IAP_AND_WEB | WEB_ONLY — 기본: 모든 나라 · 플랫폼 인앱결제만 (= 지역 스위치 꺼짐)
@@ -14,6 +14,12 @@ skeleton:
       #   item-ref: cheer-3000
       #   ios-product-id: com.example.sample.cheer3000
       #   play-product-id: cheer_3000
+      #   consumable: true               # 단건 줄에만, 기본 true(소모성). false = 비소모성 1회 구매 → GET /iap/entitlements 에 권리로 나온다. 구독 줄에 적으면 기동 실패
+      # - item-type: ads-removal         # 예시일 뿐 기본값이 아니다 — 광고 제거(비소모성 1회 구매)
+      #   item-ref: v1
+      #   consumable: false
+      #   ios-product-id: com.example.sample.adsfree
+      #   play-product-id: ads_free
       # - plan: premium-monthly-krw      # 구독: SubscriptionPlans 의 플랜 코드
       #   ios-product-id: com.example.sample.premium.monthly
       #   play-product-id: premium       # 구글 구독 상품 id

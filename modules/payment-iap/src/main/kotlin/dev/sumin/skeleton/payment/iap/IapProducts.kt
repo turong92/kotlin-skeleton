@@ -13,6 +13,8 @@ data class IapProduct(
     val iosProductId: String? = null,
     val playProductId: String? = null,
     val playBasePlanId: String? = null,
+    /** 단건만 뜻이 있다 - `false` 면 비소모성(1회 구매 + 권리). 기본 `true`. */
+    val consumable: Boolean = true,
 ) {
     val kind: StorePurchaseKind get() = if (plan != null) StorePurchaseKind.SUBSCRIPTION else StorePurchaseKind.ONE_TIME
 
@@ -38,7 +40,7 @@ interface IapProducts {
 
 class ConfiguredIapProducts(properties: IapProperties) : IapProducts {
     private val products = properties.products.map {
-        IapProduct(it.itemType?.trim(), it.itemRef?.trim(), it.plan?.trim(), it.iosProductId?.trim()?.takeIf(String::isNotEmpty), it.playProductId?.trim()?.takeIf(String::isNotEmpty), it.playBasePlanId?.trim()?.takeIf(String::isNotEmpty))
+        IapProduct(it.itemType?.trim(), it.itemRef?.trim(), it.plan?.trim(), it.iosProductId?.trim()?.takeIf(String::isNotEmpty), it.playProductId?.trim()?.takeIf(String::isNotEmpty), it.playBasePlanId?.trim()?.takeIf(String::isNotEmpty), it.consumable ?: true)
     }
 
     override fun all(): List<IapProduct> = products

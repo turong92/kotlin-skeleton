@@ -12,6 +12,7 @@ import dev.sumin.skeleton.payment.PaymentLedgerConflictException
 import dev.sumin.skeleton.payment.PaymentProviderPaymentConflictException
 import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentLedgerTx
+import dev.sumin.skeleton.payment.OrderItemKey
 import dev.sumin.skeleton.payment.PaymentOrder
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentRefund
@@ -136,6 +137,16 @@ class JdbcPaymentLedgerStore(
             "select 1 from payment_orders where account_id = :account and paid_at is not null and coalesce(paid_amount, amount) > 0 and provider not in ('${PaymentOrders.FREE_PROVIDER}', '${PaymentOrders.EXEMPT_PROVIDER}') limit 1",
             mapOf("account" to accountId), Int::class.java,
         ).isNotEmpty()
+
+    override fun paidOneTimeItems(accountId: String, items: Collection<OrderItemKey>): Set<OrderItemKey> {
+        val asked = items.toSet()
+        if (asked.isEmpty()) return emptySet()
+        // 계정의 색인(account_id, …)으로 좁히고 품목 종류로 거른 뒤, 정확한 (종류, 번호) 짝은 여기서 맞춘다 - 두 방언에 같은 SQL
+        return jdbc.query(
+            "select item_type, item_ref from payment_orders where account_id = :account and kind = 'ONE_TIME' and status = 'PAID' and item_type in (:types)",
+            mapOf("account" to accountId, "types" to asked.map { it.itemType }.toSet()),
+        ) { rs, _ -> OrderItemKey(rs.getString("item_type"), rs.getString("item_ref")) }.filter { it in asked }.toSet()   // distinct 는 SQL 에서 하지 않는다 - MySQL 의 대소문자 무시 정렬이 'v1' · 'V1' 을 합칠 수 있어 정확한 짝은 여기서 가린다
+    }
 
     override fun findRefund(id: String): PaymentRefund? =
         jdbc.query("${refundRows.refundSelect} where id = :id", mapOf("id" to id)) { rs, _ -> refundRows.refund(rs) }.firstOrNull()

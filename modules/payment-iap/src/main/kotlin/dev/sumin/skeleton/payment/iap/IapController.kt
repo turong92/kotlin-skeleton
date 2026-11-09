@@ -3,11 +3,14 @@ package dev.sumin.skeleton.payment.iap
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.FieldValidationException
+import dev.sumin.skeleton.common.ListResponse
 import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
 import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.common.web.ClientIps
+import dev.sumin.skeleton.payment.OrderItemKey
+import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentProviderRouter
 import dev.sumin.skeleton.payment.PaymentStoreGateway
 import dev.sumin.skeleton.payment.StoreAccountTokens
@@ -43,7 +46,12 @@ data class IapProductResponse(
     val storeProductId: String,
     /** 구글 구독의 기본 요금제 id. */
     val basePlanId: String?,
+    /** 단건만 - `false` 면 비소모성(앱이 소모하지 않는다, 권리는 `/entitlements`). 구독이면 null. */
+    val consumable: Boolean?,
 )
+
+/** 부른 계정이 지금 갖고 있는 비소모성 품목 하나. */
+data class IapEntitlementResponse(val itemType: String, val itemRef: String)
 
 data class IapConfigResponse(
     /** `IAP_ONLY` · `IAP_AND_WEB` · `WEB_ONLY`. */
@@ -68,7 +76,7 @@ data class IapPurchaseResponse(
 )
 
 /**
- * 앱용 인앱결제 HTTP 둘(스펙 §3) - 설정 응답과 구매 확인. 로그인이 필요하고, 구매 확인에는 주문 만들기와 같은 요청 수 한도가 걸린다(스토어 API 할당량 보호).
+ * 앱용 인앱결제 HTTP 셋(스펙 §3) - 설정 응답 · 구매 확인 · 비소모성 권리 조회. 로그인이 필요하고, 구매 확인에는 주문 만들기와 같은 요청 수 한도가 걸린다(스토어 API 할당량 보호).
  * `@Transactional` 없음 - 스토어 호출이 트랜잭션 안에 들어가면 안 된다.
  */
 @RestController
@@ -84,6 +92,7 @@ class IapController(
     private val limiter: PaymentOrderRateLimiter,
     private val clientIps: ClientIps,
     private val properties: IapProperties,
+    private val ledger: PaymentLedgerStore,
 ) {
     @Operation(
         summary = "How this app sells (in-app only, in-app + web link, web only), the account token and the store products",
@@ -105,9 +114,24 @@ class IapController(
         val channel = channels.channelOf(country, target)
         val store = target.store.takeIf { it in router.providerIds(PaymentStoreGateway::class) }
         val items = products.forPlatform(target).map {
-            IapProductResponse(it.kind.name, it.itemType, it.itemRef, it.plan, checkNotNull(it.storeProductId(target)), it.basePlanId(target))
+            IapProductResponse(it.kind.name, it.itemType, it.itemRef, it.plan, checkNotNull(it.storeProductId(target)), it.basePlanId(target), it.consumable.takeIf { _ -> it.plan == null })
         }
         return Response.ok(IapConfigResponse(channel.name, properties.webCheckoutUrl.takeIf { channel.allowsWeb }, store, StoreAccountTokens.of(account), items))
+    }
+
+    @Operation(
+        summary = "The non-consumable items (products with consumable: false) the caller owns now",
+        description = "A product line counts when the caller has a PAID one-time order for its item - whichever store sold it. A confirmed refund (PARTIALLY_REFUNDED · REFUNDED) takes the entitlement away " +
+            "(the store's refund notices already change the order), consumable lines never show, and other accounts' orders never mix in. Read straight from the order ledger; there is no separate entitlement table.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.LIST, value = IapEntitlementResponse::class)
+    @GetMapping("/entitlements")
+    fun entitlements(authentication: Authentication?): ListResponse<IapEntitlementResponse> {
+        val account = callers.account(authentication)
+        val lines = products.all().filter { it.plan == null && !it.consumable && it.itemType != null && it.itemRef != null }
+            .map { OrderItemKey(checkNotNull(it.itemType), checkNotNull(it.itemRef)) }.distinct()
+        val owned = ledger.paidOneTimeItems(account, lines)
+        return Response.list(lines.filter { it in owned }.map { IapEntitlementResponse(it.itemType, it.itemRef) })
     }
 
     @Operation(
