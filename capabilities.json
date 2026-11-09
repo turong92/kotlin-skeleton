@@ -1003,7 +1003,11 @@
       "basePaths": ["/api/v1/auth/web-handoff"],
       "secrets": [],
       "docs": ["docs/modules/auth-web-handoff.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["web-handoff-landing"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
       "notFor": [
         "코드를 내는 쪽(지금은 payment-iap 의 web-checkout-link)이 없으면 쓸 일이 없다",
         "auth-session(세션 장치)이 없으면 기동 실패 — 코드는 열린 세션에 묶여야 낸다",
