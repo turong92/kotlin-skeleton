@@ -107,5 +107,9 @@ class PointIssuer : RewardIssuer {
     override val type = "point"
     override fun validate(params: Map<String, String>) = require(params["amount"]?.toLongOrNull()?.let { it > 0 } == true) { "amount must be a positive number" }
     override fun issue(grant: RewardGrantView) = IssuedReward("res")
-    override fun describe(params: Map<String, String>, locale: Locale) = RewardLabel("Points", "p")
+    val describedIn = mutableListOf<Locale>()
+    override fun describe(params: Map<String, String>, locale: Locale): RewardLabel {
+        describedIn += locale
+        return RewardLabel("Points", "p")
+    }
 }

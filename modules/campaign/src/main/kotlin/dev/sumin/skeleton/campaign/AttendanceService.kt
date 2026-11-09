@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.campaign
 
+import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.reward.RewardIssuer
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.reward.RewardGrants
@@ -26,6 +27,9 @@ class AttendanceService(
     private val issuers: () -> List<RewardIssuer>,
     private val zone: CampaignZone,
     private val time: TimeProvider,
+    /** 받는 사람 언어를 아는 곳(`account`) - 없으면 [locale] */
+    private val facts: () -> AccountFacts? = { null },
+    /** 계정 언어를 모를 때 쓰는 언어 */
     private val locale: Locale = Locale.getDefault(),
 ) {
     fun checkIn(accountId: String, campaignId: String): CheckInResult = store.inTransaction {
@@ -55,7 +59,7 @@ class AttendanceService(
                     if (grants.record(accountId, spec.type, spec.params, SOURCE_TYPE, "$key:$i") != null) earned += spec
                 }
             }
-            CheckInResult(false, total, streak, earned.map { RewardLine(it.type, label(it)) })
+            CheckInResult(false, total, streak, earned.map { RewardLine(it.type, label(it, accountId)) })
         }
     }
 
@@ -85,8 +89,9 @@ class AttendanceService(
         return campaign
     }
 
-    private fun label(spec: RewardSpec): String =
-        runCatching { issuers().firstOrNull { it.type == spec.type }?.describe(spec.params, locale)?.title }.getOrNull() ?: spec.type
+    /** 보상 이름 - 출석한 사람의 계정 언어로(JVM 기본 언어가 en 인 서버에서 한국 계정에 영어가 가지 않게) */
+    private fun label(spec: RewardSpec, accountId: String): String =
+        runCatching { issuers().firstOrNull { it.type == spec.type }?.describe(spec.params, facts()?.locale(accountId) ?: locale)?.title }.getOrNull() ?: spec.type
 
     private fun streakEndingOn(days: List<LocalDate>, today: LocalDate): Int {
         val set = days.toHashSet()

@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.campaign
 
+import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.time.Instant
 import java.time.ZoneId
@@ -25,6 +26,28 @@ class CampaignTransactionBoundaryTest {
         assertEquals(false, result.alreadyChecked)
         assertEquals(listOf(RewardLine("point", "point")), result.rewards)
         assertEquals(listOf(Triple("acc_1", "point", "attendance/cmp_1:acc_1:2026-10-28:daily:0")), grants.recorded)
+    }
+
+    @Test
+    fun `the reward name is made in the checking-in account's language even when the JVM default is English`() {
+        val saved = java.util.Locale.getDefault()
+        java.util.Locale.setDefault(java.util.Locale.ENGLISH)
+        try {
+            store.insert(Campaign("cmp_1", "attendance", "Daily", true, Instant.parse("2026-01-01T00:00:00Z"), null, config, time.now(), time.now()))
+            val issuer = PointIssuer()
+            val facts = object : AccountFacts {
+                override fun createdAt(accountId: String): Instant? = null
+                override fun locale(accountId: String): java.util.Locale? = if (accountId == "acc_ko") java.util.Locale.KOREAN else null
+            }
+            val zone = CampaignZone(ZoneId.of("Asia/Seoul"))
+
+            AttendanceService(store, grants, { listOf(issuer) }, zone, time, { facts }).checkIn("acc_ko", "cmp_1")
+            AttendanceService(store, grants, { listOf(issuer) }, zone, time, { facts }).checkIn("acc_other", "cmp_1")
+
+            assertEquals(listOf(java.util.Locale.KOREAN, java.util.Locale.ENGLISH), issuer.describedIn)
+        } finally {
+            java.util.Locale.setDefault(saved)
+        }
     }
 
     @Test

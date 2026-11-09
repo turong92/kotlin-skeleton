@@ -68,7 +68,8 @@ class CampaignAutoConfiguration {
         issuers: ObjectProvider<RewardIssuer>,
         zone: CampaignZone,
         time: ObjectProvider<TimeProvider>,
-    ): AttendanceService = AttendanceService(store, grants, { issuers.orderedStream().toList() }, zone, time.getIfAvailable { TimeProvider.systemUtc() })
+        facts: ObjectProvider<AccountFacts>,
+    ): AttendanceService = AttendanceService(store, grants, { issuers.orderedStream().toList() }, zone, time.getIfAvailable { TimeProvider.systemUtc() }, { facts.getIfAvailable() })
 
     @Bean
     @ConditionalOnBean(Campaigns::class, RewardGrants::class)
