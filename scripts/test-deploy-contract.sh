@@ -113,7 +113,18 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   else
     echo "  (이미지 빌드 — 몇 분 걸린다)"
     IMAGES="$IMAGES $IMG"
-    if docker build -q --build-arg "APP=$APP" -t "$IMG" "$SRC" >/dev/null; then pass "이미지 빌드 ($IMG)"; else fail "이미지 빌드 실패"; continue; fi
+    # 성공이면 조용히, 실패하면 빌드 출력 마지막 60줄을 보여 준다(gradle 오류 본문이 CI 로그에 남도록)
+    BUILD_LOG="$(mktemp)"
+    if docker build --progress=plain --build-arg "APP=$APP" -t "$IMG" "$SRC" >"$BUILD_LOG" 2>&1; then
+      pass "이미지 빌드 ($IMG)"
+      rm -f "${BUILD_LOG:?}"
+    else
+      fail "이미지 빌드 실패"
+      echo "  --- docker build 출력 (마지막 60줄) ---"
+      tail -n 60 "$BUILD_LOG" | sed 's/^/    | /'
+      rm -f "${BUILD_LOG:?}"
+      continue
+    fi
   fi
 
   echo "-- A. 계약의 환경변수만으로 뜬다"
