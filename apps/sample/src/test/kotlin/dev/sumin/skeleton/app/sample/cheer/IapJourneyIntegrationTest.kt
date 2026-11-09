@@ -127,6 +127,27 @@ class IapJourneyIntegrationTest : CheerIntegrationBase() {
     }
 
     @Test
+    fun `the ads-removal purchase is a non-consumable - a restored transaction is the same order, the entitlement shows, and Apple's REFUND takes it away`() {
+        accountOf("user@example.com")
+        val token = read(config("ios").andExpect { status { isOk() }; jsonPath("$.value.products[?(@.itemType=='ads-removal')].consumable") { value(false) } }, "$.value.appAccountToken")
+        get("$iap/entitlements", user).andExpect { status { isOk() }; jsonPath("$.values.length()") { value(0) } }
+        fun tx(id: String) = transactionJson(transactionId = id, originalTransactionId = "2000000000000201", type = "Non-Consumable", productId = "com.example.sample.removeads", price = 3_300_000, currency = "KRW", appAccountToken = token, purchaseDate = Instant.now().minusSeconds(60))
+        apple.knows("2000000000000201", tx("2000000000000201"))
+        apple.knows("2000000000000202", tx("2000000000000202"))   // 복원 거래 - 새 transactionId, 같은 originalTransactionId
+
+        post("$iap/appstore/purchases", user, """{"transactionId":"2000000000000201"}""").andExpect { status { isOk() } }
+        post("$iap/appstore/purchases", user, """{"transactionId":"2000000000000202"}""").andExpect { status { isOk() } }
+
+        assertEquals(1, jdbc.sql("select count(*) from payment_orders where item_type = 'ads-removal'").query(Long::class.java).single(), "the restore is the same order")
+        get("$iap/entitlements", user).andExpect { status { isOk() }; jsonPath("$.values.length()") { value(1) }; jsonPath("$.values[0].itemType") { value("ads-removal") }; jsonPath("$.values[0].itemRef") { value("ads-removal") } }
+
+        val refunded = transactionJson(transactionId = "2000000000000201", originalTransactionId = "2000000000000201", type = "Non-Consumable", productId = "com.example.sample.removeads", price = 3_300_000, currency = "KRW", appAccountToken = token,
+            purchaseDate = Instant.now().minusSeconds(60), revocationDate = Instant.now(), revocationType = "REFUND_FULL", revocationPercentage = 100_000)
+        mvc.post("$PAYMENTS/webhooks/appstore") { contentType = org.springframework.http.MediaType.APPLICATION_JSON; content = notificationBody(chain, "REFUND", uuid = "aaaaaaaa-0000-4000-8000-000000000201", transaction = refunded) }.andExpect { status { isOk() } }
+        await { get("$iap/entitlements", user).andReturn().response.contentAsString.takeIf { it.contains("\"values\":[]") } }
+    }
+
+    @Test
     fun `a Google Play cheer follows the same road - confirmed with Google, recorded, and taken back by the voided-purchase push`() {
         val me = accountOf("user@example.com")
         val accountToken = read(config("android").andExpect { status { isOk() }; jsonPath("$.value.store") { value("googleplay") } }, "$.value.appAccountToken")

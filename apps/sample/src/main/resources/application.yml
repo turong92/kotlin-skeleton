@@ -256,6 +256,11 @@ skeleton:
         item-ref: cheer-3000
         ios-product-id: com.example.sample.cheer3000
         play-product-id: cheer_3000
+      - item-type: ads-removal          # 단건(비소모성): 광고 제거 1회 구매 - 카탈로그에 없는 품목이라 주문 이름은 item-ref 로 남는다. GET /iap/entitlements 에 권리로 나온다
+        item-ref: ads-removal
+        consumable: false
+        ios-product-id: com.example.sample.removeads
+        play-product-id: removeads
       - plan: standard                  # 월 구독: catalog 씨앗의 스탠다드 플랜. 구독을 켠 앱에서만 지급된다(SKELETON_PAYMENT_SUBSCRIPTION_ENABLED=true)
         ios-product-id: com.example.sample.standard.monthly
         play-product-id: standard

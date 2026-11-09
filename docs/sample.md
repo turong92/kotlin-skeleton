@@ -265,7 +265,7 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 
 | 값 | 이름 |
 |---|---|
-| 상품 지도 | `application.yml` 의 `skeleton.payment-iap.products` - 응원 `cheer-3000` ↔ 스토어 상품 `com.example.sample.cheer3000`(iOS) · `cheer_3000`(Android), 월 구독 플랜 `standard`(구독을 켠 앱에서만 지급) |
+| 상품 지도 | `application.yml` 의 `skeleton.payment-iap.products` - 응원 `cheer-3000` ↔ 스토어 상품 `com.example.sample.cheer3000`(iOS) · `cheer_3000`(Android), 광고 제거(비소모성 `consumable: false`) `ads-removal/ads-removal` ↔ `com.example.sample.removeads`(iOS) · `removeads`(Android) — 산 계정의 권리는 `GET /iap/entitlements`, 월 구독 플랜 `standard`(구독을 켠 앱에서만 지급) |
 | 지역 스위치 | `skeleton.payment-iap.channels` - 기본 `IAP_ONLY`(모든 나라 인앱결제만). 미국 예시는 yml 주석. 웹이 드는 값을 켜면 `SKELETON_PAYMENT_IAP_WEB_CHECKOUT_URL` 이 필요하고(없으면 기동 실패), 앱은 `POST …/iap/web-checkout-link` 의 한 번 쓰는 자동 로그인 주소로 웹에 넘어간다 |
 | 스토어 켜기 | `SKELETON_PAYMENT_APPSTORE_ENABLED=true` + `_PRIVATE_KEY`(비밀) · `_ISSUER_ID` · `_KEY_ID` · `_BUNDLE_ID` · `_APP_APPLE_ID` / `SKELETON_PAYMENT_GOOGLEPLAY_ENABLED=true` + `_SERVICE_ACCOUNT`(비밀) · `_PACKAGE_NAME` · `_PUBSUB_AUDIENCE` · `_PUBSUB_SERVICE_ACCOUNT_EMAIL`. 키 없이 뜨면 `GET /iap/config` 의 `store` 가 `null` |
 
