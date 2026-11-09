@@ -45,6 +45,15 @@ class AppStoreFetchTest {
     }
 
     @Test
+    fun `a restored one-time purchase is the original purchase - the order key is the original transaction id`() {
+        prod.knows("2000000000000099", transactionJson(transactionId = "2000000000000099", originalTransactionId = "2000000000000001"))
+
+        val purchase = gateway.fetch(StoreClaim("2000000000000099"))!!
+
+        assertThat(purchase.providerPaymentId).isEqualTo("2000000000000001")
+    }
+
+    @Test
     fun `a purchase the production host does not know is asked of the sandbox and is a test purchase`() {
         sandbox.knows("2000000000000001", transactionJson(environment = "Sandbox"))
         val purchase = gateway.fetch(claim)!!

@@ -92,7 +92,9 @@ class AppStorePaymentProvider(
             mode = modeOf(tx),
             kind = StorePurchaseKind.ONE_TIME,
             productId = tx.text("productId") ?: throw unreadable(),
-            providerPaymentId = tx.text("transactionId") ?: throw unreadable(),
+            // 단건의 주문 키는 원 거래 번호다 - 비소모성을 복원하면 새 transactionId 가 오지만 originalTransactionId 는 같고(소모성은 둘이 같다),
+            // 환불 알림도 원 거래를 가리킨다. transactionId 로 두면 복원이 같은 계정에 주문을 하나 더 만들고 환불은 그 중 하나만 닫아 권리가 남는다.
+            providerPaymentId = tx.text("originalTransactionId") ?: tx.text("transactionId") ?: throw unreadable(),
             accountToken = tx.text("appAccountToken"),
             amount = amountOf(tx),
             quantity = tx["quantity"]?.asInt(1) ?: 1,
@@ -250,14 +252,16 @@ class AppStorePaymentProvider(
         val eventMode = modeOf(tx)
         val transactionId = tx.text("transactionId") ?: error("App Store payload without a transaction id")
         val originalId = tx.text("originalTransactionId") ?: transactionId
+        // 단건은 원 거래 번호(fetch 의 oneTime 과 같은 기준), 구독의 환불은 그 갱신 거래
+        val paymentId = if (subscription) transactionId else originalId
         val items = tx.text("productId")?.let { listOf(PushedItem(it, 1)) }.orEmpty()
         return when (type) {
             "REFUND", "REFUND_REVERSED" -> PushedRefund(
                 eventId = eventId,
                 occurredAt = occurredAt,
                 kind = PushedRefundKind.REFUND,
-                providerRefundId = "refund-$transactionId",
-                providerPaymentId = transactionId,
+                providerRefundId = "refund-$paymentId",
+                providerPaymentId = paymentId,
                 status = if (type == "REFUND") PushedRefundStatus.APPROVED else PushedRefundStatus.REVERSED,
                 amount = refundAmount(tx),
                 providerSubscriptionId = originalId.takeIf { subscription },

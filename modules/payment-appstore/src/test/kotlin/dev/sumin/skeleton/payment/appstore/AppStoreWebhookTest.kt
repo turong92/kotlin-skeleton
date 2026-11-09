@@ -108,6 +108,15 @@ class AppStoreWebhookTest {
     }
 
     @Test
+    fun `a refund of a one-time purchase names the original transaction - a restore transaction is the same order`() {
+        val refunded = transactionJson(transactionId = "2000000000000099", originalTransactionId = "2000000000000001", revocationDate = NOW, revocationType = "REFUND_FULL", revocationPercentage = 100_000)
+
+        val refund = event("REFUND", transaction = refunded, renewal = null) as PushedRefund
+
+        assertThat(refund.providerPaymentId).isEqualTo("2000000000000001")
+    }
+
+    @Test
     fun `a prorated refund is the share Apple names`() {
         val refunded = transactionJson(price = 10_000_000, revocationDate = NOW, revocationType = "REFUND_PRORATED", revocationPercentage = 25_000)
         val refund = event("REFUND", transaction = refunded, renewal = null) as PushedRefund
