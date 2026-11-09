@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.reward
 
+import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.reward.RewardGrantView
 import dev.sumin.skeleton.common.reward.RewardLabel
 import dev.sumin.skeleton.common.reward.RewardPermanentFailure
@@ -22,7 +23,7 @@ class RewardWorkerTest {
     private val notified = mutableListOf<Pair<RewardGrantView, RewardLabel>>()
 
     private fun worker(issuer: ScriptedIssuer?, notifier: RewardNotifier = RewardNotifier { g, l -> notified += g to l }) =
-        RewardWorker(store, { listOfNotNull(issuer) }, { notifier }, time, Locale.ENGLISH)
+        RewardWorker(store, { listOfNotNull(issuer) }, { notifier }, time, locale = Locale.ENGLISH)
 
     private fun grant(): String = service.record("acc_1", "point", mapOf("amount" to "100"), "attendance", "c1:acc_1:2026-10-28:daily:0")!!
 
@@ -39,6 +40,31 @@ class RewardWorkerTest {
         assertEquals(1, issuer.issued.get())
         assertEquals(RewardGrantStatus.ISSUED, store.find(id)!!.status)
         assertEquals("res_$id", store.find(id)!!.resultRef)
+    }
+
+    @Test
+    fun `the notification text is made in the recipient's account language even when the JVM default is English`() {
+        val saved = Locale.getDefault()
+        Locale.setDefault(Locale.ENGLISH)
+        try {
+            val issuer = ScriptedIssuer()
+            val facts = object : AccountFacts {
+                override fun createdAt(accountId: String): Instant? = null
+                override fun locale(accountId: String): Locale? = if (accountId == "acc_1") Locale.KOREAN else null
+            }
+            val w = RewardWorker(store, { listOf(issuer) }, { RewardNotifier { g, l -> notified += g to l } }, time, { facts })
+
+            w.process(grant())
+            assertEquals(listOf(Locale.KOREAN), issuer.describedIn)
+
+            // 계정 언어를 모르면(설정 안 한 계정 · account 모듈 없음) JVM 기본 언어로 돌아간다
+            val other = RewardWorker(store, { listOf(issuer) }, { RewardNotifier { g, l -> notified += g to l } }, time)
+            other.process(service.record("acc_2", "point", mapOf("amount" to "100"), "attendance", "c1:acc_2:2026-10-28:daily:0")!!)
+            assertEquals(Locale.KOREAN, issuer.describedIn[0])
+            assertEquals(Locale.ENGLISH, issuer.describedIn[1])
+        } finally {
+            Locale.setDefault(saved)
+        }
     }
 
     @Test

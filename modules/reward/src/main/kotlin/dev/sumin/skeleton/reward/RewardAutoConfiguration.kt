@@ -2,6 +2,7 @@ package dev.sumin.skeleton.reward
 
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
+import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.reward.RewardIssuer
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.reward.erasure.RewardAccountErasureListener
@@ -47,11 +48,13 @@ class RewardAutoConfiguration {
         issuers: ObjectProvider<RewardIssuer>,
         notifier: ObjectProvider<RewardNotifier>,
         time: ObjectProvider<TimeProvider>,
+        facts: ObjectProvider<AccountFacts>,
     ): RewardWorker = RewardWorker(
         store,
         { issuers.orderedStream().toList() },
         { notifier.getObject() },
         time.getIfAvailable { TimeProvider.systemUtc() },
+        { facts.getIfAvailable() },
     )
 
     @Bean

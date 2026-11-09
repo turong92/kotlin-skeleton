@@ -61,6 +61,7 @@ class RecordingTasks : RewardTasks {
 /** [failures] 번 던진 뒤 성공하는 지급기. 성공 횟수를 센다 */
 class ScriptedIssuer(override val type: String = "point", var failures: Int = 0, private val permanent: Boolean = false, private val notify: Boolean = true) : RewardIssuer {
     val issued = AtomicInteger()
+    val describedIn = java.util.concurrent.CopyOnWriteArrayList<Locale>()
     override fun validate(params: Map<String, String>) = Unit
     override fun issue(grant: RewardGrantView): IssuedReward {
         if (failures > 0) {
@@ -71,5 +72,10 @@ class ScriptedIssuer(override val type: String = "point", var failures: Int = 0,
         issued.incrementAndGet()
         return IssuedReward("res_${grant.id}", notify)
     }
-    override fun describe(params: Map<String, String>, locale: Locale) = RewardLabel("Points", "You got ${params["amount"]} points", "/rewards/points")
+    override fun describe(params: Map<String, String>, locale: Locale): RewardLabel {
+        describedIn += locale
+        return label(params)
+    }
+
+    private fun label(params: Map<String, String>) = RewardLabel("Points", "You got ${params["amount"]} points", "/rewards/points")
 }

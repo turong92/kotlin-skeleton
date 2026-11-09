@@ -52,6 +52,24 @@ class AccountFactsTest {
     }
 
     @Test
+    fun `locale answers the language saved on the account - nothing when unset, blank or erased`() {
+        val at = h.time.now()
+        fun add(id: String, locale: String?, status: AccountStatus = AccountStatus.ACTIVE) =
+            h.repo.insert(Account(id, "$id@example.com", true, status, setOf("USER"), null, null, null, at, at).copy(locale = locale), emptyList())
+        add("acc_ko", "ko")
+        add("acc_tag", "en-US")
+        add("acc_none", null)
+        add("acc_blank", " ")
+        add("acc_e", "ko", AccountStatus.ERASED)
+        assertEquals(java.util.Locale.KOREAN, facts.locale("acc_ko"))
+        assertEquals(java.util.Locale.forLanguageTag("en-US"), facts.locale("acc_tag"))
+        assertNull(facts.locale("acc_none"))
+        assertNull(facts.locale("acc_blank"))
+        assertNull(facts.locale("acc_e"))
+        assertNull(facts.locale("acc_never"))
+    }
+
+    @Test
     fun `activeAmong keeps only the active accounts`() {
         insert("acc_a", "a@example.com", true)
         insert("acc_p", "p@example.com", false, AccountStatus.PENDING_VERIFICATION)

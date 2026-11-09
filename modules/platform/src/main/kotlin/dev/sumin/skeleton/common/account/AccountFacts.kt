@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.common.account
 
 import java.time.Instant
+import java.util.Locale
 
 /**
  * 계정에 대한 사실 하나를 모듈이 `account` 를 모르고 묻는 자리(`RoleHolders` 와 같은 선례) — 이벤트의 「새 계정만」 판정이 쓴다.
@@ -15,6 +16,9 @@ fun interface AccountFacts {
 
     /** [verifiedEmail] 의 반대 - 이 주소가 **확인된** 살아 있는 계정의 id. 확인 전 · 없는 · 지워진 계정은 null (초대가 「이미 멤버인 주소」를 거를 때). 기본은 null(모르는 구현은 아무 주소도 계정에 잇지 않는다) */
     fun accountIdByVerifiedEmail(email: String): String? = null
+
+    /** 계정에 저장된 언어(받는 사람 언어로 알림 · 메일 문구를 만들 때). 설정 안 한 · 없는 · 지워진 계정은 null - 부르는 쪽이 자기 기본 언어를 쓴다. 기본은 null */
+    fun locale(accountId: String): Locale? = null
 
     /** 주어진 id 중 **활성** 계정(로그인할 수 있는 계정)만 — 대기 · 정지 · 삭제 유예 · 지워진 · 없는 계정은 빠진다. 계정을 모르는 모듈의 목록(멤버 등)을 거를 때 쓴다. 기본은 전원 통과(모르는 구현은 아무도 거르지 않는다) */
     fun activeAmong(accountIds: Collection<String>): Set<String> = accountIds.toSet()

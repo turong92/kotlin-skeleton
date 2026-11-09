@@ -2,6 +2,7 @@ package dev.sumin.skeleton.account
 
 import dev.sumin.skeleton.common.account.AccountFacts
 import java.time.Instant
+import java.util.Locale
 
 /** [AccountFacts] 를 계정 저장소로 — 지워진(`ERASED`) 계정은 없는 계정과 같다 */
 class RepositoryAccountFacts(private val accounts: () -> AccountRepository) : AccountFacts {
@@ -13,6 +14,10 @@ class RepositoryAccountFacts(private val accounts: () -> AccountRepository) : Ac
 
     override fun accountIdByVerifiedEmail(email: String): String? =
         accounts().findByEmail(email.trim().lowercase())?.takeIf { it.status != AccountStatus.ERASED && it.emailVerified }?.id
+
+    override fun locale(accountId: String): Locale? =
+        accounts().findById(accountId)?.takeIf { it.status != AccountStatus.ERASED }?.locale?.takeIf { it.isNotBlank() }
+            ?.let(Locale::forLanguageTag)?.takeIf { it.language.isNotEmpty() }
 
     override fun activeAmong(accountIds: Collection<String>): Set<String> =
         accounts().findByIds(accountIds).filter { it.status == AccountStatus.ACTIVE }.map { it.id }.toSet()
