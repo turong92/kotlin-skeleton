@@ -105,7 +105,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 >       captcha: REQUIRED      # 비회원의 만들기에 captchaToken 필수 → 실패는 400 BOARD.CAPTCHA_FAILED. BoardCaptcha 빈이 없으면 기동 실패
 > ```
 
-> **업로드 정리와 첨부 키** — 글 · 댓글 · 고친 판은 첨부 저장 키를 저장하므로 board 는 `UploadKeyHolder("board")` 표지를 내고, `board-jdbc` 의 `UploadedKeyUsage`(`answers = {board}`)가 그 키를 「쓰이는 파일」로 알린다. storage 의 버려진 회원 업로드 정리(`skeleton.storage.web.cleanup`, 기본 꺼짐)는 이 짝이 있어야 켜진다 - 저장소를 직접 구현하면 같은 이름을 대답하는 `UploadedKeyUsage` 를 둔다. [storage](storage.md)
+> **업로드 정리와 첨부 키** — 글 · 댓글 · 고친 판은 첨부 저장 키를 저장하므로 board 는 `UploadKeyHolder("board")` 표지를 내고, `board-jdbc` 의 `UploadedKeyUsage`(`answers = {board}`)가 그 키를 「쓰이는 파일」로 알린다. storage 의 버려진 회원 업로드 정리(`skeleton.storage.web.cleanup`, 기본 꺼짐)는 이 짝이 있어야 켜진다 - 저장소를 직접 구현하면 같은 이름을 대답하는 `UploadedKeyUsage` 를 둔다. storage(docs/modules/storage.md - 이 모듈만 고른 프로젝트에는 없을 수 있다)
 
 > **비회원 첨부** — 기본 `canGuestAttach` 는 platform 의 `GuestUploadKeys`(storage 가 내놓는다)가 있으면 **storage 의 비회원 업로드로 발급한 키(`<prefix>/g/<uuid>.<mac>/file.<ext>`, MAC 이 맞는 것)만** 허용한다. 회원 키 · 남의 키 · 임의 문자열을 비회원이 다시 싣는 길이 막힌다. 결정 7 「회원처럼 허용」과 어긋나 보이지만, 회원의 `canAttach`(자기 업로드 키만)와 같은 수준의 업로드 소유 확인이 생겼기 때문이다 - 비회원 업로드를 켜지 않으면(`skeleton.storage.web.guest.enabled=false`) 비회원은 사진을 붙일 수 없다. 업로드 모듈이 없는 앱은 지금까지처럼 모두 허용되므로(**남는 위험**: 공개된 남의 키를 다시 실을 수 있다) 앱이 `canGuestAttach` 로 좁힌다. **발급 키에도 같은 위험이 있다**: 비회원 업로드로 발급한 키는 한 번 공개되면(공개된 댓글의 첨부) 다른 비회원이 그 키를 자기 댓글에 다시 실을 수 있다 - 발급 키는 키 하나가 한 번만 쓰이도록 묶여 있지 않다(키는 비밀이 아니라 MAC 으로 발급을 증명할 뿐). 같은 사진이 두 곳에 보이는 것이 전부이고 원본을 읽게 되지는 않지만, 한 번만 쓰이게 하려면 앱이 `canGuestAttach` 로 사용 표를 둔다. 키는 한 번 붙은 뒤에도 같은 글 · 다른 댓글에 다시 실을 수 있다(공개된 그림이므로 새로운 노출은 아니다). 켜는 법 · 제한 · 고아 회수: `storage` 모듈 문서(docs/modules/storage.md - 이 모듈만 고른 프로젝트에는 없을 수 있다).
 
