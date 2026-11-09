@@ -69,7 +69,8 @@ class CampaignAutoConfiguration {
         zone: CampaignZone,
         time: ObjectProvider<TimeProvider>,
         facts: ObjectProvider<AccountFacts>,
-    ): AttendanceService = AttendanceService(store, grants, { issuers.orderedStream().toList() }, zone, time.getIfAvailable { TimeProvider.systemUtc() }, { facts.getIfAvailable() })
+        environment: Environment,
+    ): AttendanceService = AttendanceService(store, grants, { issuers.orderedStream().toList() }, zone, time.getIfAvailable { TimeProvider.systemUtc() }, { facts.getIfAvailable() }, appDefaultLocale(environment))
 
     @Bean
     @ConditionalOnBean(Campaigns::class, RewardGrants::class)

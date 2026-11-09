@@ -6,6 +6,7 @@
 
 **출석**: 「오늘」은 **서비스 시간대**의 날짜다(`skeleton.campaign.zone` → `skeleton.time.default-zone` → `Asia/Seoul`; 보는 사람의 시간대를 쓰면 시간대를 옮겨 두 번 찍을 수 있다). 하루 한 번은 `(이벤트, 계정, 날짜)` 키가 지키고, 같은 날 두 번째는 지급 없이 현재 상태를 돌려준다.
 한 트랜잭션에서 출석 줄 → 누적 · 연속 계산 → 보상마다 `RewardGrants.record`. 지급 건 키는 매일 `<이벤트>:<계정>:<날>:daily:<순번>`, 누적 달성 `<이벤트>:<계정>:milestone:<일수>:<순번>`(한 번), 연속 달성 `<이벤트>:<계정>:streak:<일수>:<연속 시작일>:<순번>`(연속이 끊겼다 다시 쌓여 닿으면 다시). 지난 날을 채워 찍는 길은 없다. 키에 보상 **순번**이 들어 있으므로 진행 중인 이벤트의 보상 목록 중간에 끼우거나 빼면 밀린 보상이 새 키로 다시 나갈 수 있다 - 더할 때는 목록 끝에만 더한다.
+출석 응답의 보상 이름(`rewards[].label`)은 출석한 사람의 계정 언어(`AccountFacts.locale`)로 만들고, 모르면 앱의 기본 언어 `skeleton.time.default-locale`(`time` 모듈 기본 `ko-KR`)로 만든다 - 서버 JVM 의 기본 언어가 아니다.
 설정: `{daily: [{type, params}], milestones: [{days, streak, rewards}]}`.
 
 **업적**(`achievement`): 설정 `{metric, milestones: [{value, rewards: [...]}]}` — `metric` 은 `[a-z0-9._-]{1,64}`, 단계는 1~20개 · 기준값 오름차순 · 중복 없음 · 단계마다 보상 1개 이상(출석 `milestones` 와 같은 꼴, 보상은 어떤 종류든 나란히 — `[{type: badge}, {type: point}]`).

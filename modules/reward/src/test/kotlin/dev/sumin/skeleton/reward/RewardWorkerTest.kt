@@ -68,6 +68,26 @@ class RewardWorkerTest {
     }
 
     @Test
+    fun `an account without a language gets the app default language, not the JVM default`() {
+        val saved = Locale.getDefault()
+        Locale.setDefault(Locale.ENGLISH)
+        try {
+            val issuer = ScriptedIssuer()
+            val noLanguage = object : AccountFacts {
+                override fun createdAt(accountId: String): Instant? = null
+            }
+            val fallback = appDefaultLocale(org.springframework.mock.env.MockEnvironment())   // 설정 없음 = time 모듈의 기본 ko-KR
+            RewardWorker(store, { listOf(issuer) }, { RewardNotifier { g, l -> notified += g to l } }, time, { noLanguage }, fallback).process(grant())
+
+            assertEquals(Locale.forLanguageTag("ko-KR"), issuer.describedIn.single())
+            assertEquals(Locale.forLanguageTag("en-US"), appDefaultLocale(org.springframework.mock.env.MockEnvironment().withProperty("skeleton.time.default-locale", "en-US")))
+            assertEquals(Locale.KOREAN, appDefaultLocale(org.springframework.mock.env.MockEnvironment().withProperty("skeleton.time.default-locale", "")))
+        } finally {
+            Locale.setDefault(saved)
+        }
+    }
+
+    @Test
     fun `an already issued grant does not reach the issuer`() {
         val issuer = ScriptedIssuer()
         val id = grant()

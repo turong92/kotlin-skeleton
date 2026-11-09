@@ -49,12 +49,14 @@ class RewardAutoConfiguration {
         notifier: ObjectProvider<RewardNotifier>,
         time: ObjectProvider<TimeProvider>,
         facts: ObjectProvider<AccountFacts>,
+        environment: org.springframework.core.env.Environment,
     ): RewardWorker = RewardWorker(
         store,
         { issuers.orderedStream().toList() },
         { notifier.getObject() },
         time.getIfAvailable { TimeProvider.systemUtc() },
         { facts.getIfAvailable() },
+        appDefaultLocale(environment),
     )
 
     @Bean

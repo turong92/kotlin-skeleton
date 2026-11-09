@@ -51,6 +51,22 @@ class CampaignTransactionBoundaryTest {
     }
 
     @Test
+    fun `an account without a language gets the app default language, not the JVM default`() {
+        val saved = java.util.Locale.getDefault()
+        java.util.Locale.setDefault(java.util.Locale.ENGLISH)
+        try {
+            store.insert(Campaign("cmp_1", "attendance", "Daily", true, Instant.parse("2026-01-01T00:00:00Z"), null, config, time.now(), time.now()))
+            val issuer = PointIssuer()
+            val fallback = appDefaultLocale(org.springframework.mock.env.MockEnvironment())   // 설정 없음 = time 모듈의 기본 ko-KR
+            AttendanceService(store, grants, { listOf(issuer) }, CampaignZone(ZoneId.of("Asia/Seoul")), time, { null }, fallback).checkIn("acc_1", "cmp_1")
+
+            assertEquals(listOf(java.util.Locale.forLanguageTag("ko-KR")), issuer.describedIn)
+        } finally {
+            java.util.Locale.setDefault(saved)
+        }
+    }
+
+    @Test
     fun `the zone ladder is the campaign zone, then the app default, then Asia Seoul`() {
         assertEquals(ZoneId.of("America/New_York"), CampaignZone.resolve("America/New_York", "Europe/Paris").zone)
         assertEquals(ZoneId.of("Europe/Paris"), CampaignZone.resolve(null, "Europe/Paris").zone)

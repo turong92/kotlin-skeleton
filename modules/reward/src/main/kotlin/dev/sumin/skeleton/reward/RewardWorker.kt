@@ -21,7 +21,7 @@ class RewardWorker(
     private val time: TimeProvider,
     /** 받는 사람 언어를 아는 곳(`account`) - 없으면 [locale] */
     private val facts: () -> AccountFacts? = { null },
-    /** 계정 언어를 모를 때 쓰는 언어 */
+    /** 계정 언어를 모를 때 쓰는 언어 - 자동설정은 앱의 기본 언어([appDefaultLocale])를 준다 */
     private val locale: Locale = Locale.getDefault(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -49,3 +49,10 @@ class RewardWorker(
         }
     }
 }
+
+/**
+ * 받는 사람의 계정 언어를 모를 때 쓰는 앱의 기본 언어 - `skeleton.time.default-locale`(`time` 모듈의 기본 `ko-KR` 과 같은 값). JVM 기본 언어가 아니다:
+ * 운영 리눅스 JVM 은 en 이라 한국 서비스의 알림 · 화면이 영어로 나가기 때문이다. 잘못된 태그면 ko.
+ */
+internal fun appDefaultLocale(environment: org.springframework.core.env.Environment): Locale =
+    Locale.forLanguageTag(environment.getProperty("skeleton.time.default-locale", "ko-KR")).takeIf { it.language.isNotEmpty() } ?: Locale.KOREAN

@@ -11,7 +11,7 @@
 상태: `PENDING → ISSUED`(끝) · `PENDING → FAILED`(작업이 DEAD 또는 영구 실패; 운영자 「다시 지급」으로 `PENDING`) · `PENDING → CANCELED`(운영자, 지급 전만).
 
 **같은 DB 라는 전제**: 지급기가 쿠폰 · 포인트 표에 쓰는 일이 건을 `ISSUED` 로 적는 것과 한 트랜잭션이다(`issue` 는 호출자 트랜잭션 안). 지급기를 다른 저장소에 쓰는 구현으로 바꾸면 이 전제가 깨지니 그쪽이 `(GRANT, 건 id)` 멱등을 스스로 지켜야 한다.
-알림 문구는 서버가 **받는 사람의 계정 언어**(`AccountFacts.locale` - `account` 가 있고 언어를 정해 둔 계정)로 만든다. 모르면 서버 JVM 의 기본 언어(`Locale.getDefault()`)로 돌아간다(받는 쪽 번역 렌더가 알림 모듈에 아직 없다). `payload.link` 는 실어 두지만 클릭 이동은 아직 없다.
+알림 문구는 서버가 **받는 사람의 계정 언어**(`AccountFacts.locale` - `account` 가 있고 언어를 정해 둔 계정)로 만든다. 모르면(언어를 안 정한 계정 · `account` 없음) 앱의 기본 언어 `skeleton.time.default-locale`(`time` 모듈 기본 `ko-KR`)로 만든다 - 서버 JVM 의 기본 언어가 아니다(운영 리눅스 JVM 은 en 이라 한국 서비스에 영어가 나간다). 받는 쪽 번역 렌더가 알림 모듈에 아직 없다. `payload.link` 는 실어 두지만 클릭 이동은 아직 없다.
 
 운영자 경로(`skeleton.reward.admin.enabled=true` 일 때만, 꺼져 있으면 404; 서블릿 웹 앱 + Spring Security 필요) — 모든 호출에 `reward.operate`(기본 역할 없음 — 전권 역할만, 익명 401 · 권한 없음 403):
 
