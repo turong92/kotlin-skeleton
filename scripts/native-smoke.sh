@@ -2,7 +2,7 @@
 # 네이티브 이미지 시험 — 떠 있는 tools/native-check 서버(JVM 이든 네이티브 바이너리든)에 핵심 흐름을 실제 HTTP 로 돌린다 (docs/native-image.md).
 #   scripts/native-smoke.sh --url http://localhost:18080 --mail http://localhost:18025 [--webhook-token <값>] [--wake-secret <값>]
 #   (메일은 실제 SMTP 로 나가 mailpit 이 받는다 — --mail 은 mailpit 의 HTTP 주소. scripts/native-test.sh 가 mailpit 을 올린다)
-# 확인하는 것: 기동(/health) · 가입(메일 확인 코드) · 로그인 · 토큰 갱신(재사용 거절) · 단건 결제(가짜 결제사) · 구독 시작 · 작업 큐 일감 처리(요청 구동: 깨우기 주소) · 웹훅 수신(재전송 중복) · OpenAPI 문서.
+# 확인하는 것: 기동(/health) · 가입(메일 확인 코드) · 로그인 · 토큰 갱신(재사용 거절) · 단건 결제(가짜 결제사) · 구독 시작 · 작업 큐 일감 처리(요청 구동: 깨우기 주소) · 웹훅 수신(재전송 중복) · jOOQ(레코드 쓰기 · 읽기 · 고치기, audit 리스너, fetchInto) · OpenAPI 문서.
 # 종료 코드: 0 = 전부 통과 · 1 = 어느 단계가 어긋남(단계 이름을 출력). 비밀 값은 출력하지 않는다. 필요한 것: curl · python3.
 set -uo pipefail
 
@@ -124,6 +124,16 @@ EVT="evt-smoke-$RANDOM$$"
 R=$(curl -sS -m 30 -X POST "$URL$WH" -H "x-scripted-delivery-id: $EVT" -H 'Content-Type: text/plain' --data-binary "$HOOK_BODY" -w '\n%{http_code}'); expect "웹훅 수신" 200 "$R"
 R=$(curl -sS -m 30 -X POST "$URL$WH" -H "x-scripted-delivery-id: $EVT" -H 'Content-Type: text/plain' --data-binary "$HOOK_BODY" -w '\n%{http_code}'); expect "같은 전달 재전송(중복)" 200 "$R"
 R=$(curl -sS -m 30 -X POST "$URL/api/v1/payments/webhooks/scripted/wrong-token" -H 'Content-Type: text/plain' --data-binary "$HOOK_BODY" -w '\n%{http_code}'); expect "틀린 비밀 조각은 404" 404 "$R"
+
+echo "== jOOQ (persistence-jooq)"
+R=$(call POST /api/v1/native-check/jooq "" '{"note":"jooq-smoke"}'); expect "jOOQ 쓰기(레코드 store + audit 리스너)" 200 "$R"
+JID=$(printf '%s' "$R" | body | json id)
+[ -n "$JID" ] && [ -n "$(printf '%s' "$R" | body | json createdAt)" ] && ok "audit 리스너가 created_at 을 채웠다" || bad "jOOQ 쓰기 응답이 이상하다: $(printf '%s' "$R" | body | head -c 200)"
+R=$(call GET "/api/v1/native-check/jooq/$JID"); expect "jOOQ 읽기" 200 "$R"
+[ "$(printf '%s' "$R" | body | json note)" = "jooq-smoke" ] && ok "레코드로 읽었다" || bad "jOOQ 읽기 값이 다르다"
+[ "$(printf '%s' "$R" | body | json viaPojo)" = "jooq-smoke" ] && ok "값 클래스로 읽었다(fetchInto)" || bad "fetchInto 가 값을 못 읽었다"
+R=$(call POST "/api/v1/native-check/jooq/$JID/touch" "" '{"note":"jooq-changed"}'); expect "jOOQ 고치기" 200 "$R"
+[ "$(printf '%s' "$R" | body | json note)" = "jooq-changed" ] && [ "$(printf '%s' "$R" | body | json updatedAt)" != "$(printf '%s' "$R" | body | json createdAt)" ] && ok "audit 리스너가 updated_at 을 고쳤다" || bad "jOOQ 고치기 결과가 이상하다: $(printf '%s' "$R" | body | head -c 200)"
 
 echo "== 문서"
 R=$(call GET /api/v1/docs); expect "OpenAPI JSON" 200 "$R"

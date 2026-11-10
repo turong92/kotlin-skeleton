@@ -11,6 +11,7 @@ dependencies {
     implementation(project(":modules:auth-session-jdbc"))
     implementation(project(":modules:legal-jdbc"))
     implementation(project(":modules:persistence-jdbc"))
+    implementation(project(":modules:persistence-jooq"))   // jOOQ 네이티브 확인 — JooqProbeController 가 jOOQ 로 쓰고 읽는다
     implementation(project(":modules:db-postgresql"))
     implementation(project(":modules:migration-flyway"))
     implementation(project(":modules:time"))
@@ -35,6 +36,7 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
+    implementation("org.springframework.boot:spring-boot-starter-jooq")   // 앱이 jOOQ 를 직접 쓰는 것과 같게 - 모듈은 implementation 으로만 가져온다
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-validation")

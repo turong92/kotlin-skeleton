@@ -1,0 +1,4 @@
+org.springframework.aot.hint.RuntimeHintsRegistrar=\
+dev.sumin.skeleton.persistence.jooq.JooqNativeHints
+org.springframework.beans.factory.aot.BeanFactoryInitializationAotProcessor=\
+dev.sumin.skeleton.persistence.jooq.JooqRecordAotProcessor

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### persistence-jooq - 네이티브 이미지 지원 (2026-11-11)
+
+- `persistence-jooq` 가 GraalVM 네이티브에서 돈다: `JooqNativeHints`(`SQLDataType` 의 배열형 등록 — 없으면 `DSLContext` 가 서지 못한다)와 `JooqRecordAotProcessor`(앱 패키지의 jOOQ 레코드 클래스 생성자 등록 — 없으면 `Could not construct new record`)를 `aot.factories` 로 낸다. `fetchInto(클래스)` 의 값 클래스는 앱이 `@RegisterReflectionForBinding` 으로 표시한다. `tools/native-check` 와 `scripts/native-smoke.sh` 에 jOOQ 단계가 더해졌다. 문서: `docs/native-image.md` "jOOQ".
+
 ### ads-admob - AdMob 보상형 광고 SSV 수신 (2026-11-09)
 
 - 새 모듈 `ads-admob`(기본 꺼짐 `skeleton.ads-admob.enabled`): `GET /api/v1/ads/admob/ssv`(공개) 가 AdMob 의 서버 측 확인 콜백을 받는다. 받은 쿼리를 고치지 않고 `&signature=` 앞까지를 ECDSA-SHA256 으로 `key_id` 의 구글 공개키에 확인하고(키 목록은 24시간 넘게 쥐지 않고, 모르는 `key_id` 면 한 번 다시 읽되 1분 안에는 되풀이하지 않는다), `ad-units` 에 있는 광고 단위만 받고(비면 모두 거절), `PointWallet.earn(user_id, reward_amount, 유효기간, "ADMOB_SSV", transaction_id)` 로 같은 거래 번호는 한 번만 쌓는다.

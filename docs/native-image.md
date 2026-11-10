@@ -62,6 +62,8 @@ Spring AOT 는 `@ConditionalOnProperty` · `@ConditionalOnBean` 같은 **조건�
 | `payment-toss` · `payment-kakaopay` · `payment-naverpay` · `payment-stripe` · `auth-social-google/kakao/naver` · `crypto` | 외부 응답 · 웹훅 본문 · 토큰 본문 DTO (`BindingHints`) | 컨트롤러 밖에서 JSON 으로 바꾸는 타입 |
 | `auth-social` (`AuthSocialNativeHints`) | `OAuthSocialLoginRequest` | 소셜 로그인 경로가 컨트롤러가 아니라 **함수형 라우트**(`RouterFunction`)라 AOT 가 요청 본문 타입을 못 찾는다 |
 | `notification-sse` (`NotificationSseNativeHints`) | `NotificationSseConnectedEvent` · `NotificationEvent` | `SseEmitter.send(객체)` 로 흘리는 이벤트 본문 |
+| `persistence-jooq` (`JooqRecordAotProcessor`) | 앱 패키지의 jOOQ 레코드 클래스(`XxxRecord`)의 생성자 | jOOQ 가 `getDeclaredConstructor()` 로 레코드를 만든다 — 없으면 `Could not construct new record` 로 쓰기 · 읽기가 500 |
+| `persistence-jooq` (`JooqNativeHints`) | `SQLDataType` 상수들의 자바 타입의 **배열형**(`String[]` · `Long[]` …) | jOOQ 의 `SQLDataType` 정적 초기화가 자료형마다 `Array.newInstance(타입, 0).getClass()` 로 배열형을 만든다. 네이티브에서 배열 클래스를 미리 알리지 않으면 null 이 나와 `ConcurrentHashMap.putIfAbsent` NPE 로 `DSLContext` 가 서지 못한다 |
 | `platform` (`ConfigurationPropertiesBindingAotProcessor`) | 모든 `@ConfigurationProperties` 클래스와 그 중첩 타입 · 맵 값 타입 | 코틀린 기본 인자 data class 의 중첩 설정(`StorageWebProperties` …)을 kotlin-reflect 가 못 찾는다 |
 | `platform` (`ApiResponseEnvelopeAotProcessor`) | `@ApiResponseEnvelope(value = X::class)` 의 `X` | 컨트롤러가 `Any` 를 돌려줘도(저장소 presign) 응답 타입이 이 어노테이션에 있다 |
 
@@ -98,7 +100,7 @@ class AppHints : RuntimeHintsRegistrar {
 자기 compose 프로젝트의 Postgres 를 따로 올리고 끝나면 지운다 (개발 DB 는 건드리지 않는다).
 
 - **이 레포(스켈레톤)**: `tools/native-check` — 스타터 + 결제 장부 + 구독 + 작업 큐(요청 구동)에 **가짜 결제사**(`ScriptedGateway`)를 얹은 시험용 조립(배포 대상 아님). `scripts/native-smoke.sh` 가 실제 HTTP 로 이 흐름을 돈다:
-  기동 · 마이그레이션 → 가입(메일은 기록) · 이메일 확인 · 로그인 · 토큰 갱신(재사용 거절) → 가짜 결제사로 단건 결제 · 구독 시작 → 작업 큐 일감 하나(깨우기 주소로 처리) → 웹훅 하나(재전송 중복 · 틀린 비밀 조각 404) → OpenAPI 문서.
+  기동 · 마이그레이션 → 가입(메일은 기록) · 이메일 확인 · 로그인 · 토큰 갱신(재사용 거절) → 가짜 결제사로 단건 결제 · 구독 시작 → 작업 큐 일감 하나(깨우기 주소로 처리) → 웹훅 하나(재전송 중복 · 틀린 비밀 조각 404) → jOOQ 레코드 쓰기 · 읽기 · 고치기(audit 리스너 · `fetchInto`) → OpenAPI 문서.
 - **새 프로젝트**: `tools/` 와 `native-smoke.sh` 는 복사되지 않는다. `scripts/native-test.sh` 는 남아 **`apps/api`(내 앱)** 를 대상으로 돈다 — 기본은 최소 확인(/health · OpenAPI 문서 200).
   네이티브로 배포하기로 하면 **내 핵심 흐름(가입 · 결제 …)을 `scripts/<내 시험>.sh` 로 쓰고 `scripts/native-test.sh --smoke scripts/<내 시험>.sh`** 로 붙인다 (`--url <주소>` 를 받고 0 = 통과; 스켈레톤 레포의 `scripts/native-smoke.sh` 가 틀: ok · bad · expect · call 함수).
   앱에 필요한 설정(비밀 · 주소)은 `NATIVE_TEST_ENV="KEY=VALUE …"` 로 넘긴다. 워크플로(`.github/workflows/native.yml`)는 손으로 도는 것만 남아 있다 — 파일 안 주석대로 릴리스 태그 · 의존성 파일 PR 트리거를 켠다.
@@ -130,11 +132,21 @@ S3 는 compose 의 SeaweedFS(`s3` 프로필 — MinIO 를 쓰지 않는다: 이�
 **못 본 것**: `payment-stripe`(시험용 조립에 없다) · `crypto` 의 불투명 URL 토큰 경로(`OpaqueUrlTokenPayload`, 저장소 공개 URL 을 `OPAQUE` 로 쓸 때) · 부하. (샘플 앱 전체 — 이메일 변경 · 로그인 아이디 · 매직 링크 · 게시판 · 작성자 프로필 · 노트 · 첨부 · 응원하기 — 는 프런트 e2e 로 확인했다, 위.) 이런 기능을 쓰는 앱은 처음 네이티브로 빌드할 때 같은 종류의 규칙 위반이 몇 개 더 나올 수 있다.
 Flyway 는 기동 때 `Unable to scan location: /db/migration/postgresql (unsupported protocol: resource)` 경고를 여러 번 찍지만 마이그레이션은 적용된다.
 
+## jOOQ (`persistence-jooq`)
+
+네이티브에서 jOOQ 가 깨지는 곳은 둘이었고 모듈이 둘 다 막는다 (위 표):
+1. `SQLDataType` 정적 초기화가 배열 클래스를 리플렉션으로 만든다 → `JooqNativeHints` 가 배열형을 등록한다 (`DSLContext` 가 서지 못하던 원인).
+2. jOOQ 가 레코드를 `recordType.getDeclaredConstructor()` 로 만든다 → `JooqRecordAotProcessor` 가 앱 패키지(`AutoConfigurationPackages`)의 `org.jooq.Record` 구현 클래스(코드 생성 `XxxRecord` 포함)의 생성자를 빌드 때 찾아 등록한다.
+   앱이 따로 표시하지 않아도 되지만, **레코드 클래스가 앱의 자동 구성 패키지(`@SpringBootApplication` 이 있는 패키지) 밖에 있으면** 앱이 `@RegisterReflectionForBinding` 이 아니라 자기 `RuntimeHintsRegistrar` 로 `INVOKE_DECLARED_CONSTRUCTORS` 를 등록해야 한다.
+- 시험 경로: `tools/native-check` 의 `JooqProbeController` 가 jOOQ 로 레코드를 쓰고(audit 리스너가 `created_at` · `updated_at` 을 채운다) · 읽고 · 고치고 · `fetchInto(값 클래스)` 로 읽는다. `scripts/native-smoke.sh` 의 "jOOQ" 단계가 이것을 확인한다.
+- **확인 상태**: 두 힌트는 단위 테스트(`JooqNativeHintsTest` · `JooqRecordAotProcessorTest`)로 확인했다. 네이티브 실빌드의 첫 시험에서 레코드 생성자 문제(2번)가 드러났고, 고친 뒤 `scripts/native-test.sh` 의 jOOQ 단계(쓰기 · audit 리스너 · 읽기 · `fetchInto` · 고치기)가 모두 통과했다(이 조립의 빌드는 Docker VM 메모리 6GB 가까이 필요하다 — 빌드 자원 절). 시험 DB 는 PostgreSQL 이라 MySQL 방언, 배열 컬럼, 집계 · 윈도 함수는 보지 않는다.
+- **앱이 할 일 하나**: `fetchInto(클래스)` · `into(클래스)` 로 옮기는 값 클래스는 컨트롤러 반환 타입이 아니라 AOT 가 못 찾는다 — 쓰는 빈에 `@RegisterReflectionForBinding(값클래스::class)` 를 단다 (`JooqProbeController` 의 `ProbeNote` 가 그 예).
+
 ## 무거운 라이브러리를 쓰는 앱을 위한 안내
 
 JS 압축기(Closure Compiler) · 이미지 처리(`ImageIO` · AWT) · jOOQ 같은 라이브러리는 리플렉션 · 리소스 · 네이티브 라이브러리를 많이 쓴다. 네이티브가 맞는지 정하는 순서:
 
-1. 이 레포의 모듈(`persistence-jooq` · `storage-s3` …)을 얹은 앱은 **모듈 단위로** 네이티브 시험을 먼저 돌린다 (스켈레톤 레포에서는 `tools/native-check` 에 모듈 한 줄을 얹어, 새 프로젝트에서는 앱에 얹어 `scripts/native-test.sh`). 안 되면 아래 둘 중 하나.
+1. 이 레포의 모듈(`storage-s3` …)을 얹은 앱은 **모듈 단위로** 네이티브 시험을 먼저 돌린다 (스켈레톤 레포에서는 `tools/native-check` 에 모듈 한 줄을 얹어, 새 프로젝트에서는 앱에 얹어 `scripts/native-test.sh`). 안 되면 아래 둘 중 하나.
 2. **JVM 으로 간다** — [Cloud Run 0대 운영](cloud-run-scale-to-zero.md)의 "JVM 다듬기"(AOT + CDS)가 콜드스타트를 절반 이하로 줄인다. 무거운 라이브러리가 핵심이면 이쪽이 안전하다.
 3. 그 라이브러리를 **별도 서비스**로 떼어 낸다 (예: 이미지 처리만 JVM 서비스).
 4. 정말 네이티브가 필요하면 라이브러리별로 `RuntimeHintsRegistrar` 를 쓰고(위 규칙), GraalVM 추적 에이전트(`-agentlib:native-image-agent`)로 JVM 에서 시험을 돌려 목록을 뽑아 **필요한 것만** 추려 모듈에 둔다 (결과를 통째로 붙이지 않는다).
