@@ -9,6 +9,8 @@ import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.reward.RewardIssuer
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.wake.OnRequestTask
+import dev.sumin.skeleton.common.wake.SimpleOnRequestTask
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.reward.RewardAutoConfiguration
 import dev.sumin.skeleton.reward.RewardGrants
@@ -95,6 +97,12 @@ class CampaignAutoConfiguration {
     @ConditionalOnClass(name = ["dev.sumin.skeleton.scheduler.SkeletonScheduled"])
     @ConditionalOnMissingBean
     fun referralReleaseJob(referrals: Referrals): ReferralReleaseJob = ReferralReleaseJob(referrals)
+
+    /** 요청 구동 모드(인스턴스 0대 배포)의 깨우기가 부른다 - [Referrals.releaseDue] 가 조건부 갱신이라 멱등이다 */
+    @Bean
+    @ConditionalOnBean(Referrals::class)
+    @ConditionalOnMissingBean(name = ["referralReleaseTask"])
+    fun referralReleaseTask(referrals: Referrals): OnRequestTask = SimpleOnRequestTask("campaign-referral-release") { referrals.releaseDue() }
 
     /** 같은 네트워크 확인을 켠 초대 이벤트인데 클라이언트 IP 규칙이 없으면 기동 로그에 경고 (막지 않는다) */
     @Bean

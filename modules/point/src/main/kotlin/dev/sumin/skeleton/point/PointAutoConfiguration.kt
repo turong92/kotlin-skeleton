@@ -5,6 +5,8 @@ import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.reward.RewardIssuer
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.wake.OnRequestTask
+import dev.sumin.skeleton.common.wake.SimpleOnRequestTask
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -39,6 +41,12 @@ class PointAutoConfiguration {
     @ConditionalOnClass(name = ["dev.sumin.skeleton.scheduler.SkeletonScheduled"])
     @ConditionalOnMissingBean
     fun pointExpiryJob(wallet: PointWallet, time: TimeProvider): PointExpiryJob = PointExpiryJob(wallet, time)
+
+    /** 요청 구동 모드(인스턴스 0대 배포)의 깨우기가 부른다 - [PointWallet.expireDue] 가 멱등이다 */
+    @Bean
+    @ConditionalOnBean(PointWallet::class)
+    @ConditionalOnMissingBean(name = ["pointExpiryTask"])
+    fun pointExpiryTask(wallet: PointWallet, time: TimeProvider): OnRequestTask = SimpleOnRequestTask("point-expire") { wallet.expireDue(time.now()) }
 
     @Bean
     @ConditionalOnBean(PointStore::class)
