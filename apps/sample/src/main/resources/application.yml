@@ -2,6 +2,8 @@
 spring:
   application:
     name: kotlin-skeleton
+  lifecycle:
+    timeout-per-shutdown-phase: 8s   # 종료 신호 뒤 진행 중 요청을 기다리는 시간 (프레임워크 기본 30초). Cloud Run · compose 는 10초 뒤 내린다 - docs/cloud-run-scale-to-zero.md
   aot:
     repositories:
       enabled: false   # 네이티브 빌드 전용: Spring Data 의 저장소 AOT 생성은 빌드 때 DB 에 연결해 방언을 알아내려 한다(빌드에는 DB 가 없다) - 끄면 저장소 프록시가 실행 때 만들어진다 (docs/native-image.md). JVM 실행에는 영향 없다

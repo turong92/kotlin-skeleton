@@ -54,7 +54,7 @@ class JobQueueJdbcAutoConfiguration {
     fun jobRetention(repository: JdbcJobRepository, properties: JobQueueProperties, timeProvider: ObjectProvider<TimeProvider>) =
         JobRetention(repository, properties.retention, timeProvider.getIfAvailable { TimeProvider.systemUtc() })
 
-    @Bean(initMethod = "start", destroyMethod = "stop")
+    @Bean // SmartLifecycle - 시작 · 종료는 스프링이 단계로 부른다 (JobQueueWorker.stop 참고)
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "skeleton.job-queue", name = ["worker-enabled"], havingValue = "true", matchIfMissing = true)
     fun jobQueueWorker(

@@ -43,6 +43,12 @@ data class JobQueueProperties(
     val backoff: Backoff = Backoff(),
     val staleLockTimeout: Duration = Duration.ofMinutes(10),
     /**
+     * 종료 신호를 받으면 일꾼은 새 묶음을 집지 않고, 이미 집었지만 안 돈 잡은 곧바로 되돌려주고(시도를 쓰지 않는다), 도는 잡은 이 시간까지 기다린다.
+     * 그래도 끝나지 않으면 스레드를 끊고(그 뒤 최대 1초 더 기다려 돌려주기를 마치게 한다) 그 잡도 되돌려준다 — [staleLockTimeout] 을 기다리지 않는다. **인터럽트에 반응하는 핸들러의 잡만 돌려받는다**(반응하지 않으면 스테일 복구가 맡는다).
+     * 일꾼은 웹 서버의 정상 종료와 같은 단계에서 같이 멈추므로(`SmartLifecycle`) 두 대기가 더해지지 않고 겹친다. Cloud Run 은 SIGTERM 뒤 10초라 기본 5초(+1초)는 웹 대기 8초 안에 든다
+     */
+    val shutdownGrace: Duration = Duration.ofSeconds(5),
+    /**
      * 이 워커가 처리기를 모르는 잡 종류는 집지 않고 PENDING 으로 둔다 — 신구 버전이 섞인 배포 동안 새 버전이 넣은 잡을 옛 워커가 DEAD 로 만들지 않게.
      * 실행 시각이 이 기간보다 더 지났는데도 아무 워커도 집지 못했으면(처리기가 어디에도 없다) 그때 DEAD + 로그 + 듣는 쪽 알림. 배포 한 번이 끝나는 시간보다 길게 둔다
      */

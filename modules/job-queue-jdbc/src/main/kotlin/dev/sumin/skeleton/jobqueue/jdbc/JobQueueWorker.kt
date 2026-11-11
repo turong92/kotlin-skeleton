@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicBoolean
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
+import org.springframework.context.SmartLifecycle
 
 /**
  * 폴링 워커. [JobQueueProperties.pollInterval] 마다 [JdbcJobRepository.claim] → 핸들러 실행 → DONE / 재시도(백오프) / DEAD.
@@ -38,16 +39,19 @@ class JobQueueWorker(
     private val retention: JobRetention? = null,
     /** 프로젝트 모드(`skeleton.projects`)면 서비스 중인 프로젝트를 차례로 돈다. null 이면 지금까지처럼 한 서비스 */
     private val projects: ProjectRegistry? = null,
-) : JobDrainer {
+) : JobDrainer, SmartLifecycle {
     private val log = LoggerFactory.getLogger(javaClass)
     private val handlerByType = handlers.associateBy { it.type }
     val workerId: String = properties.workerId.ifBlank { defaultWorkerId() }
     private val running = AtomicBoolean(false)
+    /** [stop] 이 불렸다 - 직접 [pollOnce] 를 부르는 쪽(시작하지 않은 일꾼)과 가르는 표시 */
+    @Volatile private var stopping = false
     private var executor: ExecutorService? = null
     /** 깨우기 표 — [wake] 가 한 장 더하고, 쉬고 있는 스레드 하나가 한 장을 가져가 바로 판을 돈다. 스레드 수보다 쌓이지 않는다 */
     private val wakeups = Semaphore(0)
 
-    fun start() {
+    override fun start() {
+        stopping = false
         if (!running.compareAndSet(false, true)) return
         if (properties.mode == JobQueueProperties.Mode.ON_REQUEST) {
             // 요청 구동: 스레드를 띄우지 않는다 — 깨우기 주소가 drain 을 부를 때만 처리한다 (인스턴스가 0대로 내려가도 일감은 DB 에 남는다)
@@ -77,6 +81,7 @@ class JobQueueWorker(
         try {
             while (running.get()) {
                 wakeups.tryAcquire(properties.pollInterval.toMillis(), TimeUnit.MILLISECONDS)
+                if (!running.get()) break // 쉬는 동안 stop() 이 불렸다
                 do {
                     val handled = safePoll()
                 } while (handled >= properties.batchSize && running.get())
@@ -86,10 +91,40 @@ class JobQueueWorker(
         }
     }
 
-    fun stop() {
+    /**
+     * 종료 신호: 새 묶음은 더 집지 않고, 이미 집은 묶음의 안 돈 잡은 [giveBack] 으로 돌려주고, 도는 잡은 [JobQueueProperties.shutdownGrace] 까지 기다린 뒤 끊는다
+     * (끊긴 잡도 시도를 쓰지 않고 돌아온다). 앱을 내리는 쪽의 제한 시간(Cloud Run 은 SIGTERM 뒤 10초) 안에 끝나도록 기다림에 상한이 있다.
+     */
+    override fun stop() {
         if (!running.compareAndSet(true, false)) return
-        executor?.shutdownNow()
+        stopping = true
+        wakeups.release(properties.concurrency) // 폴링 간격을 자는 스레드를 깨워 고리를 빠져나오게 한다
+        executor?.let { pool ->
+            pool.shutdown()
+            try {
+                if (!pool.awaitTermination(properties.shutdownGrace.toMillis(), TimeUnit.MILLISECONDS)) {
+                    log.warn("Job queue worker still running a job after {}, interrupting", properties.shutdownGrace)
+                    pool.shutdownNow()
+                    // 끊긴 핸들러가 돌려주기(giveBack)를 마칠 짧은 틈 - DataSource 가 닫히기 전에. 인터럽트에 반응하지 않는 핸들러의 잡은 스테일 복구가 맡는다
+                    pool.awaitTermination(INTERRUPT_SETTLE.toMillis(), TimeUnit.MILLISECONDS)
+                }
+            } catch (_: InterruptedException) {
+                pool.shutdownNow()
+                Thread.currentThread().interrupt()
+            }
+        }
         executor = null
+    }
+
+    // SmartLifecycle - 웹 서버의 정상 종료(요청 대기)와 같은 단계에서 **같이** 멈춘다. 빈 소멸(destroyMethod)로 두면 웹 대기 뒤에 불려 대기가 더해지고 그동안 새 묶음을 계속 집는다
+    override fun isRunning(): Boolean = running.get()
+
+    // 웹 서버 정상 종료 단계(Boot WebServerGracefulShutdownLifecycle.GRACEFUL_SHUTDOWN_PHASE = SmartLifecycle.DEFAULT_PHASE - 1024)와 같은 값 - 단계가 다르면 차례로 멈춰 대기가 더해진다. web-server 에 기대지 않으려고 값을 적는다
+    override fun getPhase(): Int = SHUTDOWN_PHASE
+
+    /** 기다리는 [stop] 을 다른 스레드에서 돌려, 같은 단계의 웹 서버 종료 대기와 겹치게 한다 */
+    override fun stop(callback: Runnable) {
+        Thread({ try { stop() } finally { callback.run() } }, "skeleton-job-queue-stop").apply { isDaemon = true }.start()
     }
 
     /**
@@ -103,7 +138,7 @@ class JobQueueWorker(
         var rounds = 0
         var processed = 0
         var timedOut = false
-        while (true) {
+        while (!stopping) {
             val handled = pollOnce()
             rounds++
             processed += handled
@@ -119,7 +154,7 @@ class JobQueueWorker(
      * 지금 프로젝트 문맥(프로젝트 모드)의 `jobs` 를 본다 - 부르는 쪽이 문맥 안에서 부른다.
      */
     fun runNow(type: String, payloadJson: String): Boolean {
-        if (type !in handlerByType) return false
+        if (type !in handlerByType || stopping) return false
         val job = repository.claimOne(workerId, type, payloadJson, timeProvider.now()) ?: return false
         run(job)
         return true
@@ -201,12 +236,18 @@ class JobQueueWorker(
     private fun claimAndRun(now: java.time.Instant): Int {
         // 아는 종류만 집는다 — 모르는 종류(배포 중 새 버전이 넣은 잡)는 시도도 쓰지 않고 남아, 그 종류를 아는 워커가 집는다
         val jobs = repository.claim(workerId, properties.batchSize, now, handlerByType.keys)
+        var handled = 0
         jobs.forEach { job ->
+            if (stopping) { // 종료 중 - 아직 안 돈 잡은 시도를 쓰지 않고 돌려준다 (스테일 복구 10분을 기다리지 않게). 돌린 수에는 세지 않는다
+                if (!repository.giveBack(job.id, workerId, job.attempts, timeProvider.now())) logLostLease(job)
+                return@forEach
+            }
+            handled++
             // 차례가 온 잡의 임대를 새로 잡는다 — 못 잡으면 앞 잡이 오래 걸려 그 사이 복구되어 남에게 넘어갔다. 돌리지 않는다
             if (repository.renew(job.id, workerId, job.attempts, timeProvider.now())) run(job)
             else log.warn("Job {} ({}) was reclaimed by another worker before its turn, skipped", job.id, job.type)
         }
-        return jobs.size
+        return handled
     }
 
     /** 이 워커가 모르는 종류가 [JobQueueProperties.unhandledTypeGrace] 가 지나도록 남아 있으면 처리기가 어디에도 없다는 뜻이다 — 그때 DEAD */
@@ -252,6 +293,12 @@ class JobQueueWorker(
             log.warn("Job {} ({}) failed permanently: {}", job.id, job.type, ex.message)
         } catch (ex: Exception) {
             val now = timeProvider.now()
+            if (stopping) { // 종료 중 끊겼다 - 잡의 잘못이 아니니 시도를 쓰지 않고 돌려준다
+                Thread.interrupted() // 끊긴 표시가 남아 있으면 이어지는 DB 호출이 깨진다
+                if (!repository.giveBack(job.id, workerId, job.attempts, now)) logLostLease(job)
+                log.info("Job {} ({}) interrupted by shutdown, given back: {}", job.id, job.type, ex.javaClass.simpleName)
+                return
+            }
             if (job.attempts >= job.maxAttempts) {
                 if (repository.markDead(job.id, workerId, job.attempts, describe(ex), now)) notifyDead(job, describe(ex)) else logLostLease(job)
                 log.error("Job {} ({}) dead after {} attempts", job.id, job.type, job.attempts, ex)
@@ -283,5 +330,11 @@ class JobQueueWorker(
     private fun defaultWorkerId(): String {
         val host = runCatching { InetAddress.getLocalHost().hostName }.getOrDefault("worker")
         return "$host-${UUID.randomUUID().toString().take(8)}"
+    }
+
+    private companion object {
+        /** 인터럽트 뒤 끊긴 핸들러가 잡을 돌려주기를 마치기를 기다리는 시간 */
+        val INTERRUPT_SETTLE: java.time.Duration = java.time.Duration.ofSeconds(1)
+        const val SHUTDOWN_PHASE: Int = org.springframework.context.SmartLifecycle.DEFAULT_PHASE - 1024
     }
 }

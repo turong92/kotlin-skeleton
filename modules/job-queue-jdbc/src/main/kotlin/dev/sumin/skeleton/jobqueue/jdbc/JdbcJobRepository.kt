@@ -129,6 +129,13 @@ class JdbcJobRepository(
         ).param("id", id).param("worker", workerId).param("attempts", attempts)
             .param("error", error.take(4000)).param("now", dialect.instantParam(now)).update() > 0
 
+    /** 종료 때 안 돈(또는 끊긴) 잡을 시도를 쓰지 않은 채 PENDING 으로 돌려준다 - 임대 주인일 때만, 바로 다음 판에 집힌다 */
+    fun giveBack(id: Long, workerId: String, attempts: Int, now: Instant): Boolean =
+        jdbc.sql(
+            """update jobs set status = 'PENDING', attempts = attempts - 1, locked_by = null, locked_at = null, updated_at = :now
+               where id = :id and status = 'RUNNING' and locked_by = :worker and attempts = :attempts""",
+        ).param("id", id).param("worker", workerId).param("attempts", attempts).param("now", dialect.instantParam(now)).update() > 0
+
     /**
      * 묶음에서 이 잡의 차례가 왔을 때 임대를 새로 잡는다 — 청구 시각은 묶음 전체가 같아서, 앞 잡들이 오래 걸리면 뒤 잡은 돌기도 전에
      * 스테일 복구 기준을 넘는다. 이미 복구되어 남에게 넘어갔으면(0행) false — 부르는 쪽은 그 잡을 돌리지 않는다.

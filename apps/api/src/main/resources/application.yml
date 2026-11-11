@@ -2,6 +2,8 @@
 spring:
   application:
     name: kotlin-skeleton
+  lifecycle:
+    timeout-per-shutdown-phase: 8s   # 종료 신호 뒤 진행 중 요청을 기다리는 시간 (프레임워크 기본 30초). Cloud Run · compose 는 10초 뒤 내린다 - docs/cloud-run-scale-to-zero.md
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/app}  # 시각 바인딩은 modules:db-postgresql (SqlDialect)
     username: ${SPRING_DATASOURCE_USERNAME:app}
