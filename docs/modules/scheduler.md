@@ -1,7 +1,8 @@
 # scheduler
 
 스케줄 작업의 실행 가드 · 락 매니저 · 실패 핸들러를 갖춘 어노테이션 기반 스케줄러다.
-기본 락은 no-op(단일 인스턴스용)이고 여러 인스턴스에서는 `redis-lock` 같은 락 매니저로 바꾼다. 전용 스케줄러 빈 이름은 `skeletonTaskScheduler`.
+기본 락은 no-op(단일 인스턴스용)이다 — `lockKey` 를 적어도 인스턴스가 여럿이면 작업은 인스턴스마다 다 돈다. 이 레포에는 여러 인스턴스용 락 매니저 구현이 없고(`redis-lock` 은 메서드용 분산 락이다), 필요하면 앱이 `SkeletonScheduledLockManager` 를 구현한다.
+**그래서 이 레포의 주기 작업은 모두 겹쳐 돌아도 안전하게 짜여 있다**(조건부 갱신 · 멱등 삭제 — 만료 회수, 소멸, 초대 해제, 청소). 락은 중복 일을 줄일 뿐 정확성은 멱등이 지킨다: 새 `@SkeletonScheduled` 작업도 겹쳐 돌아도 해가 없게 쓴다. 인스턴스가 0대로 내려가는 배포에서는 타이머 대신 `OnRequestTask` 가 깨운다([cloud-run-scale-to-zero](../cloud-run-scale-to-zero.md)). 전용 스케줄러 빈 이름은 `skeletonTaskScheduler`.
 
 | 항목 | 내용 |
 |---|---|

@@ -3,4 +3,5 @@ skeleton:
   idempotency:
     enabled: true                              # false 면 모듈이 빈을 만들지 않는다
     ttl: 24h                                   # 저장한 응답을 유지하는 시간
+    in-progress-lease: 5m                      # 응답을 저장하기 전의 「진행 중」 예약이 유효한 시간 (idempotency-jdbc) — 지나면 같은 키의 다음 요청이 새로 시작한다. 가장 오래 걸리는 명령보다 길게
     cached-methods: [POST, PUT, PATCH, DELETE] # 이 HTTP 메서드만 멱등 처리한다

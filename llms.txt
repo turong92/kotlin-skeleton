@@ -128,6 +128,7 @@
 - db-postgresql: PostgreSQL 방언(기본) [PostgreSQL, 포스트그레스]
 - event-kafka: 이벤트를 Kafka 로 발행하는 KafkaEventPublisher 와… [카프카, 이벤트 발행]
 - idempotency: Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복… [멱등, 중복 요청 방지]
+- idempotency-jdbc: 멱등 키를 DB 에 둔다 (PostgreSQL · MySQL) [멱등 키 저장소, 멱등 DB]
 - inquiry: 문의 · 의견 받기 — 로그인 없이도 보내는 한 줄 폼(질문 · 기능… [문의, 문의하기]
 - inquiry-jdbc: 문의를 DB 에 둔다 (PostgreSQL · MySQL) [문의 저장소, 문의 DB]
 - job-queue-jdbc: DB 테이블 기반 재시도 작업 큐 [작업 큐, 백그라운드 작업]

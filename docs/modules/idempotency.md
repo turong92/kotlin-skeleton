@@ -2,7 +2,7 @@
 
 `Idempotency-Key` 헤더가 있는 명령 요청의 중복 실행을 막고 첫 응답을 재생한다.
 `Idempotency-Key` 가 없으면 `400 COMMON.IDEMPOTENCY_ERROR`(제목 `Missing Idempotency-Key`) — 검증 오류(`COMMON.VALIDATION_FAILED`)와 코드가 다르고, 요청 로그 종료 줄에도 `code=… reason=Missing Idempotency-Key` 가 남는다(키 값은 싣지 않는다).
-기본 저장소는 인메모리(인스턴스별)다. 여러 인스턴스라면 앱이 `IdempotencyStore` 를 대체한다.
+기본 저장소는 인메모리(인스턴스별)다 — stage · prod 에서는 기동 실패(`DeployGuard` `idempotency`)이므로 [idempotency-jdbc](idempotency-jdbc.md) 를 넣거나 앱이 `IdempotencyStore` 를 대체한다.
 
 | 항목 | 내용 |
 |---|---|
@@ -11,7 +11,7 @@
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.idempotency` — [docs/config/modules/idempotency.yml](../config/modules/idempotency.yml) |
 | 기본 동작 | 켜짐 (인메모리 저장소). 응답은 상태와 상관없이 키에 묶어 재생한다 — `@IdempotentOperation(cacheClientErrors = false)` 인 명령(비밀번호 · 코드를 싣는 계정 명령)은 4xx 를 묶지 않고 예약을 푼다(`IdempotencyStore.release`). |
-| 부팅에 필요한 것 | 없음. |
+| 부팅에 필요한 것 | 없음. 보호 환경(`skeleton.env` = stage · prod)에서는 인메모리가 아닌 `IdempotencyStore`(`idempotency-jdbc` 또는 앱의 빈). |
 | 교체 지점 | `IdempotencyStore`, `IdempotencyScopeResolver` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | 없음 |

@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":modules:time"))
     // 이 샘플이 더한 기능 — 한 줄에 하나
     implementation(project(":modules:idempotency"))        // 만들기 두 번 눌러도 한 번 (Idempotency-Key)
+    implementation(project(":modules:idempotency-jdbc"))   // 멱등 키를 DB 에 둔다 - 인스턴스가 여럿이어도 같은 키는 한 번만 실행된다 (보호 환경에서는 인메모리 저장소면 기동 실패). docs/modules/idempotency-jdbc.md
     implementation(project(":modules:notification-jdbc"))  // 받은편지함 저장 (+ notification: 계약 · /api/v1/notifications)
     implementation(project(":modules:notification-sse"))   // 실시간 전달 (/api/v1/notifications/sse)
     implementation(project(":modules:storage-s3"))         // 첨부 업로드 (+ storage: /api/v1/storage)

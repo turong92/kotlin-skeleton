@@ -223,7 +223,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `crypto` | beans only when `skeleton.crypto.keys` has a key | nothing | AES keys |
 | `db-postgresql` / `db-mysql` | yes — exactly one | a reachable database matching the dialect (`SqlDialectVerifier` names the mismatch) | — |
 | `event-kafka` | yes, as a logging sender | nothing | `enabled=true` + a `KafkaOperations` bean + Kafka |
-| `idempotency` | yes (in-memory store) | nothing | — |
+| `idempotency` | yes (in-memory store) | nothing in `local` / `dev` / `test`; in protected envs: `idempotency-jdbc` or your own `IdempotencyStore` — `DeployGuard` `idempotency` fails startup on the in-memory store | — |
+| `idempotency-jdbc` | yes (replaces the in-memory store) | a `DataSource` + one `db-*` module (+ its migration `idempotency_keys`) | `scheduler` (hourly purge of expired keys; compile-only) |
 | `inquiry` | yes (in-memory store; the human check passes everything until `captcha-turnstile` or an app bean) | `inquiry-jdbc` | — |
 | `inquiry-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `inquiries`, as above) | — |
 | `booking` | wired only once a `BookingStore` exists (then the server API `BookingPools` · `BookingHolds`; HTTP `/api/v1/booking` for a servlet app with Spring Security; the door lets everyone in, the relay stays in this instance) | `booking-jdbc` | `scheduler` (the 1-minute expiry sweep; compile-only), `spring-security-core` (HTTP; compile-only) |

@@ -1984,10 +1984,38 @@
       "secrets": [],
       "docs": ["docs/modules/idempotency.md"],
       "frontend": null,
-      "notFor": ["기본 저장소는 인메모리(인스턴스별) — 여러 인스턴스면 앱이 IdempotencyStore 를 대체한다"],
+      "notFor": [
+        "기본 저장소는 인메모리(인스턴스별) — stage · prod 에서는 기동 실패이므로 idempotency-jdbc 를 같이 고르거나 앱이 IdempotencyStore 를 대체한다"
+      ],
       "keywords": {
         "ko": ["멱등", "중복 요청 방지", "두 번 눌러도 한 번", "멱등 키", "중복 결제 방지"],
         "en": ["idempotency", "idempotency key", "duplicate request", "replay response"]
+      }
+    },
+    {
+      "id": "idempotency-jdbc",
+      "kind": "module",
+      "module": "idempotency-jdbc",
+      "path": "modules/idempotency-jdbc",
+      "status": "experimental",
+      "summary": "멱등 키를 DB 에 둔다 (PostgreSQL · MySQL) — 여러 인스턴스 · 재시작에도 같은 Idempotency-Key 는 한 번만 실행되고 첫 응답을 재생한다. stage · prod 에서 인메모리 저장소면 기동 실패하는 가드를 푼다.",
+      "starter": false,
+      "newProjectFlag": "--modules idempotency-jdbc",
+      "autoIncludes": ["scheduler"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/idempotency-jdbc.md"],
+      "frontend": null,
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["멱등 키 저장소", "멱등 DB", "여러 인스턴스 멱등"],
+        "en": ["idempotency storage", "idempotency key table", "multi-instance idempotency"]
       }
     },
     {
@@ -4487,6 +4515,7 @@
         "dashboard-cloudflare",
         "dashboard-ga",
         "dashboard-jdbc",
+        "idempotency-jdbc",
         "inquiry",
         "inquiry-jdbc",
         "json",
@@ -4632,6 +4661,7 @@
         "dashboard-jdbc",
         "db-mysql",
         "event-kafka",
+        "idempotency-jdbc",
         "inquiry",
         "inquiry-jdbc",
         "json",

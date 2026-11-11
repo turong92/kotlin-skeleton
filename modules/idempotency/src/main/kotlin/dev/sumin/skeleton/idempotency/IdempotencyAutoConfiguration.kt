@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.idempotency
 
+import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.web.ClientIps
 import io.swagger.v3.oas.models.Operation
 import io.swagger.v3.oas.models.media.StringSchema
@@ -32,6 +33,11 @@ class IdempotencyAutoConfiguration {
     @ConditionalOnMissingBean
     fun idempotencyStore(): IdempotencyStore =
         InMemoryIdempotencyStore()
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["idempotencyDeployGuard"])
+    fun idempotencyDeployGuard(store: ObjectProvider<IdempotencyStore>): DeployGuard =
+        IdempotencyDeployGuard { store.getIfUnique() }
 
     @Bean
     @ConditionalOnMissingBean
@@ -93,7 +99,7 @@ class IdempotencyAutoConfiguration {
                 .name(IdempotencyHeaders.IDEMPOTENCY_KEY)
                 .description("Required for idempotent command endpoints. Reuse the same key to replay the first response.")
                 .required(true)
-                .schema(StringSchema().minLength(1).maxLength(255)),
+                .schema(StringSchema().minLength(1).maxLength(IdempotencyHeaders.MAX_KEY_LENGTH)),
         )
     }
 

@@ -35,6 +35,17 @@ class IdempotencyMissingKeyLogTest {
     }
 
     @Test
+    fun `a key longer than the documented 255 characters is 400, not a storage error`() {
+        val request = MockHttpServletRequest("POST", "/api/v1/notes").apply { addHeader("Idempotency-Key", "k".repeat(256)) }
+        val response = MockHttpServletResponse()
+
+        assertThat(interceptor.preHandle(request, response, handler)).isFalse()
+
+        assertThat(response.status).isEqualTo(400)
+        assertThat(response.contentAsString).doesNotContain("kkkkkkkk")
+    }
+
+    @Test
     fun `a conflicting reuse is recorded too and never carries the key itself`() {
         val first = MockHttpServletRequest("POST", "/api/v1/notes").apply { addHeader("Idempotency-Key", "secret-key-123"); setContent("""{"a":1}""".toByteArray()) }
         interceptor.preHandle(first, MockHttpServletResponse(), handler)

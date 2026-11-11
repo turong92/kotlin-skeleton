@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.common.web
 
+import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.time.asClock
@@ -127,6 +128,12 @@ class WebPolicyAutoConfiguration {
     @ConditionalOnProperty(prefix = "skeleton.web.rate-limit", name = ["enabled"], havingValue = "true")
     fun rateLimitStore(timeProvider: ObjectProvider<TimeProvider>): RateLimitStore =
         InMemoryFixedWindowRateLimitStore(timeProvider.getIfAvailable()?.asClock() ?: Clock.systemUTC())
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["rateLimitDeployGuard"])
+    @ConditionalOnProperty(prefix = "skeleton.web.rate-limit", name = ["enabled"], havingValue = "true")
+    fun rateLimitDeployGuard(store: ObjectProvider<RateLimitStore>): DeployGuard =
+        RateLimitDeployGuard { store.getIfUnique() }
 
     @Bean
     @ConditionalOnMissingBean(name = ["rateLimitFilterRegistration"])

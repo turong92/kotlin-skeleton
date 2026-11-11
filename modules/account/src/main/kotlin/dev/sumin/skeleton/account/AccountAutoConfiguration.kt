@@ -476,6 +476,7 @@ class AccountAutoConfiguration {
         clientIps: ObjectProvider<ClientIps>,
         registry: ObjectProvider<SignInMethodRegistry>,
         projects: ObjectProvider<ProjectRegistry>,
+        rateLimits: ObjectProvider<RateLimitStore>,
     ): AccountDeployGuard = AccountDeployGuard(
         properties, auth.getIfAvailable { AuthProperties() }.protectedProfiles,
         // 프로젝트가 있으면 프로젝트마다 같은 검사 — 시드 · 로그 링크는 공통+프로젝트 값, 링크 주소는 프로젝트 자기 값만(공통으로 내려가지 않는다)
@@ -487,6 +488,7 @@ class AccountAutoConfiguration {
             accounts.getIfUnique(), tokenStore.getIfUnique(), challengeStore.getIfUnique(), transport.getIfUnique() is LogOnlyMailTransport, captcha.getIfAvailable() != null,
             clientIps.getIfAvailable { ClientIps() }.configured,
             registry.getIfAvailable()?.all()?.any { it.provesEmail } == true,
+            rateLimitInMemory = rateLimits.getIfUnique().let { it == null || it is InMemoryFixedWindowRateLimitStore },
         )
     }
 }

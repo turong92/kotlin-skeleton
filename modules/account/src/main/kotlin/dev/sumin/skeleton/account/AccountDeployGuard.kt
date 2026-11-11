@@ -30,6 +30,8 @@ class AccountDeployGuard(
         val clientIpModeConfigured: Boolean,
         /** 메일함을 증명하는 로그인 수단(매직 링크 …)이 등록돼 있나 — [AccountProperties.Social.mergeOnVerifiedEmail] 과 함께 이메일 확인 끈 모드의 위험을 키운다 */
         val mailboxProofMethod: Boolean = false,
+        /** 속도 제한 저장소가 없거나 인메모리다 (platform `RateLimitStore` 빈이 없거나 `InMemoryFixedWindowRateLimitStore`) — 한도가 인스턴스별로 따로 센다 */
+        val rateLimitInMemory: Boolean = false,
     )
 
     override val name: String = "account"
@@ -66,6 +68,7 @@ class AccountDeployGuard(
     override fun warnings(context: DeployContext): List<String> = buildList {
         if (!context.protectedBy(protectedProfiles)) return@buildList
         if (!props.login.throttleEnabled) add("skeleton.account.login.throttle-enabled=false: sign-in brute force is not limited by this module")
+        if (state().rateLimitInMemory) add("the sign-in, sign-up, reset and magic link limits count in each instance's memory (no shared RateLimitStore), so they loosen by the instance count and reset on restart: add modules:redis-rate-limit or define a RateLimitStore bean")
         if (props.signUp.enabled && !props.captcha.required) add("sign-up is open without a captcha (skeleton.account.captcha.required=false): bots can create accounts and mail strangers")
         if (props.admin.enabled && props.bootstrap.adminEmail.isBlank()) add("the admin API is enabled but no administrator can exist yet: set skeleton.account.bootstrap.admin-email or grant ADMIN another way")
         // 재가입 차단 해시의 키 — 비면 JWT 비밀에서 파생돼 JWT 비밀을 돌릴 때 차단이 조용히 풀린다. 차단은 관리자 지우기(관리자 API)로만 생기므로 그것을 켠 앱만 알린다 (문제가 아니라 경고 — 차단을 쓰지 않는 앱을 막지 않는다)

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 다중 인스턴스 · 0대 운영 구멍 메우기 - idempotency-jdbc, 종료 신호, 0대 깨우기 (2026-11-11)
+
+- 새 모듈 `idempotency-jdbc`: 멱등 키를 DB 에 둔다(PostgreSQL · MySQL, 표 `idempotency_keys` — 기본 키 = 범위가 붙은 키, MySQL 은 이진 정렬이라 대소문자를 구분한다). 인스턴스가 여럿이거나 다시 떠도 같은 `Idempotency-Key` 는 한 번만 실행되고 첫 응답(상태 · 헤더 · 본문 바이트)을 재생한다. 동시에 온 같은 키는 예약마다 넣는 난수로 하나만 시작한다. 응답을 저장하기 전에 프로세스가 죽어도 키가 TTL 내내 묶이지 않는다 - 새 설정 `skeleton.idempotency.in-progress-lease`(기본 5분) 가 지난 「진행 중」 예약은 다음 요청이 새로 시작한다(가장 오래 걸리는 명령보다 길게). 만료한 줄은 한 시간마다 청소한다(`scheduler` 가 있으면 `idempotency.purge`, 요청 구동 모드면 `OnRequestTask` `idempotency-purge`). 마이그레이션 `V20261111100000__idempotency_keys.sql`.
+- **호환 변경(stage · prod)**: `idempotency` 에 배포 가드 `idempotency` 를 더했다 - `skeleton.env` 가 stage · prod 인데 저장소가 인메모리면 기동 실패한다(같은 키가 다른 인스턴스로 가면 다시 실행되기 때문). `idempotency-jdbc` 를 넣거나 `IdempotencyStore` 빈을 둔다. `apps/sample` · `apps/workbench` 는 `idempotency-jdbc` 를 포함하도록 바꿨다. `Idempotency-Key` 가 255자를 넘으면 저장소 오류가 아니라 `400` 이다(OpenAPI `maxLength` 와 같게).
+- 0대 배포의 깨우기가 부르는 `OnRequestTask` 를 더했다: `point-expire`(포인트 소멸), `campaign-referral-release`(초대 보상 해제) - 타이머만 있던 두 작업이 인스턴스가 0대일 때도 돈다.
+- 보호 환경(stage · prod)에서 속도 제한이 인스턴스별 메모리로 세면 기동 경고를 낸다(막지 않는다): `skeleton.web.rate-limit` 을 켠 앱(`rate-limit` 가드), 계정의 로그인 · 가입 · 재설정 한도(`account` 가드). `redis-rate-limit` 이나 `RateLimitStore` 빈으로 공유한다.
+- `job-queue-jdbc` 종료 신호(SIGTERM): 일꾼이 `SmartLifecycle`(웹 서버의 정상 종료와 같은 단계)로 멈춰 두 대기가 더해지지 않고 겹친다. 신호 즉시 새 묶음을 집지 않고, 이미 집었지만 안 돈 잡은 시도를 쓰지 않고 바로 `PENDING` 으로 돌려주며, 도는 잡은 새 설정 `skeleton.job-queue.shutdown-grace`(기본 5초)까지 기다린 뒤 인터럽트하고 그 잡도 돌려준다(인터럽트에 반응하는 핸들러만 - 아니면 스테일 복구 10분). 앱은 `spring.lifecycle.timeout-per-shutdown-phase: 8s` 를 정한다(`apps/api` · `apps/sample` - 모듈 기본값은 그대로, 프레임워크 기본 30초는 Cloud Run 10초보다 길다).
+- 문서: `scheduler` 락은 설계상 no-op 이며 레포의 주기 작업은 모두 겹쳐 돌아도 안전하다(`docs/modules/scheduler.md`, 틀린 「redis-lock 으로 바꾼다」 안내 정정), `@Async` 로 돈 · 지급 · 메일 · 외부 호출을 돌리지 않는다(`docs/async.md`), 긴 핸들러는 하트비트 대신 잡을 나눈다(`docs/cloud-run-scale-to-zero.md`).
 ### persistence-jooq - 네이티브 이미지 지원 (2026-11-11)
 
 - `persistence-jooq` 가 GraalVM 네이티브에서 돈다: `JooqNativeHints`(`SQLDataType` 의 배열형 등록 — 없으면 `DSLContext` 가 서지 못한다)와 `JooqRecordAotProcessor`(앱 패키지의 jOOQ 레코드 클래스 생성자 등록 — 없으면 `Could not construct new record`)를 `aot.factories` 로 낸다. `fetchInto(클래스)` 의 값 클래스는 앱이 `@RegisterReflectionForBinding` 으로 표시한다. `tools/native-check` 와 `scripts/native-smoke.sh` 에 jOOQ 단계가 더해졌다. 문서: `docs/native-image.md` "jOOQ".

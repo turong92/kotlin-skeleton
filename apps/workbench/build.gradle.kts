@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":modules:crypto"))
     implementation(project(":modules:event-kafka"))
     implementation(project(":modules:idempotency"))
+    implementation(project(":modules:idempotency-jdbc"))   // 멱등 키 저장소 - 보호 환경에서는 인메모리 저장소면 기동 실패
     implementation(project(":modules:json"))
     implementation(project(":modules:notification-slack"))
     implementation(project(":modules:notification-jdbc"))

@@ -83,6 +83,16 @@ class AccountDeployGuardTest {
     }
 
     @Test
+    fun `per-instance in-memory rate limits are a warning in a protected env, never a startup failure - the limits loosen by the instance count`() {
+        val inMemory = healthy.copy(rateLimitInMemory = true)
+        val warned = guard(state = inMemory).warnings(prod)
+        assertTrue(warned.any { "RateLimitStore" in it && "redis-rate-limit" in it }, warned.toString())
+        assertEquals(emptyList(), guard(state = inMemory).problems(prod))
+        assertTrue(guard().warnings(prod).none { "RateLimitStore" in it })
+        assertTrue(guard(state = inMemory).warnings(local).none { "RateLimitStore" in it })
+    }
+
+    @Test
     fun `an app that can erase accounts by an administrator but has no blocks secret is warned - the block key would come from the JWT secret`() {
         val admin = goodProps.copy(admin = AccountProperties.Admin(enabled = true))
         val warned = guard(admin).warnings(prod)

@@ -45,6 +45,18 @@ class IdempotencyHandlerInterceptor(
             return false
         }
 
+        if (rawKey.length > IdempotencyHeaders.MAX_KEY_LENGTH) {
+            writeError(
+                request = request,
+                response = response,
+                status = HttpStatus.BAD_REQUEST,
+                title = "Invalid Idempotency-Key",
+                detail = "Idempotency-Key must be at most ${IdempotencyHeaders.MAX_KEY_LENGTH} characters.",
+                rawKey = null,
+            )
+            return false
+        }
+
         val scopedKey = "${scopeResolver.resolve(request)}:$rawKey"
         val idempotencyRequest = IdempotencyRequest(
             scopedKey = scopedKey,

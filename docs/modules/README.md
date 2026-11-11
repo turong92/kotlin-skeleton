@@ -70,6 +70,7 @@
 | `payment-paddle` | Paddle 해외 결제 제공자 | [payment-paddle](payment-paddle.md) |
 | `config-aws-ssm` | AWS SSM Parameter Store 를 프로퍼티로 읽기 | [config-aws-ssm](config-aws-ssm.md) |
 | `idempotency` | Idempotency-Key 로 명령 엔드포인트 보호 | [idempotency](idempotency.md) |
+| `idempotency-jdbc` | 멱등 키 저장을 DB 에 두기 (여러 인스턴스 · 재시작에도 한 번만) | [idempotency-jdbc](idempotency-jdbc.md) |
 | `json` | JsonCodec · JsonDocument · 버전 있는 페이로드 | [json](json.md) |
 | `crypto` | AES-GCM 텍스트 암호화 · 불투명 URL 토큰 | [crypto](crypto.md) |
 | `persistence-jpa` | JPA audit 타임스탬프 · 부분 수정 도우미 | [persistence-jpa](persistence-jpa.md) |

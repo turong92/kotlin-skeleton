@@ -41,6 +41,18 @@ fun sendLater(command: SendCommand) {
 }
 ```
 
+## What Not To Run With `@Async`
+
+An `@Async` task lives only in this instance's memory. It is lost when the instance
+restarts, scales down or is stopped (Cloud Run gives a stopping instance 10 seconds, and
+`await-termination-seconds` above defaults to 20), and on a scale-to-zero deploy the CPU
+can be taken away as soon as the response is sent. So **do not use it for money, payouts,
+mail, or any call to an outside service** — anything that must happen once the request
+succeeded. Put that work in the job queue (`job-queue-jdbc`: a row in the database,
+retried, picked up by any instance or by the wake call) and make the handler idempotent.
+`@Async` is for best-effort work that may be lost: cache warming, extra logging, derived
+data that is rebuilt on the next read.
+
 ## CompletableFuture Task Groups
 
 Use `AsyncTaskGroup` when multiple named futures should be awaited and logged
