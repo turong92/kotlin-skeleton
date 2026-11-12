@@ -60,7 +60,7 @@ class LoginIdRequiredWebTest {
     private val required = "ACCOUNT.LOGIN_ID_REQUIRED"
     private fun bearer(r: MvcResult) = "Bearer " + JsonPath.read<String>(r.response.contentAsString, "$.value.accessToken")
     private fun social(code: String) = mvc.perform(post("/api/v1/auth/social/fakeidp/login").contentType(json).content("""{"authorizationCode":"$code"}""")).andExpect(status().isOk).andReturn()
-    private fun uniq() = "id${System.nanoTime()}"
+    private fun uniq() = "id${java.util.UUID.randomUUID().toString().replace("-", "").take(12)}"   // 아이디 기본 20자 안
 
     /** 아이디도 이메일도 없는 소셜 계정 */
     private fun bare(code: String) = bearer(social(code))

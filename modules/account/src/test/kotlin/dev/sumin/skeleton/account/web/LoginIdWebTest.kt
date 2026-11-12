@@ -46,7 +46,9 @@ class LoginIdWebTest {
     @BeforeEach fun clear() { mail.sent.clear() }
 
     private fun unique() = "u${System.nanoTime()}@example.com"
-    private fun id() = "id${System.nanoTime()}"
+    private fun id() = "id${short()}"
+    // 아이디는 기본 20자까지 — nanoTime 은 기계가 오래 켜져 있으면 19자리가 되어 넘는다
+    private fun short() = java.util.UUID.randomUUID().toString().replace("-", "").take(12)
 
     private fun signUp(email: String, loginIdJson: String?): ResultActions =
         mvc.perform(
@@ -166,10 +168,10 @@ class LoginIdWebTest {
     fun `L4 - the 31st call from one IP is 429 ACCOUNT_RATE_LIMITED with Retry-After, form errors do not count, another IP is fine`() {
         val ip = "203.0.113.13"
         repeat(10) { check("\"x\"", ip).andExpect(status().isOk) }   // INVALID: free
-        repeat(30) { check("\"free${System.nanoTime()}\"", ip).andExpect(status().isOk) }
-        check("\"free${System.nanoTime()}\"", ip).andExpect(status().isTooManyRequests)
+        repeat(30) { check("\"free${short()}\"", ip).andExpect(status().isOk) }
+        check("\"free${short()}\"", ip).andExpect(status().isTooManyRequests)
             .andExpect(jsonPath("$.code").value("ACCOUNT.RATE_LIMITED")).andExpect(header().exists("Retry-After"))
-        check("\"free${System.nanoTime()}\"", "203.0.113.14").andExpect(status().isOk)
+        check("\"free${short()}\"", "203.0.113.14").andExpect(status().isOk)
     }
 
     @Test
@@ -201,7 +203,7 @@ class LoginIdWebTest {
         assertTrue(loginId !in payload, "no id in the JWT")
 
         val now = java.time.Instant.now()
-        val social = "soc${System.nanoTime()}"
+        val social = "soc${short()}"
         val socialId = "acc_$social"
         accounts.insert(dev.sumin.skeleton.account.Account(socialId, "$social@example.com", true, dev.sumin.skeleton.account.AccountStatus.ACTIVE, setOf("USER"), null, "ko", "Asia/Seoul", now, now, loginId = social), listOf(dev.sumin.skeleton.account.Identity("idn_$social", socialId, "google", "g-$social", true, createdAt = now)), core.loginIdHashOf(social))
 
