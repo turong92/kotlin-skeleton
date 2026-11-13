@@ -123,13 +123,15 @@ class AccountResponseLevelSecurityTest {
             awaitUntil("the reset mail") { sent.size > before }
             val tokens = sent.filter { it.link != null }.map { it.link!!.substringAfter("token=") }
             assertTrue(tokens.isNotEmpty(), "expected the reset mail")
-            val lines = appender.list.map { it.formattedMessage + " " + (it.throwableProxy?.message ?: "") }
+            // 다른 스레드(비동기 메일 · 스케줄러)가 이 사이에도 로그를 쓴다 — 쓰기와 같은 잠금(AppenderBase.doAppend)으로 한 번 떠 둔 사본만 읽는다
+            val events = synchronized(appender) { appender.list.toList() }
+            val lines = events.map { it.formattedMessage + " " + (it.throwableProxy?.message ?: "") }
             tokens.forEach { t -> assertTrue(lines.none { t in it }, "a one-time token was logged") }
             // 6자리 숫자가 다른 숫자(시각 · 포트 · id)의 부분열로 우연히 같을 수 있다 — 코드는 **다른 글자에 붙지 않은 독립된 토큰**으로 찍혔을 때만 유출이다
             val standalone = Regex("(?<![0-9A-Za-z])" + Regex.escape(code) + "(?![0-9A-Za-z])")
             assertTrue(lines.none { standalone.containsMatchIn(it) }, "a sign-up code was logged")
-            assertTrue(lines.none { signUpId in it }, "a sign-up id was logged by " + appender.list.filter { signUpId in it.formattedMessage }.map { it.loggerName + ": " + it.formattedMessage.take(200) })
-            assertTrue(appender.list.none { "tangerine-42-moon" in it.formattedMessage }, "a password was logged by " + appender.list.filter { "tangerine-42-moon" in it.formattedMessage }.map { it.loggerName + ": " + it.formattedMessage.take(120) })
+            assertTrue(lines.none { signUpId in it }, "a sign-up id was logged by " + events.filter { signUpId in it.formattedMessage }.map { it.loggerName + ": " + it.formattedMessage.take(200) })
+            assertTrue(events.none { "tangerine-42-moon" in it.formattedMessage }, "a password was logged by " + events.filter { "tangerine-42-moon" in it.formattedMessage }.map { it.loggerName + ": " + it.formattedMessage.take(120) })
 
             val link = sent.first { it.link != null }.link!!
             assertTrue("token=" in link)
