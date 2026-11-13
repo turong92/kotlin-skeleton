@@ -17,4 +17,9 @@ annotation class SkeletonScheduled(
     val profiles: Array<String> = [],
     val enabledProperty: String = "",
     val lockKey: String = "",
+    // 밖에서 부를 때(mode=EXTERNAL)의 호출자 설정 — 앱은 쓰지 않고 작업 목록 내보내기(SkeletonExternalSchedules)에만 실린다. -1 = 기본값
+    // (주기 1시간 이하: 예산 60초 · 재시도 0 · 대기 300초, 그보다 길면: 900초 · 2 · 120초)
+    val budgetSeconds: Int = -1,
+    val retries: Int = -1,
+    val minBackoffSeconds: Int = -1,
 )

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### scheduler - 밖의 스케줄러로 돌리기 (2026-11-13)
+
+- `skeleton.scheduler.mode=external`(기본 `local` 그대로): 타이머를 하나도 걸지 않고 `POST /internal/scheduler/run/{taskId}`(`external.path`, 헤더 `X-Scheduler-Secret` = `external.secret`)로 Cloud Scheduler 같은 밖의 호출자가 작업 하나를 요청 안에서 끝까지 돌린다. 성공 200, 락을 못 잡으면 200 `ran:false`, 작업이 던지면 실패 핸들러 뒤 500(호출자 재시도), local 모드 · 비밀값 없음 · 없는 작업 404, 틀린 비밀값 401. 모드 · 비밀값은 실행 때 읽는다(네이티브 이미지도 환경변수로 전환). 보호 환경에서 비밀값이 없거나 약하면 기동 실패(배포 가드 `scheduler-external`).
+- `@SkeletonScheduled` 에 호출자 설정 `budgetSeconds` · `retries` · `minBackoffSeconds`(기본 -1 = 주기 1시간 이하 60초 · 0 · 300초, 그보다 길면 900초 · 2 · 120초)를 더했다. `SkeletonExternalSchedules.from(registrar.discoveredTasks())` 가 작업 목록(unix cron 5자리 · 시간대 · 위 설정 · profiles)을 만든다 — 옮길 수 없는 스케줄(초 단위, 나눠떨어지지 않는 간격, `L` `W` `#`, 일과 요일 동시 지정)은 실패한다. 문서: `docs/modules/scheduler.md` "밖의 스케줄러로 돌리기".
+
 ### 다중 인스턴스 · 0대 운영 구멍 메우기 - idempotency-jdbc, 종료 신호, 0대 깨우기 (2026-11-11)
 
 - 새 모듈 `idempotency-jdbc`: 멱등 키를 DB 에 둔다(PostgreSQL · MySQL, 표 `idempotency_keys` — 기본 키 = 범위가 붙은 키, MySQL 은 이진 정렬이라 대소문자를 구분한다). 인스턴스가 여럿이거나 다시 떠도 같은 `Idempotency-Key` 는 한 번만 실행되고 첫 응답(상태 · 헤더 · 본문 바이트)을 재생한다. 동시에 온 같은 키는 예약마다 넣는 난수로 하나만 시작한다. 응답을 저장하기 전에 프로세스가 죽어도 키가 TTL 내내 묶이지 않는다 - 새 설정 `skeleton.idempotency.in-progress-lease`(기본 5분) 가 지난 「진행 중」 예약은 다음 요청이 새로 시작한다(가장 오래 걸리는 명령보다 길게). 만료한 줄은 한 시간마다 청소한다(`scheduler` 가 있으면 `idempotency.purge`, 요청 구동 모드면 `OnRequestTask` `idempotency-purge`). 마이그레이션 `V20261111100000__idempotency_keys.sql`.

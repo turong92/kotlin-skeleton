@@ -3,6 +3,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter")
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.springframework:spring-aop")
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")   // 밖의 스케줄러가 부르는 작업 주소 (SchedulerTriggerController) — platform 이 이미 싣는다, 서블릿 웹 앱일 때만 선다
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     testImplementation("org.assertj:assertj-core")

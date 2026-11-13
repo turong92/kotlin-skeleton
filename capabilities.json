@@ -3782,7 +3782,7 @@
       "module": "scheduler",
       "path": "modules/scheduler",
       "status": "stable",
-      "summary": "어노테이션 기반 스케줄러 — 실행 가드 · 락 매니저 · 실패 핸들러(기본 락은 no-op, 단일 인스턴스용).",
+      "summary": "어노테이션 기반 스케줄러 — 실행 가드 · 락 매니저 · 실패 핸들러(기본 락은 no-op, 단일 인스턴스용). mode=external 이면 타이머 없이 밖의 스케줄러(Cloud Scheduler)가 작업마다 POST /internal/scheduler/run/{taskId} 로 부른다.",
       "starter": false,
       "newProjectFlag": "--modules scheduler",
       "autoIncludes": [],
@@ -3795,14 +3795,14 @@
         "prefixes": ["skeleton.scheduler"],
         "snippet": "docs/config/modules/scheduler.yml"
       },
-      "basePaths": [],
+      "basePaths": ["/internal/scheduler/run"],
       "secrets": [],
       "docs": ["docs/modules/scheduler.md"],
       "frontend": null,
       "notFor": ["여러 인스턴스에서 한 번만 돌리려면 redis-lock 같은 락 매니저로 바꾼다", "재시도 · 영속 큐가 아니다(job-queue-jdbc)"],
       "keywords": {
-        "ko": ["스케줄러", "정기 작업", "크론", "주기 실행", "배치"],
-        "en": ["scheduler", "cron", "scheduled job", "periodic task", "batch"]
+        "ko": ["스케줄러", "정기 작업", "크론", "주기 실행", "배치", "외부 스케줄러"],
+        "en": ["scheduler", "cron", "scheduled job", "periodic task", "batch", "cloud scheduler"]
       }
     },
     {

@@ -12,3 +12,7 @@ skeleton:
       blocked-profiles: []         # 이 프로필에서는 실행하지 않는다
     locking:
       enabled: true                # 락 매니저를 거친다 (lock-key 가 있는 작업)
+    mode: local                    # local = 앱 안 타이머. external = 타이머 없이 밖의 스케줄러가 POST {external.path}/{taskId} 로 부른다 (실행 때 읽는다)
+    external:
+      path: /internal/scheduler/run
+      secret: ""                   # 헤더 X-Scheduler-Secret 과 맞춘다. 비면 주소는 닫혀 있다(404). 보호 환경에서 없거나 약하면 기동 실패

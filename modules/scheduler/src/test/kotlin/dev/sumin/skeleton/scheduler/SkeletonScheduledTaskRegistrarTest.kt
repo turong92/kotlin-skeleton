@@ -9,6 +9,7 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.scheduling.TaskScheduler
@@ -58,6 +59,27 @@ class SkeletonScheduledTaskRegistrarTest {
             assertThat(fixture.failureHandler.failures).hasSize(1)
             assertThat(fixture.failureHandler.failures.single().taskId).isEqualTo("sample.failing")
             assertThat(fixture.failureHandler.failures.single().throwable).isInstanceOf(IllegalStateException::class.java)
+        }
+    }
+
+    @Test
+    fun `external mode schedules nothing and runs a task on call, rethrowing failures`() {
+        val fixture = Fixture()
+
+        fixture.contextRunner.withPropertyValues("skeleton.scheduler.mode=external").run { context ->
+            val registrar = context.getBean(SkeletonScheduledTaskRegistrar::class.java)
+
+            assertThat(registrar.registerTasks()).isEmpty()
+            assertThat(fixture.scheduler.scheduled).isEmpty()
+
+            assertThat(registrar.runExternally("sample.locked")).isEqualTo(SkeletonExternalRunResult.RAN)
+            assertThat(context.getBean(SampleScheduledBean::class.java).lockedCalls).isEqualTo(1)
+            assertThat(fixture.lockManager.requests).hasSize(1)
+
+            assertThat(registrar.runExternally("nope")).isEqualTo(SkeletonExternalRunResult.NOT_FOUND)
+
+            assertThatThrownBy { registrar.runExternally("sample.failing") }.isInstanceOf(IllegalStateException::class.java)
+            assertThat(fixture.failureHandler.failures.single().taskId).isEqualTo("sample.failing")
         }
     }
 
