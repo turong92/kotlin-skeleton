@@ -27,10 +27,18 @@ class FakePresignedStorage : PresignedStorage {
     override fun presignDownload(request: PresignedDownloadRequest) =
         PresignedUrl(request.key, "GET", URI("http://s3.test/${request.key}?down"), emptyMap(), expires)
 
-    override fun startMultipartUpload(request: StartMultipartUploadRequest) = StartedMultipartUpload(request.key, "upload-1")
+    var startedUploads = 0
+    var signedParts = 0
 
-    override fun presignMultipartUploadPart(request: PresignedMultipartUploadPartRequest) =
-        PresignedMultipartUploadPart(request.key, request.uploadId, request.partNumber, "PUT", URI("http://s3.test/${request.key}?part=${request.partNumber}"), emptyMap(), expires)
+    override fun startMultipartUpload(request: StartMultipartUploadRequest): StartedMultipartUpload {
+        startedUploads++
+        return StartedMultipartUpload(request.key, "upload-1")
+    }
+
+    override fun presignMultipartUploadPart(request: PresignedMultipartUploadPartRequest): PresignedMultipartUploadPart {
+        signedParts++
+        return PresignedMultipartUploadPart(request.key, request.uploadId, request.partNumber, "PUT", URI("http://s3.test/${request.key}?part=${request.partNumber}"), emptyMap(), expires)
+    }
 
     override fun completeMultipartUpload(request: CompleteMultipartUploadRequest) = CompletedMultipartUpload(request.key, request.uploadId, "etag-all")
 

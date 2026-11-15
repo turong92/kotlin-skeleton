@@ -15,6 +15,7 @@ import dev.sumin.skeleton.storage.PresignedStorage
 import dev.sumin.skeleton.storage.PresignedUploadRequest
 import dev.sumin.skeleton.storage.StartMultipartUploadRequest
 import dev.sumin.skeleton.storage.StorageFileCandidate
+import dev.sumin.skeleton.storage.StorageFileValidationErrorCode
 import dev.sumin.skeleton.storage.StorageFileValidator
 import dev.sumin.skeleton.storage.StorageKeyScheme
 import dev.sumin.skeleton.storage.StorageUploadCompletion
@@ -115,6 +116,7 @@ enum class StorageErrorCode(
     UNAUTHENTICATED("STORAGE.UNAUTHENTICATED", HttpStatus.UNAUTHORIZED, "Authentication required"),
     RATE_LIMITED("STORAGE.RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Too many uploads"),
     CAPTCHA_FAILED("STORAGE.CAPTCHA_FAILED", HttpStatus.BAD_REQUEST, "Captcha failed"),
+    MULTIPART_DISABLED("STORAGE.MULTIPART_DISABLED", HttpStatus.NOT_FOUND, "Multipart upload disabled"),
 }
 
 /**
@@ -214,6 +216,7 @@ class StorageController(
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StorageMultipartStartResponse::class)
     @PostMapping("/multipart/start")
     fun startMultipart(authentication: Authentication?, @Valid @RequestBody request: StorageCandidateRequest): Any {
+        requireMultipart()
         val accountId = authentication.accountId()
         requireAccepted(request)
         val started = storage.startMultipartUpload(StartMultipartUploadRequest(newKey(accountId, request.fileName), request.contentType))
@@ -224,7 +227,13 @@ class StorageController(
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StorageMultipartPartResponse::class)
     @PostMapping("/multipart/part")
     fun presignPart(authentication: Authentication?, @Valid @RequestBody request: StorageMultipartPartRequest): Any {
+        requireMultipart()
         val key = ownedKey(authentication.accountId(), request.key)
+        // 조각 하나가 파일 전체 상한보다 클 수는 없다 - 서명 전에 거절한다 (최종 크기는 완료 때 다시 본다)
+        val max = validator.rule.maxSizeBytes
+        if (request.contentLength != null && request.contentLength > max) {
+            throw sizeRejected(request.contentLength, max)
+        }
         val part = storage.presignMultipartUploadPart(
             PresignedMultipartUploadPartRequest(key, request.uploadId, request.partNumber, request.contentLength),
         )
@@ -235,10 +244,18 @@ class StorageController(
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StorageMultipartCompleteResponse::class)
     @PostMapping("/multipart/complete")
     fun completeMultipart(authentication: Authentication?, @Valid @RequestBody request: StorageMultipartCompleteRequest): Any {
+        requireMultipart()
         val key = ownedKey(authentication.accountId(), request.key)
         val completed = storage.completeMultipartUpload(
             CompleteMultipartUploadRequest(key, request.uploadId, request.parts.map { CompletedUploadPart(it.partNumber, it.eTag) }),
         )
+        // 조각 크기는 클라이언트가 정하므로 합친 최종 크기가 상한을 넘으면 지우고 거절한다
+        val size = storage.metadata(key)?.sizeBytes
+        val max = validator.rule.maxSizeBytes
+        if (size != null && size > max) {
+            storage.delete(key)
+            throw sizeRejected(size, max)
+        }
         return Response.ok(StorageMultipartCompleteResponse(completed.key.value, completed.uploadId, completed.eTag))
     }
 
@@ -246,10 +263,21 @@ class StorageController(
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StorageMultipartAbortResponse::class)
     @PostMapping("/multipart/abort")
     fun abortMultipart(authentication: Authentication?, @Valid @RequestBody request: StorageMultipartAbortRequest): Any {
+        requireMultipart()
         val key = ownedKey(authentication.accountId(), request.key)
         storage.abortMultipartUpload(AbortMultipartUploadRequest(key, request.uploadId))
         return Response.ok(StorageMultipartAbortResponse(aborted = true))
     }
+
+    private fun requireMultipart() {
+        if (!web.multipart.enabled) throw ApplicationException("Multipart upload is disabled", StorageErrorCode.MULTIPART_DISABLED)
+    }
+
+    private fun sizeRejected(size: Long, max: Long) = ApplicationException(
+        message = "File rejected: SIZE_TOO_LARGE",
+        errorCode = StorageErrorCode.FILE_REJECTED,
+        data = mapOf("errors" to listOf(StorageValidationIssue(StorageFileValidationErrorCode.SIZE_TOO_LARGE.name, "File size $size exceeds maximum $max."))),
+    )
 
     private fun requireAccepted(request: StorageCandidateRequest) {
         val result = validator.validate(request.toCandidate())

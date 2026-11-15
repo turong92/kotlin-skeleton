@@ -24,6 +24,8 @@ data class StorageWebProperties(
     val `public`: StoragePublicProperties = StoragePublicProperties(),
     /** 버려진 회원 업로드 정리 - **기본 꺼짐**, 앱 yml 이 켠다 */
     val cleanup: StorageCleanupProperties = StorageCleanupProperties(),
+    /** 멀티파트 올리기 스위치 - 기본 켜짐. 큰 파일이 없는 앱은 끈다 */
+    val multipart: StorageMultipartProperties = StorageMultipartProperties(),
 ) {
     init {
         if (`public`.enabled) {
@@ -68,6 +70,9 @@ data class StorageWebProperties(
         const val MIN_KEY_SECRET_LENGTH = 32
     }
 }
+
+/** 멀티파트 올리기(`skeleton.storage.web.multipart.*`) - false 면 멀티파트 네 길(`/multipart/` 아래)이 모두 404 `STORAGE.MULTIPART_DISABLED`, 한 번에 올리는 `presign` 은 그대로 */
+data class StorageMultipartProperties(val enabled: Boolean = true)
 
 /**
  * 버려진 회원 업로드 정리(`skeleton.storage.web.cleanup.*`) - 업로드 접두사 아래에서 [minAge] 보다 오래됐고 어떤 사용처([dev.sumin.skeleton.common.upload.UploadedKeyUsage])도 쓴다고 하지 않은 원본을 지운다.

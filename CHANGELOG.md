@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### storage - 멀티파트가 크기 상한을 우회하던 구멍 (2026-11-15)
+
+- `POST /api/v1/storage/multipart/complete` 가 합친 객체의 실제 크기를 `skeleton.storage.validation.max-size-bytes` 와 대 보고, 넘으면 객체를 지우고 400 `STORAGE.FILE_REJECTED`(`SIZE_TOO_LARGE`)로 거절한다. 조각 크기를 클라이언트가 정해 상한을 우회할 수 있었다(객체 저장소 비용 사고). `/multipart/part` 는 `contentLength` 가 상한보다 크면 서명 전에 같은 400 이다.
+- 새 설정 `skeleton.storage.web.multipart.enabled`(기본 `true` = 지금 동작). `false` 면 멀티파트 네 길이 모두 404 `STORAGE.MULTIPART_DISABLED` 이고 `/presign` 은 그대로다.
+
 ### scheduler - 밖의 스케줄러로 돌리기 (2026-11-13)
 
 - `skeleton.scheduler.mode=external`(기본 `local` 그대로): 타이머를 하나도 걸지 않고 `POST /internal/scheduler/run/{taskId}`(`external.path`, 헤더 `X-Scheduler-Secret` = `external.secret`)로 Cloud Scheduler 같은 밖의 호출자가 작업 하나를 요청 안에서 끝까지 돌린다. 성공 200, 락을 못 잡으면 200 `ran:false`, 작업이 던지면 실패 핸들러 뒤 500(호출자 재시도), local 모드 · 비밀값 없음 · 없는 작업 404, 틀린 비밀값 401. 모드 · 비밀값은 실행 때 읽는다(네이티브 이미지도 환경변수로 전환). 보호 환경에서 비밀값이 없거나 약하면 기동 실패(배포 가드 `scheduler-external`).

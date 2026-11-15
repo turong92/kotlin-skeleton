@@ -99,9 +99,60 @@ class StorageWebTest {
     }
 
     @Test
+    fun `multipart complete deletes an object larger than the size limit and rejects`() {
+        val key = "uploads/acc_a/big/v.txt"
+        storage.objects[key] = ByteArray(1500) to "text/plain"
+        postJson("/api/v1/storage/multipart/complete", """{"key":"$key","uploadId":"upload-1","parts":[{"partNumber":1,"eTag":"e1"}]}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("STORAGE.FILE_REJECTED"))
+            .andExpect(jsonPath("$.data.errors[0].code").value("SIZE_TOO_LARGE"))
+        assertTrue(key in storage.deleted)
+        assertTrue(key !in storage.objects)
+    }
+
+    @Test
+    fun `multipart complete keeps an object within the size limit`() {
+        val key = "uploads/acc_a/ok/v.txt"
+        storage.objects[key] = ByteArray(900) to "text/plain"
+        postJson("/api/v1/storage/multipart/complete", """{"key":"$key","uploadId":"upload-1","parts":[{"partNumber":1,"eTag":"e1"}]}""")
+            .andExpect(status().isOk)
+        assertTrue(key in storage.objects)
+    }
+
+    @Test
+    fun `multipart part larger than the size limit is refused before signing`() {
+        val before = storage.signedParts
+        postJson("/api/v1/storage/multipart/part", """{"key":"uploads/acc_a/z/v.txt","uploadId":"upload-1","partNumber":1,"contentLength":1001}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("STORAGE.FILE_REJECTED"))
+        assertEquals(before, storage.signedParts)
+    }
+
+    @Test
     fun `without an authenticated caller it is 401`() {
         mockMvc.perform(post("/api/v1/storage/presign").contentType(MediaType.APPLICATION_JSON).content("""{"fileName":"a.txt","contentType":"text/plain","sizeBytes":1}"""))
             .andExpect(status().isUnauthorized)
+    }
+}
+
+@SpringBootTest(classes = [StorageWebTestApplication::class], properties = ["skeleton.storage.web.multipart.enabled=false"])
+@AutoConfigureMockMvc
+class StorageWebMultipartOffTest {
+    @Autowired lateinit var mockMvc: MockMvc
+    @Autowired lateinit var storage: FakePresignedStorage
+
+    private fun postJson(path: String, body: String) =
+        mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body).principal(TestingAuthenticationToken("acc_a", "n/a", "ROLE_USER")))
+
+    @Test
+    fun `every multipart endpoint is 404 and starts nothing while presign still works`() {
+        val started = storage.startedUploads
+        postJson("/api/v1/storage/multipart/start", """{"fileName":"v.txt","contentType":"text/plain","sizeBytes":5}""").andExpect(status().isNotFound)
+        postJson("/api/v1/storage/multipart/part", """{"key":"uploads/acc_a/z/v.txt","uploadId":"u","partNumber":1}""").andExpect(status().isNotFound)
+        postJson("/api/v1/storage/multipart/complete", """{"key":"uploads/acc_a/z/v.txt","uploadId":"u","parts":[{"partNumber":1,"eTag":"e"}]}""").andExpect(status().isNotFound)
+        postJson("/api/v1/storage/multipart/abort", """{"key":"uploads/acc_a/z/v.txt","uploadId":"u"}""").andExpect(status().isNotFound)
+        assertEquals(started, storage.startedUploads)
+        postJson("/api/v1/storage/presign", """{"fileName":"a.png","contentType":"image/png","sizeBytes":5}""").andExpect(status().isOk)
     }
 }
 
