@@ -59,6 +59,7 @@ dependencies {
     implementation(project(":modules:workspace-jdbc"))   // + workspace (api) — 워크스페이스(팀) · 역할 · slug · 멤버 관리 · 경계 `CurrentWorkspace`. 초대 · 운영자 읽기는 앱이 켠다. 실제 흐름은 apps/sample
     implementation(project(":modules:api-key-jdbc"))   // + api-key (api) — API 키 발급 · 범위 · 회수 · 요청 인증. account 위에 얹힌 모듈이라 클래스패스에만 둔다(설정 스니펫 · 모듈 목록 시험), 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
     implementation(project(":modules:inquiry-jdbc"))   // + inquiry (api) — 문의 · 의견 받기(POST /api/v1/inquiries, 접수 경보 · 사람 확인 연결, 운영자 목록은 앱이 켠다). 실제 흐름은 apps/sample
+    implementation(project(":modules:request-routing-jdbc"))   // + request-routing (api) — 로컬 창 이력을 DB 에. 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 · 모듈 목록 시험)
     implementation(project(":modules:request-routing"))   // 요청 라우팅 - 직원의 머리표 요청만 후보 · 로컬 서버로. 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 · 모듈 목록 시험)
     implementation(project(":modules:auth-mfa-jdbc"))   // + auth-mfa (api) — 2단계 인증(TOTP). account 위에 얹힌 모듈이라 클래스패스에만 둔다(설정 스니펫 · 모듈 목록 시험), 자동설정은 application.yml 에서 꺼 둔다
     implementation(project(":modules:booking-jdbc"))   // + booking (api) — 예약(좌석 지정 · 선착순): 자리 잡기 · 놓기 · 보류 시간 자동 반환 · 무료 확정 · 배치도 스냅샷 + SSE. 설정 스니펫 · 모듈 목록 시험을 위해 클래스패스에 둔다.

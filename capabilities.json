@@ -3852,7 +3852,7 @@
       "needs": {
         "requires": [],
         "oneOf": [],
-        "optional": []
+        "optional": ["request-routing-jdbc"]
       },
       "config": {
         "prefixes": ["skeleton.routing"],
@@ -3878,6 +3878,36 @@
           "header-based routing",
           "hotfix testing"
         ]
+      }
+    },
+    {
+      "id": "request-routing-jdbc",
+      "kind": "module",
+      "module": "request-routing-jdbc",
+      "path": "modules/request-routing-jdbc",
+      "status": "experimental",
+      "summary": "요청 라우팅의 로컬 창 이력을 DB 에 둔다 (PostgreSQL · MySQL) — 표 하나 `routing_local_windows`, 열면 앞 창을 닫고, 줄은 지우지 않는다. 이 표가 있어야 로컬 대상으로 보내는 창을 열 수 있다.",
+      "starter": false,
+      "newProjectFlag": "--modules request-routing-jdbc",
+      "autoIncludes": ["request-routing"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/request-routing-jdbc.md"],
+      "frontend": null,
+      "notFor": [
+        "DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다",
+        "로컬 대상이 없으면 필요 없다 — 후보 대상만 쓰는 앱은 창이 늘 닫혀 있어도 된다",
+        "창 표는 그 서버가 쓰는 DB 의 표일 뿐이다 — 서버들이 DB 하나를 같이 쓰면 한 번 열면 전부 적용되고, DB 를 나눴으면 서버마다 따로 연다"
+      ],
+      "keywords": {
+        "ko": ["로컬 창 저장소", "라우팅 창 DB"],
+        "en": ["local window storage", "routing window table"]
       }
     },
     {
@@ -4948,6 +4978,7 @@
         "redis-lock",
         "redis-rate-limit",
         "request-routing",
+        "request-routing-jdbc",
         "review",
         "review-jdbc",
         "reward",
