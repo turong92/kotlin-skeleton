@@ -3,10 +3,10 @@ skeleton:
   notification:
     scheduled:
       enabled: false                      # true 면 예약 · 취소 서비스(ScheduledPushes)와 1분 훑기가 선다. 저장소(notification-scheduled-jdbc)가 없으면 기동 실패
-      type: reminder                      # 정보성 예약의 알림 종류 - enabled 면 필수, advertising.types 에 있으면 안 된다. 푸시로 닿으려면 notification.push.types 에도 넣는다
+      type: ""                            # 예: reminder - 정보성 예약의 알림 종류 - enabled 면 필수, advertising.types 에 있으면 안 된다. 푸시로 닿으려면 notification.push.types 에도 넣는다
       advertising-type: ""                # 광고성 예약의 알림 종류 - 비우면 광고성 예약은 거절된다. 정하면 notification.advertising.types 안에 있어야 한다(동의 · 야간 · (광고) 표기 게이트가 걸린다)
       topic: scheduled                    # 알림함 topic
-      daily-limit:                        # 한 사람이 24시간에 받는 최대 개수 - 닿으면 그 예약은 건너뛴다. 비우면(기본) 상한 없음, 정하면 1 이상
+      # daily-limit: 3                    # 한 사람이 24시간에 받는 최대 개수 - 닿으면 그 예약은 건너뛴다. 비우면(기본) 상한 없음, 정하면 1 이상
       batch-size: 100                     # 한 번 훑을 때 집는 최대 예약 수 (1~1000)
       lease: 5m                           # 집은 예약을 다른 훑기가 못 집는 시간 - 집은 쪽이 죽으면 이 시간 뒤 다시 나간다
       dedupe-window: 30d                  # 끝난(보냄 · 건너뜀) 키를 다시 예약해도 무시하는 기간 - 지나면 같은 키가 새 예약으로 되살아난다 (schedule 이 IGNORED 를 돌려준다)

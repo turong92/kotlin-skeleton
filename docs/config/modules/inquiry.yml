@@ -5,6 +5,6 @@ skeleton:
     per-client: 5        # 로그인하지 않은 호출: 클라이언트(IP)마다 window 동안 문의 수
     per-account: 10      # 로그인한 호출: 계정마다 window 동안 문의 수
     window: 1h
-    retention:           # 비워 두면(기본) 지우지 않는다. 예: 365d - 처리 완료(DONE) 뒤 이만큼 지난 문의를 매일 지운다(미처리는 남김). 0 이하면 기동 실패. scheduler 모듈이나 요청 구동 모드(skeleton.job-queue.mode=on-request)가 없으면 기동 실패
+    # retention: 365d    # 적지 않으면(기본) 지우지 않는다. 예: 365d - 처리 완료(DONE) 뒤 이만큼 지난 문의를 매일 지운다(미처리는 남김). 0 이하면 기동 실패. scheduler 모듈이나 요청 구동 모드(skeleton.job-queue.mode=on-request)가 없으면 기동 실패
     admin:
       enabled: false     # true 면 운영자 경로(GET /api/v1/admin/inquiries · PUT …/{id}/status). 모듈 기본은 꺼짐(404). 권한 inquiry.read · inquiry.handle
