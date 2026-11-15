@@ -1,15 +1,19 @@
 package dev.sumin.skeleton.routing
 
 import dev.sumin.skeleton.common.authz.OperatorAccess
+import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.http.ExternalHttpClientCustomizer
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.routing.client.RouteOutboundCustomizer
+import dev.sumin.skeleton.routing.window.LocalWindowAdminController
+import dev.sumin.skeleton.routing.window.LocalWindowService
 import dev.sumin.skeleton.routing.web.RouteInboundFilter
 import dev.sumin.skeleton.routing.web.RouteProxy
 import dev.sumin.skeleton.routing.web.RoutingErrorWriter
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -18,6 +22,8 @@ import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
+import org.springframework.transaction.support.TransactionOperations
 import java.net.http.HttpClient
 import tools.jackson.databind.ObjectMapper
 
@@ -80,6 +86,33 @@ class RequestRoutingAutoConfiguration {
         FilterRegistrationBean(RouteInboundFilter(properties, targets, window, access, time, RoutingErrorWriter(objectMapper), proxy.ifAvailable)).apply {
             order = SECURITY_CHAIN_ORDER + 10
         }
+
+    /**
+     * 로컬 창 관리 API — `admin.enabled=true` + 서블릿 웹 + 호출자(Spring Security) + 창 저장소 빈이 모두 있을 때만.
+     * 안쪽 클래스라 시큐리티가 없을 때는 컨트롤러 클래스를 읽지 않는다.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnProperty(prefix = "skeleton.routing.admin", name = ["enabled"], havingValue = "true")
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    @ConditionalOnClass(name = ["org.springframework.security.core.Authentication"])
+    @ConditionalOnBean(LocalRouteWindowStore::class)
+    class LocalWindowAdminConfiguration {
+        @Bean
+        @ConditionalOnMissingBean
+        fun localWindowService(
+            store: LocalRouteWindowStore,
+            window: LocalRouteWindow,
+            audit: OperatorAuditLog,
+            tx: TransactionOperations,
+            time: TimeProvider,
+            properties: RequestRoutingProperties,
+        ): LocalWindowService = LocalWindowService(store, window, audit, tx, time, properties.local.maxWindow)
+
+        @Bean
+        @ConditionalOnMissingBean
+        fun localWindowAdminController(service: LocalWindowService, access: OperatorAccess): LocalWindowAdminController =
+            LocalWindowAdminController(service, access)
+    }
 
     private companion object {
         const val SECURITY_CHAIN_ORDER = -100

@@ -7,6 +7,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-webflux")   // 나가는 호출 필터(ExchangeFilterFunction) — platform 의 ExternalHttpClient 가 WebClient 다
+    implementation("org.springframework.boot:spring-boot-starter-validation")   // 창 열기 요청 검사(@Min · @Max · @NotBlank)
+    implementation("org.springframework:spring-tx")   // 창 저장과 감사를 한 트랜잭션으로(TransactionOperations)
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
