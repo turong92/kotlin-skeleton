@@ -6,6 +6,7 @@
 
 **표시 모양**(`platform` 의 `RouteBaggage`): `baggage` 멤버 하나 `route=orders:alice|api:candidate`. 이름은 `^[a-z][a-z0-9-]{0,39}$`, 쌍은 8개 · 값은 256자까지, 같은 서비스를 두 번 쓸 수 없다. 요청 동안 값은 MDC 키 `route`.
 **허용 목록 검사**: 기동 때 `RouteTargets` 가 이름 모양과 대상 `url`(http · https 원점만, 경로 없음)을 검사하고 어기면 기동이 실패한다 — 메시지엔 속성 이름만 있고 값은 없다.
+**들어올 때**(서블릿 앱, 보안 필터 체인 바로 뒤의 `routeInboundFilterRegistration`): 요청의 `route` 를 믿고 · 검사하고 · MDC `route` 에 둔다. `inbound: edge`(기본)는 인증된 호출자가 `routing.use` 를 가질 때만 표시를 받고 **아니면 말없이 버린다**(손님의 표시는 응답 · 나가는 호출 어디에도 흔적이 없다). `inbound: internal` 은 앞 서비스가 보낸 표시를 믿는다 — 공개 주소가 없는 서비스만 쓴다. 받은 표시는 허용 목록으로 검사한다: 모양 오류 400 `ROUTING.MALFORMED`, 아는 서비스의 모르는 대상 400 `ROUTING.UNKNOWN_TARGET`, 로컬 대상인데 창이 닫힘 403 `ROUTING.LOCAL_CLOSED`, 모르는 서비스 이름은 뒤 서비스 몫이라 그대로 둔다. 로컬 대상을 받아들일 때마다 WARN 한 줄(행위자 id · 대상). Spring Security 가 없으면 아무도 직원이 아니다.
 **창 판정**: `LocalRouteWindow` — 저장소 빈(`LocalRouteWindowStore`)이 있으면 `cache-ttl` 동안 캐시해서 읽고, 없으면 창은 늘 닫혀 있다. 시각이 지나면 캐시 안에서도 닫힌 것으로 본다.
 
 **오류 코드**: `ROUTING.MALFORMED` 400 · `ROUTING.UNKNOWN_TARGET` 400 · `ROUTING.LOCAL_CLOSED` 403 · `ROUTING.LOOP` 508 · `ROUTING.TARGET_UNREACHABLE` 502.
@@ -17,9 +18,9 @@
 | 함께 오는 모듈 | `platform` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.routing` — [docs/config/modules/request-routing.yml](../config/modules/request-routing.yml) |
-| 기본 동작 | 꺼짐. `skeleton.routing.enabled=true` 일 때만 허용 목록 · 창 판정 · 권한 선언이 선다 (표시를 받고 · 넘기는 필터는 같은 스위치 아래 이어서 붙는다). |
-| 부팅에 필요한 것 | `TimeProvider` 빈(platform). 창을 열려면 `LocalRouteWindowStore` 구현(`request-routing-jdbc`). 대상 `url` 이 원점이 아니면 기동 실패. |
-| 교체 지점 | `RouteTargets`, `LocalRouteWindow`, `LocalRouteWindowStore`, `requestRoutingPermissionDeclaration` |
+| 기본 동작 | 꺼짐. `skeleton.routing.enabled=true` 일 때만 허용 목록 · 창 판정 · 권한 선언 · 들어오는 요청 필터가 선다. |
+| 부팅에 필요한 것 | `TimeProvider` · `OperatorAccess` 빈(platform). 창을 열려면 `LocalRouteWindowStore` 구현(`request-routing-jdbc`). 대상 `url` 이 원점이 아니면 기동 실패. |
+| 교체 지점 | `RouteTargets`, `LocalRouteWindow`, `LocalRouteWindowStore`, `routeInboundFilterRegistration`, `requestRoutingPermissionDeclaration` |
 | 마이그레이션 | 없음 (`request-routing-jdbc` 가 가진다) |
 | 프론트 짝 | 없음 |
 | 테스트 | `modules/request-routing/src/test` |

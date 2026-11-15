@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.routing
 
+import dev.sumin.skeleton.common.authz.OperatorAccess
+import dev.sumin.skeleton.common.authz.OperatorRef
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
+import dev.sumin.skeleton.routing.web.RouteInboundFilter
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.time.Instant
 import kotlin.test.Test
@@ -8,6 +11,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import org.springframework.boot.test.context.runner.WebApplicationContextRunner
+import org.springframework.boot.web.servlet.FilterRegistrationBean
+import tools.jackson.databind.json.JsonMapper
 
 class RequestRoutingAutoConfigurationTest {
     private val runner = ApplicationContextRunner()
@@ -62,5 +68,24 @@ class RequestRoutingAutoConfigurationTest {
             "skeleton.routing.enabled=true",
             "skeleton.routing.services.orders.targets.alice.url=https://alice.example.com/path",
         ).run { context -> assertEquals(true, context.startupFailure != null) }
+    }
+
+    @Test
+    fun `the inbound filter sits right behind the security chain, in servlet apps only`() {
+        val webRunner = WebApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(RequestRoutingAutoConfiguration::class.java))
+            .withBean(TimeProvider::class.java, { TimeProvider.systemUtc() })
+            .withBean(OperatorAccess::class.java, { object : OperatorAccess { override fun permissionsOf(ref: OperatorRef) = emptySet<String>() } })
+            .withBean(JsonMapper::class.java, { JsonMapper.builder().build() })
+
+        webRunner.withPropertyValues("skeleton.routing.enabled=true").run { context ->
+            val registration = context.getBean("routeInboundFilterRegistration", FilterRegistrationBean::class.java)
+            assertIs<RouteInboundFilter>(registration.filter)
+            assertEquals(-90, registration.order)
+        }
+        webRunner.run { context -> assertEquals(0, context.getBeansOfType(FilterRegistrationBean::class.java).size) }
+        runner.withPropertyValues("skeleton.routing.enabled=true").run { context ->
+            assertEquals(0, context.getBeansOfType(FilterRegistrationBean::class.java).size)
+        }
     }
 }
