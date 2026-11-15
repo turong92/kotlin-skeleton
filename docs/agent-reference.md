@@ -95,6 +95,7 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
 6. 성공 응답 `meta.traceId`/`meta.spanId`, 에러 응답 body `traceId`/`spanId` 필드에도 포함
 7. **디버깅**: 프론트 콘솔/토스트에 찍힌 traceId 로 서버 로그 `grep` → 전체 플로우, spanId 로 특정 요청 단계 좁혀보기
 8. 외부 HTTP 호출은 `ExternalHttpClient` 가 `traceparent`/`X-Trace-Id` 를 전파한다.
+9. 클라이언트(웹 · 앱)는 **마지막 API 요청의 traceId** 를 오류 보고(`POST /api/v1/client-errors`, `alert` 모듈, 기본 꺼짐)에 실어 보낸다 — 서버가 구조화 로그에 `clientTraceId` 로 남기니 그 값으로 보고와 그 요청의 서버 쪽 로그를 함께 찾는다. `docs/alert.md`
 
 ## auth 흐름 (스켈레톤 기본값)
 

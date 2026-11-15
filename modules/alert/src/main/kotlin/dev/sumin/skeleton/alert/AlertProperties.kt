@@ -24,7 +24,21 @@ data class AlertProperties(
     val surge: Surge = Surge(),
     val startupFailure: StartupFailure = StartupFailure(),
     val delivery: Delivery = Delivery(),
+    val clientErrors: ClientErrors = ClientErrors(),
 ) {
+    /**
+     * 사용자 기기(웹 · 앱)의 오류를 받는 공개 경로 `POST /api/v1/client-errors` — **기본 꺼짐**. 켜도 로그인은 필요 없으니 남용 한도가 있다:
+     * 본문 [maxBodyBytes] 상한, 클라이언트(IP)마다 [window] 안에 [perClient] 건, 필드마다 길이 상한. 받은 것은 구조화 로그로 남고,
+     * [surge] 건 이상 몰리면 `CLIENT_ERROR_SURGE` 경보 하나(접힘)만 나간다.
+     */
+    data class ClientErrors(
+        val enabled: Boolean = false,
+        val maxBodyBytes: Int = 16_384,
+        val perClient: Int = 10,
+        val window: Duration = Duration.ofMinutes(1),
+        val surge: Surge = Surge(threshold = 10, window = Duration.ofMinutes(5)),
+    )
+
     /** 5xx 가 [window] 안에 [threshold] 건 이상이면 경보 — 메모리 창(서버를 다시 켜면 비어 있다) */
     data class Surge(val threshold: Int = 20, val window: Duration = Duration.ofMinutes(1))
 
@@ -61,5 +75,5 @@ data class AlertProperties(
     // data class 기본 toString() 은 웹훅 주소(= 비밀)를 그대로 찍는다 — 가린다
     override fun toString(): String =
         "AlertProperties(enabled=$enabled, webhookUrl=${if (webhookUrl.isBlank()) "" else "***"}, mailTo=${if (mailTo.isBlank()) "" else "***"}, " +
-            "environment=$environment, webhookTimeout=$webhookTimeout, intervals=$intervals, surge=$surge, startupFailure=$startupFailure, delivery=$delivery)"
+            "environment=$environment, webhookTimeout=$webhookTimeout, intervals=$intervals, surge=$surge, startupFailure=$startupFailure, delivery=$delivery, clientErrors=$clientErrors)"
 }

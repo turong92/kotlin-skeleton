@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### alert - 웹 · 앱 기기에서 난 오류를 요청 ID 와 함께 받아 로그와 경보로 잇는다 (2026-11-16)
+
+- 새 공개 경로 `POST /api/v1/client-errors`(`alert` 모듈 안, **기본 꺼짐** `skeleton.alert.client-errors.enabled=false` — 꺼져 있으면 경로 자체가 없다). 로그인 없이 받는다(로그인 화면의 오류도 알아야 한다). 남용 막기: 호출자(IP)마다 `per-client` 건 / `window`(기본 10건 / 1분, `RateLimitStore` 빈이 있으면 그것을 공유)를 **본문을 보기 전에** 센다(429 + `retryAfterSeconds`), 본문 `max-body-bytes`(16 KiB) 초과는 읽지 않고 413, 모양이 아니면 400, 필드마다 길이 상한(message 500 · stack 4,000 · route 200 …), 틀린 형의 값 · 모르는 필드는 버린다. 민감값 제거: route 의 쿼리 · 조각, 글 속 URL 의 쿼리, `Bearer` · JWT 모양 · `…token=` / `…secret=` / `…password=`(`LogMasker`), 이메일, 제어 문자(로그 줄 위조 방지). 답은 `204`.
+- 받은 것은 로그 `skeleton.client-error`(WARN) 한 줄 — 필드는 key-value(`clientPlatform` · `clientRoute` · `clientRelease` · `clientTraceId` · `clientCount` · `clientStack` …)로 달려 구조화 로그에 그대로 실린다. `clientTraceId` 는 그 기기가 **마지막으로 보낸 API 요청**의 traceId 라 같은 값으로 그 요청의 서버 로그를 함께 찾는다. 표는 없다.
+- 새 경보 종류 `CLIENT_ERROR_SURGE`(WARN): `surge.window`(5분) 안에 `surge.threshold`(10)건 이상 몰리면 경보 하나(가장 최근 보고 포함)이고 `OwnerAlerts` 가 최소 간격(15분)으로 다시 접는다 — 보고마다 경보를 내지 않는다. 설정 `skeleton.alert.client-errors.*`(`docs/config/modules/alert.yml`), 설명 `docs/alert.md` 「Errors from the user's device」. 보내는 쪽: react-skeleton `@skeleton/api-client` 의 `createErrorReporter`, flutter-skeleton `skeleton_error_report`(둘 다 `ErrorReporter` 인터페이스 뒤라 나중에 Sentry 로 바꿔 끼울 수 있다).
+
 ### deploy - 배포 후 자동 점검 `scripts/post-deploy-check.sh` (2026-11-16)
 
 - 배포된 주소(인자)에 `/health`(`--wait` 초 동안 재시도 — 콜드스타트) → 시험 계정 로그인(`SMOKE_EMAIL` · `SMOKE_PASSWORD`) → 받은 토큰으로 `GET /auth/me` 를 찔러 보고, 어긋나면 종료 1(사용법 오류는 2). 후보 리비전 태그 주소를 그대로 받고, 헤더로 고르는 앞단은 `-H '이름: 값'`(여러 번)이 모든 요청에 붙는다. 비밀번호 · 토큰 · 헤더 값은 출력하지도 명령줄 인자로 넘기지도 않는다(0600 임시 파일). `native-smoke.sh` 는 시험용 서버 전체 흐름이라 재활용하지 않았다. 쓰는 법: `docs/deploy.md` 「배포 후 자동 점검」, Cloud Run 후보 흐름: `docs/cloud-run-scale-to-zero.md`. 가짜 서버로 증명: `PostDeployCheckScriptTest`(`modules/platform`).

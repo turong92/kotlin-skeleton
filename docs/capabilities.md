@@ -73,7 +73,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `account` | 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐 · `required-when=WRITE` 면 읽기는 통과하고 쓰기에서만 막는다), 로그인 아이디(이메일이 바뀌어도 안 바뀌는 비공개 간판 — 아이디 또는 이메일로 로그인 · 실시간 중복 확인 POST /account/login-id/availability · 아이디 정하기 게이트 POST /account/login-id · 아이디 찾기 메일 POST /account/login-id/forgot · 탈퇴해도 재사용 금지(해시), 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 로그인 아이디, 아이디 찾기, 관리자 도구, 계정 정지, 프로필, 프로필 사진, 아바타 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, login id, username login, find my id, admin tools, suspend account, profile, profile picture, avatar | `@skeleton/auth` |
 | `account-jdbc` | account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일 · 닉네임 키를 utf8mb4_bin 으로 정확 일치, 닉네임 방식 셋을 유니크 (키, 꼬리표) 하나로). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법. | 스타터(apps/api)에 기본 포함 | 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration | `@skeleton/auth` |
 | `ads-admob` | AdMob 보상형 광고의 서버 측 확인(SSV) 수신 — 구글이 서명해 부르는 GET /api/v1/ads/admob/ssv 를 ECDSA 서명(구글 공개키 24시간 이하 캐시)과 허용 광고 단위 목록으로 확인하고, 같은 거래 번호는 한 번만 PointWallet.earn 으로 포인트를 쌓는다. 클라이언트가 보상을 달라고 부르는 길은 없다. 기본 꺼짐. | `--modules ads-admob` | 애드몹 보상형 광고, 광고 보고 포인트, 리워드 광고, 광고 보상, 서버 측 확인 / admob rewarded ads, server-side verification, ssv callback, ad reward points, rewarded video | — |
-| `alert` | 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. | 스타터(apps/api)에 기본 포함 | 경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림, 에러 수집, 5xx 알림 / owner alert, error reporting, discord webhook, incident alert, 5xx alert, sentry alternative | — |
+| `alert` | 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. 켜면(skeleton.alert.client-errors.enabled, 기본 꺼짐) 웹 · 앱 기기의 오류도 POST /api/v1/client-errors 로 로그인 없이 받아(한도 · 크기 상한 · 민감값 제거) 구조화 로그로 남기고 몰리면 경보 하나로 접는다. | 스타터(apps/api)에 기본 포함 | 경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림, 에러 수집, 5xx 알림, 클라이언트 오류, 앱 크래시 보고, 프론트 에러 로그 / client error report, frontend error logging, owner alert, error reporting, discord webhook, incident alert, 5xx alert, sentry alternative | `@skeleton/api-client` |
 | `alert-jdbc` | 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL). | `--modules alert-jdbc` | 경보 기록, 경보 중복 접기, 경보 DB / alert ledger, alert dedupe, alert database | — |
 | `api-key` | API 키(B2B 호출자용 장기 자격) — 사용자가 이름 · 범위 · 만료를 골라 발급(다시 인증)하고 본인이 회수하며, 키로 온 요청은 `@ApiKeyScope` 로 표시한 경로에 한해(기본 거부) 주인 계정으로 움직인다. 키별 한도 · 활성 키 상한 · 만료 상한은 앱이 정한다. 저장은 해시뿐. | `--modules api-key,api-key-jdbc` | API 키, 액세스 토큰, 개인 액세스 토큰, B2B API, 키 발급, 범위, 키 회수 / api key, personal access token, scoped key, api token, key revocation, per-key rate limit | — |
 | `api-key-jdbc` | API 키를 DB 에 둔다 (PostgreSQL · MySQL) — 토큰 해시만 저장하고, 회수 · 마지막 사용(1분 해상도)은 한 문장의 조건부 갱신이라 동시에 몰려도 한 번만 쓴다. | `--modules api-key-jdbc` | API 키 저장소, API 키 DB / api key storage, api key repository | — |
@@ -299,20 +299,23 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 모바일 짝은 flutter-skeleton 의 광고 패키지(ads)다
 - 키워드: 애드몹 보상형 광고, 광고 보고 포인트, 리워드 광고, 광고 보상, 서버 측 확인 / admob rewarded ads, server-side verification, ssv callback, ad reward points, rewarded video
 
-### `alert` — 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답.
+### `alert` — 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. 켜면(skeleton.alert.client-errors.enabled, 기본 꺼짐) 웹 · 앱 기기의 오류도 POST /api/v1/client-errors 로 로그인 없이 받아(한도 · 크기 상한 · 민감값 제거) 구조화 로그로 남기고 몰리면 경보 하나로 접는다.
 
 - 종류 · 상태: module · stable — 위치 `modules/alert`
 - 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:alert"))`
 - 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `job-queue-jdbc`, `notification-mail`
 - 설정 접두사 `skeleton.alert` — 키와 기본값 `docs/config/modules/alert.yml`
+- HTTP 경로: `/api/v1/client-errors`
 - 비밀 · 환경변수: `<P>_ALERT_WEBHOOK_URL` — 빠지면: 경보가 로그로만 남는다 (기동은 된다)
 - 문서: `docs/modules/alert.md`, `docs/alert.md`
+- 짝 프런트(react-skeleton): 항목 `api-client` · 패키지 `@skeleton/api-client` · 조각 기본 포함(덧붙일 것 없음)
 - 쓰지 않는 경우:
-  - Sentry 같은 에러 수집 · 스택 모음이 아니다 — 주인이 먼저 알아야 하는 일만 보낸다
+  - Sentry 같은 에러 수집 · 스택 모음이 아니다 — 주인이 먼저 알아야 하는 일만 보낸다. 기기 오류는 건마다 로그 한 줄이고 경보는 몰릴 때 하나(표 · 화면 없음)
+  - 기기 오류 받는 경로는 기본 꺼짐 — skeleton.alert.client-errors.enabled=true 로 켠다
   - 사용자에게 가는 알림은 notification
   - 웹훅 주소가 없으면 로그만 남긴다(기동은 된다)
-- 키워드: 경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림, 에러 수집, 5xx 알림 / owner alert, error reporting, discord webhook, incident alert, 5xx alert, sentry alternative
+- 키워드: 경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림, 에러 수집, 5xx 알림, 클라이언트 오류, 앱 크래시 보고, 프론트 에러 로그 / client error report, frontend error logging, owner alert, error reporting, discord webhook, incident alert, 5xx alert, sentry alternative
 
 ### `alert-jdbc` — 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL).
 

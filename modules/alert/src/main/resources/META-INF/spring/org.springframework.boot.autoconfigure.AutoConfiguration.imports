@@ -1,3 +1,4 @@
 dev.sumin.skeleton.alert.AlertAutoConfiguration
 dev.sumin.skeleton.alert.AlertMailAutoConfiguration
 dev.sumin.skeleton.alert.AlertJobQueueAutoConfiguration
+dev.sumin.skeleton.alert.client.ClientErrorAutoConfiguration

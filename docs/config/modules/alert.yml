@@ -16,3 +16,11 @@ skeleton:
     delivery:
       attempts: 3                  # 채널 하나의 보내기 시도 횟수
       backoff: 2s                  # 시도 사이 대기 (곱절로)
+    client-errors:                 # 웹 · 앱 기기의 오류를 받는 공개 경로 POST /api/v1/client-errors (기본 꺼짐)
+      enabled: false               # true 면 로그인 없이도 받는다. 받은 것은 구조화 로그 + 몰림 경보
+      max-body-bytes: 16384        # 본문 상한 (넘으면 413)
+      per-client: 10               # 클라이언트(IP)마다 window 안에 이만큼만 (넘으면 429)
+      window: 1m
+      surge:
+        threshold: 10              # 이 창 안에 이 수 이상 받으면 CLIENT_ERROR_SURGE 경보 하나
+        window: 5m

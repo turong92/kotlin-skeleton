@@ -248,7 +248,7 @@
       "module": "alert",
       "path": "modules/alert",
       "status": "stable",
-      "summary": "주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답.",
+      "summary": "주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. 켜면(skeleton.alert.client-errors.enabled, 기본 꺼짐) 웹 · 앱 기기의 오류도 POST /api/v1/client-errors 로 로그인 없이 받아(한도 · 크기 상한 · 민감값 제거) 구조화 로그로 남기고 몰리면 경보 하나로 접는다.",
       "starter": true,
       "newProjectFlag": null,
       "autoIncludes": ["job-queue-jdbc", "notification-mail"],
@@ -261,7 +261,7 @@
         "prefixes": ["skeleton.alert"],
         "snippet": "docs/config/modules/alert.yml"
       },
-      "basePaths": [],
+      "basePaths": ["/api/v1/client-errors"],
       "secrets": [
         {
           "env": ["<P>_ALERT_WEBHOOK_URL"],
@@ -269,15 +269,22 @@
         }
       ],
       "docs": ["docs/modules/alert.md", "docs/alert.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["api-client"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/api-client"]
+      },
       "notFor": [
-        "Sentry 같은 에러 수집 · 스택 모음이 아니다 — 주인이 먼저 알아야 하는 일만 보낸다",
+        "Sentry 같은 에러 수집 · 스택 모음이 아니다 — 주인이 먼저 알아야 하는 일만 보낸다. 기기 오류는 건마다 로그 한 줄이고 경보는 몰릴 때 하나(표 · 화면 없음)",
+        "기기 오류 받는 경로는 기본 꺼짐 — skeleton.alert.client-errors.enabled=true 로 켠다",
         "사용자에게 가는 알림은 notification",
         "웹훅 주소가 없으면 로그만 남긴다(기동은 된다)"
       ],
       "keywords": {
-        "ko": ["경보", "주인 알림", "에러 알림", "장애 알림", "디스코드 알림", "에러 수집", "5xx 알림"],
+        "ko": ["경보", "주인 알림", "에러 알림", "장애 알림", "디스코드 알림", "에러 수집", "5xx 알림", "클라이언트 오류", "앱 크래시 보고", "프론트 에러 로그"],
         "en": [
+          "client error report",
+          "frontend error logging",
           "owner alert",
           "error reporting",
           "discord webhook",

@@ -9,11 +9,11 @@
 | 함께 오는 모듈 | `platform` |
 | 컴파일 전용 | `job-queue-jdbc`, `notification-mail` |
 | 설정 접두사 | `skeleton.alert` — [docs/config/modules/alert.yml](../config/modules/alert.yml) |
-| 기본 동작 | 꺼짐. `skeleton.alert.webhook-url` 을 정하면 켜진다 — 없어도 `OwnerAlerts` 는 있고 로그만 남긴다. |
+| 기본 동작 | 꺼짐. `skeleton.alert.webhook-url` 을 정하면 켜진다 — 없어도 `OwnerAlerts` 는 있고 로그만 남긴다. 웹 · 앱 기기의 오류를 받는 `POST /api/v1/client-errors`(로그인 없이, 한도 · 크기 상한 · 민감값 제거, 구조화 로그 + 몰림 경보 `CLIENT_ERROR_SURGE`)는 따로 `skeleton.alert.client-errors.enabled=true` 일 때만 열린다(기본 꺼짐, 표 없음). |
 | 부팅에 필요한 것 | 없음. 켤 때 웹훅 주소(환경변수)와 인터넷이 필요하다. |
 | 교체 지점 | `OwnerAlerts`, `AlertStore`, `AlertChannel` |
 | 마이그레이션 | 없음 |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/api-client` |
 | 테스트 | `modules/alert/src/test`, `modules/alert/src/noOptionalTest` |
 
 자세히: [주인 경보 상세](../alert.md) · DB 기록은 `alert-jdbc` 모듈 (모듈 색인)

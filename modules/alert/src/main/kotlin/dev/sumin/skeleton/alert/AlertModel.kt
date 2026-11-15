@@ -29,6 +29,7 @@ enum class BuiltInAlertKind(
     SERVER_ERROR_SURGE(AlertSeverity.CRITICAL, "Server errors (5xx) are piling up", Duration.ofMinutes(15), directFallback = true),
     STARTUP_FAILED(AlertSeverity.CRITICAL, "The server failed to start", Duration.ZERO),
     JOB_DEAD(AlertSeverity.ERROR, "A background job ran out of attempts (DEAD)", Duration.ofMinutes(30)),
+    CLIENT_ERROR_SURGE(AlertSeverity.WARN, "Client errors (web / app) are piling up", Duration.ofMinutes(15)),
     TEST(AlertSeverity.INFO, "Test alert", Duration.ofMinutes(1)),
 }
 

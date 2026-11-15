@@ -39,7 +39,29 @@ Mail is an additional channel next to the webhook: it needs `notification-mail` 
 | `SERVER_ERROR_SURGE` | CRITICAL | 20 responses >= 500 (or exceptions leaving the filter chain) within 1 minute (`surge.*`), counted in memory | 15 min |
 | `STARTUP_FAILED` | CRITICAL | the context failed to start (`ApplicationFailedEvent`); webhook only, sent directly, skipped for `startup-failure.skip-profiles` (default `local`) | every time |
 | `JOB_DEAD` | ERROR | a `job-queue-jdbc` job became DEAD (retries used, `PermanentJobFailureException`, no handler, or a stale job that used all attempts). Needs `job-queue-jdbc` on the classpath; the detail has the exception **class** only, never its message | 30 min per job type |
+| `CLIENT_ERROR_SURGE` | WARN | 10 client error reports within 5 minutes (`client-errors.surge.*`) — only when the client error path below is on | 15 min |
 | `TEST` | INFO | `alerts.emit(BuiltInAlertKind.TEST, "manual")` to check the wiring | 1 min |
+
+## Errors from the user's device (web / app)
+
+Without this, nobody learns that the page or the app broke on someone's phone. The client packages (react-skeleton `@skeleton/api-client` `createErrorReporter`, flutter-skeleton `skeleton_error_report`) post what they caught to `POST /api/v1/client-errors`;
+the server writes **one structured log line** per report and raises **one folded alert** when they pile up. No table, no Sentry — the client talks to an `ErrorReporter` interface, so a real service can be plugged in later without touching the screens.
+
+```yaml
+skeleton:
+  alert:
+    client-errors:
+      enabled: true          # default false: without it the path does not exist (404)
+```
+
+- **Open path**: `POST /api/v1/client-errors`, no login (an error on the login screen matters too). It is the only path this switch opens.
+- **Body** (JSON, or `text/plain` for `navigator.sendBeacon`): `message` (required), `platform`, `source`, `name`, `stack`, `componentStack`, `route`, `release`, `traceId` (32 hex — the trace id of the device's **last API request**, the same value you grep in the server log), `count` (how many equal errors the device folded into this report). Other fields are dropped, wrong-typed values are ignored. Answer: `204`, no body.
+- **Abuse limits**: the call spends one of `per-client` (default 10) per `window` (1 min) for the client IP **before** the body is looked at (`429` + `retryAfterSeconds`, the shared `RateLimitStore` bean when there is one — `redis-rate-limit` shares it across instances); body over `max-body-bytes` (16 KiB) is `413` and never read whole; every field has a length cap (message 500, stack 4,000, route 200 …); a non-object or message-less body is `400`.
+- **Scrubbing**: the route loses its query and fragment; URLs in text lose their query; `Bearer …`, JWT-looking values, `…token=`/`…secret=`/`…password=` pairs (`LogMasker`) and e-mail addresses are removed; control characters (line breaks) become spaces, so a report cannot forge a log line (the stack keeps its own line breaks, only in a key-value field).
+- **Log**: logger `skeleton.client-error`, level WARN, message `client error [web] <message>`, fields as key-values `clientPlatform` · `clientSource` · `clientName` · `clientRoute` · `clientRelease` · `clientTraceId` · `clientCount` · `clientUserAgent` · `clientStack` · `clientComponentStack` (they appear in the JSON of `logging.structured.format.console`; the plain pattern shows the message only). Find a user's report from the traceId they show: `clientTraceId=<id>` finds the report, the same id finds the server side of that request.
+- **Alert**: the log line is the record of each report; an alert is only for a **pile-up** — `CLIENT_ERROR_SURGE` when `surge.threshold` (10) reports arrive within `surge.window` (5 min), with the latest one in the text, then folded by the normal `alert` interval (15 min). One broken release gives one Discord message, not one per user; and since anyone can post, a flood cannot become a flood of alerts either.
+
+Limits: the counter is in memory (per instance, forgotten on restart); the per-client limit is by IP, so many addresses can still write many log lines — set `skeleton.web.rate-limit` or a Cloudflare rule in front when the app is public and attacked.
 
 ## Your own kinds
 
