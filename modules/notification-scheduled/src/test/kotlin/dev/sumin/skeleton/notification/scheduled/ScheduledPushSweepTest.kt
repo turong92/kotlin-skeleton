@@ -52,6 +52,43 @@ class ScheduledPushSweepTest {
     }
 
     @Test
+    fun `a finished key is ignored inside the dedupe window and becomes a new reservation after it`() {
+        pushes().schedule(push("k1"))
+        sweep().run()
+        assertEquals(ScheduleResult.IGNORED, pushes().schedule(push("k1")))
+        now = now.plus(properties().dedupeWindow).plusSeconds(1)
+        assertEquals(ScheduleResult.CREATED, pushes().schedule(push("k1", at = now)))
+        sweep().run()
+        assertEquals(2, publisher.events.size)
+    }
+
+    @Test
+    fun `a reservation that keeps failing is given up after max attempts instead of retrying forever`() {
+        pushes().schedule(push("k1"))
+        repeat(properties().maxAttempts + 1) {
+            publisher.failNext = true
+            sweep().run()
+            now = now.plus(properties().lease).plusSeconds(1)
+        }
+        sweep().run()
+        assertEquals(0, publisher.events.size)
+        assertEquals(SkipReason.TOO_MANY_ATTEMPTS, store.rows.getValue("k1").reason)
+    }
+
+    @Test
+    fun `a sweeper that lost its lease cannot close or move the row a newer owner holds`() {
+        pushes().schedule(push("k1"))
+        val stale = store.claimDue(now, properties().lease, 10).single()
+        now = now.plus(properties().lease).plusSeconds(1)
+        val fresh = store.claimDue(now, properties().lease, 10).single()
+        store.finish("k1", stale.claimToken, ScheduledPushStatus.SENT, null, now)   // 옛 집기 - 아무 일도 없다
+        store.reschedule("k1", stale.claimToken, now.plusSeconds(999), now)
+        assertEquals(ScheduledPushStatus.PENDING, store.rows.getValue("k1").status)
+        store.finish("k1", fresh.claimToken, ScheduledPushStatus.SENT, null, now)
+        assertEquals(ScheduledPushStatus.SENT, store.rows.getValue("k1").status)
+    }
+
+    @Test
     fun `cancel removes a pending reservation by key so it never goes out`() {
         pushes().schedule(push("k1"))
         assertTrue(pushes().cancel("k1"))

@@ -21,3 +21,5 @@ create table if not exists scheduled_pushes (
 create index idx_scheduled_pushes_due on scheduled_pushes (status, run_at);
 -- 탈퇴 삭제 · 하루 상한(그 사람이 최근 보낸 수)
 create index idx_scheduled_pushes_recipient on scheduled_pushes (recipient_id, status, finished_at);
+-- 끝난 줄 정리(시간당 한 번 지운다)
+create index idx_scheduled_pushes_finished on scheduled_pushes (status, finished_at);

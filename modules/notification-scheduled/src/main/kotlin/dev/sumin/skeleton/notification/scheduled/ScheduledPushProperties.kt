@@ -30,13 +30,21 @@ data class ScheduledPushProperties(
     val batchSize: Int = 100,
     /** 훑기가 집은 예약을 다른 훑기가 다시 집지 못하는 시간 - 집은 쪽이 죽어도 이 시간 뒤 다시 나간다. 한 건을 처리하는 데 걸리는 시간보다 넉넉하게 */
     val lease: Duration = Duration.ofMinutes(5),
-    /** 보내거나 건너뛴 줄을 이만큼 남긴다 - 같은 키의 중복 예약을 막는 표시이기도 하다 */
+    /** 끝난(보냄 · 건너뜀) 키를 다시 예약해도 무시하는 기간 - 이 기간이 지나면 같은 키가 새 예약으로 되살아난다. 같은 계기를 한 통으로 막는 기간이다 */
+    val dedupeWindow: Duration = Duration.ofDays(30),
+    /** 끝난 줄을 표에서 지우는 나이(정리 기간) - dedupe-window 보다 짧으면 지운 키는 그 전에 다시 예약된다. 하루 상한을 켰으면 24시간 이상 */
     val keepFinished: Duration = Duration.ofDays(30),
+    /** 보내려다 이만큼 실패한 예약은 포기하고 건너뛴다(`TOO_MANY_ATTEMPTS`) */
+    val maxAttempts: Int = 5,
 ) {
     init {
         require(dailyLimit == null || dailyLimit >= 1) { "skeleton.notification.scheduled.daily-limit must be at least 1 (leave it unset for no limit)" }
         require(batchSize in 1..1000) { "skeleton.notification.scheduled.batch-size must be between 1 and 1000" }
         require(!lease.isNegative && !lease.isZero) { "skeleton.notification.scheduled.lease must be positive" }
         require(!keepFinished.isNegative && !keepFinished.isZero) { "skeleton.notification.scheduled.keep-finished must be positive" }
+        require(!dedupeWindow.isNegative && !dedupeWindow.isZero) { "skeleton.notification.scheduled.dedupe-window must be positive" }
+        require(maxAttempts >= 1) { "skeleton.notification.scheduled.max-attempts must be at least 1" }
+        // 하루 상한은 끝난 줄을 세어 판정한다 - 24시간 안에 지워 버리면 상한이 조용히 풀린다
+        require(dailyLimit == null || keepFinished >= Duration.ofHours(24)) { "skeleton.notification.scheduled.keep-finished must be at least 24h when daily-limit is set (the limit counts the finished rows)" }
     }
 }

@@ -9,4 +9,7 @@ skeleton:
       daily-limit:                        # 한 사람이 24시간에 받는 최대 개수 - 닿으면 그 예약은 건너뛴다. 비우면(기본) 상한 없음, 정하면 1 이상
       batch-size: 100                     # 한 번 훑을 때 집는 최대 예약 수 (1~1000)
       lease: 5m                           # 집은 예약을 다른 훑기가 못 집는 시간 - 집은 쪽이 죽으면 이 시간 뒤 다시 나간다
-      keep-finished: 30d                  # 보내거나 건너뛴 줄을 남기는 기간 - 같은 키의 중복 예약을 막는 표시이기도 하다
+      dedupe-window: 30d                  # 끝난(보냄 · 건너뜀) 키를 다시 예약해도 무시하는 기간 - 지나면 같은 키가 새 예약으로 되살아난다 (schedule 이 IGNORED 를 돌려준다)
+      keep-finished: 30d                  # 끝난 줄을 표에서 지우는 나이(시간당 정리) - daily-limit 을 정했으면 24h 이상. dedupe-window 보다 짧으면 지운 키는 그 전에 다시 예약된다
+      max-attempts: 5                     # 보내려다 이만큼 실패한 예약은 포기하고 건너뛴다
+      # 훑기를 돌릴 길이 필요하다: scheduler 모듈이거나 skeleton.job-queue.mode=on-request - 둘 다 없으면 enabled 인 앱의 시작이 실패한다

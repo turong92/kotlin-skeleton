@@ -15,10 +15,14 @@ class FakeScheduledPushStore : ScheduledPushStore {
     val rows = linkedMapOf<String, Row>()
 
     @Synchronized
-    override fun upsert(push: ScheduledPush, now: Instant): ScheduleResult {
+    override fun upsert(push: ScheduledPush, now: Instant, dedupeWindow: Duration): ScheduleResult {
         val row = rows[push.key]
         if (row == null) {
             rows[push.key] = Row(push)
+            return ScheduleResult.CREATED
+        }
+        if (row.status != ScheduledPushStatus.PENDING && row.finishedAt!!.isBefore(now.minus(dedupeWindow))) {
+            rows[push.key] = Row(push)   // 중복 막기 기간이 지난 키는 새 예약으로 되살아난다
             return ScheduleResult.CREATED
         }
         if (row.status != ScheduledPushStatus.PENDING || (row.claimedUntil?.isAfter(now) == true)) return ScheduleResult.IGNORED
@@ -34,16 +38,16 @@ class FakeScheduledPushStore : ScheduledPushStore {
         rows.values
             .filter { it.status == ScheduledPushStatus.PENDING && !it.push.runAt.isAfter(now) && (it.claimedUntil == null || !it.claimedUntil!!.isAfter(now)) }
             .sortedBy { it.push.runAt }.take(limit)
-            .map { it.claimedUntil = now.plus(lease); it.attempts++; DuePush(it.push, it.attempts) }
+            .map { it.claimedUntil = now.plus(lease); it.attempts++; DuePush(it.push, it.attempts, it.claimedUntil!!) }
 
     @Synchronized
-    override fun finish(key: String, status: ScheduledPushStatus, reason: SkipReason?, now: Instant) {
-        rows[key]?.takeIf { it.status == ScheduledPushStatus.PENDING }?.let { it.status = status; it.reason = reason; it.claimedUntil = null; it.finishedAt = now }
+    override fun finish(key: String, claimToken: Instant, status: ScheduledPushStatus, reason: SkipReason?, now: Instant) {
+        rows[key]?.takeIf { it.status == ScheduledPushStatus.PENDING && it.claimedUntil == claimToken }?.let { it.status = status; it.reason = reason; it.claimedUntil = null; it.finishedAt = now }
     }
 
     @Synchronized
-    override fun reschedule(key: String, runAt: Instant, now: Instant) {
-        rows[key]?.takeIf { it.status == ScheduledPushStatus.PENDING }?.let { it.push = it.push.copy(runAt = runAt); it.claimedUntil = null }
+    override fun reschedule(key: String, claimToken: Instant, runAt: Instant, now: Instant) {
+        rows[key]?.takeIf { it.status == ScheduledPushStatus.PENDING && it.claimedUntil == claimToken }?.let { it.push = it.push.copy(runAt = runAt); it.claimedUntil = null }
     }
 
     @Synchronized

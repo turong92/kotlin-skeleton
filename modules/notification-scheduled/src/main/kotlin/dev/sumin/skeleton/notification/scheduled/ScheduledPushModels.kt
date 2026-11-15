@@ -54,10 +54,16 @@ enum class SkipReason {
 
     /** 그 사람의 하루 상한에 닿았다 */
     DAILY_LIMIT,
+
+    /** 보내려다 [ScheduledPushProperties.maxAttempts] 번 실패했다 */
+    TOO_MANY_ATTEMPTS,
 }
 
-/** 훑기가 집은 예약 한 건 */
-data class DuePush(val push: ScheduledPush, val attempts: Int)
+/**
+ * 훑기가 집은 예약 한 건. [claimToken] 은 이 집기의 임대 만료 시각이다 - [ScheduledPushStore.finish] · [ScheduledPushStore.reschedule] 은 이 값이 줄과 같을 때만 듣는다
+ * (임대가 끝나 다른 훑기가 다시 집었거나 앱이 예약을 바꿨다면 옛 훑기의 닫기는 아무것도 못 한다).
+ */
+data class DuePush(val push: ScheduledPush, val attempts: Int, val claimToken: Instant)
 
 /** 예약된 개인 푸시 수 · 보낸 수 · 건너뛴 수 */
 data class ScheduledPushStats(val pending: Long, val sent: Long, val skipped: Long)

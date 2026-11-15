@@ -23,22 +23,37 @@ class JdbcScheduledPushStore(
 ) : ScheduledPushStore {
     private val insertIgnore = dialect.insertIgnore(TABLE, INSERT_COLUMNS, listOf("push_key"))
 
-    override fun upsert(push: ScheduledPush, now: Instant): ScheduleResult {
-        val params = values(push, now)
-        val replaced = jdbc.update(
+    override fun upsert(push: ScheduledPush, now: Instant, dedupeWindow: Duration): ScheduleResult {
+        val params = values(push, now).addValue("reopen_before", dialect.instantParam(now.minus(dedupeWindow)))
+        // 집기를 비워(claimed_until = null) 임대가 끝난 옛 훑기의 닫기가 이 새 내용에 듣지 않게 한다
+        if (replacePending(params) > 0) return ScheduleResult.REPLACED
+        // 중복 막기 기간이 지난 끝난 줄은 새 예약으로 되살린다
+        val reopened = jdbc.update(
             """
-            update scheduled_pushes set recipient_id = :recipient_id, run_at = :run_at, title = :title, body = :body, link = :link, advertising = :advertising, updated_at = :now
-            where push_key = :push_key and status = 'PENDING' and (claimed_until is null or claimed_until < :now)
+            update scheduled_pushes set recipient_id = :recipient_id, run_at = :run_at, title = :title, body = :body, link = :link, advertising = :advertising,
+                status = 'PENDING', skip_reason = null, claimed_until = null, attempts = 0, finished_at = null, created_at = :now, updated_at = :now
+            where push_key = :push_key and status in ('SENT', 'SKIPPED') and finished_at < :reopen_before
             """.trimIndent(),
             params,
         )
-        if (replaced > 0) return ScheduleResult.REPLACED
-        // 이미 나갔거나 · 건너뛰었거나 · 지금 집혀 나가는 중이면 그대로 둔다. 없을 때만 넣는다(동시에 둘이 넣어도 하나만 남는다)
+        if (reopened > 0) return ScheduleResult.CREATED
+        // 최근에 끝났거나 · 집혀 나가는 중이면 그대로 둔다. 없을 때만 넣는다
         val exists = jdbc.queryForObject("select count(*) from scheduled_pushes where push_key = :k", mapOf("k" to push.key), Long::class.java)!! > 0
         if (exists) return ScheduleResult.IGNORED
         jdbc.update(insertIgnore, params)
+        // 동시에 같은 키를 넣은 쪽이 있으면 이 insert 는 아무것도 안 했다(두 방언 모두 갱신 행 수로는 못 가른다) - 아직 안 나간 줄이면 이 내용으로 한 번 더 바꿔 마지막 호출이 이기게 한다
+        replacePending(params)
         return ScheduleResult.CREATED
     }
+
+    private fun replacePending(params: MapSqlParameterSource): Int = jdbc.update(
+        """
+        update scheduled_pushes set recipient_id = :recipient_id, run_at = :run_at, title = :title, body = :body, link = :link, advertising = :advertising,
+            claimed_until = null, attempts = 0, updated_at = :now
+        where push_key = :push_key and status = 'PENDING' and (claimed_until is null or claimed_until < :now)
+        """.trimIndent(),
+        params,
+    )
 
     override fun cancel(key: String): Boolean =
         jdbc.update("delete from scheduled_pushes where push_key = :k and status = 'PENDING'", mapOf("k" to key)) > 0
@@ -53,7 +68,8 @@ class JdbcScheduledPushStore(
             MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("limit", limit),
             String::class.java,
         )
-        val until = dialect.instantParam(now.plus(lease))
+        val untilInstant = now.plus(lease)
+        val until = dialect.instantParam(untilInstant)
         val won = candidates.filter { key ->
             jdbc.update(
                 """
@@ -64,28 +80,33 @@ class JdbcScheduledPushStore(
             ) == 1
         }
         if (won.isEmpty()) return emptyList()
-        return jdbc.query("select * from scheduled_pushes where push_key in (:keys) order by run_at", mapOf("keys" to won)) { rs, _ ->
+        // 내 집기(claimed_until = until)인 줄만 - 그 사이 다른 훑기가 다시 집었다면 그 줄은 내 것이 아니다
+        return jdbc.query(
+            "select * from scheduled_pushes where push_key in (:keys) and claimed_until = :until order by run_at",
+            MapSqlParameterSource().addValue("keys", won).addValue("until", until),
+        ) { rs, _ ->
             DuePush(
                 ScheduledPush(
                     key = rs.getString("push_key"), recipientId = rs.getString("recipient_id"), runAt = dialect.readInstant(rs, "run_at")!!,
                     title = rs.getString("title"), body = rs.getString("body"), link = rs.getString("link"), advertising = rs.getBoolean("advertising"),
                 ),
                 rs.getInt("attempts"),
+                dialect.readInstant(rs, "claimed_until")!!,
             )
         }
     }
 
-    override fun finish(key: String, status: ScheduledPushStatus, reason: SkipReason?, now: Instant) {
+    override fun finish(key: String, claimToken: Instant, status: ScheduledPushStatus, reason: SkipReason?, now: Instant) {
         jdbc.update(
-            "update scheduled_pushes set status = :status, skip_reason = :reason, claimed_until = null, finished_at = :now, updated_at = :now where push_key = :k and status = 'PENDING'",
-            MapSqlParameterSource().addValue("status", status.name).addValue("reason", reason?.name).addValue("now", dialect.instantParam(now)).addValue("k", key),
+            "update scheduled_pushes set status = :status, skip_reason = :reason, claimed_until = null, finished_at = :now, updated_at = :now where push_key = :k and status = 'PENDING' and claimed_until = :token",
+            MapSqlParameterSource().addValue("status", status.name).addValue("reason", reason?.name).addValue("now", dialect.instantParam(now)).addValue("k", key).addValue("token", dialect.instantParam(claimToken)),
         )
     }
 
-    override fun reschedule(key: String, runAt: Instant, now: Instant) {
+    override fun reschedule(key: String, claimToken: Instant, runAt: Instant, now: Instant) {
         jdbc.update(
-            "update scheduled_pushes set run_at = :run_at, claimed_until = null, updated_at = :now where push_key = :k and status = 'PENDING'",
-            MapSqlParameterSource().addValue("run_at", dialect.instantParam(runAt)).addValue("now", dialect.instantParam(now)).addValue("k", key),
+            "update scheduled_pushes set run_at = :run_at, claimed_until = null, updated_at = :now where push_key = :k and status = 'PENDING' and claimed_until = :token",
+            MapSqlParameterSource().addValue("run_at", dialect.instantParam(runAt)).addValue("now", dialect.instantParam(now)).addValue("k", key).addValue("token", dialect.instantParam(claimToken)),
         )
     }
 

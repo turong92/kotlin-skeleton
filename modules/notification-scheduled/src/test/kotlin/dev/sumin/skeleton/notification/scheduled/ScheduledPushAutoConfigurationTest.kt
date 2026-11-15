@@ -36,7 +36,7 @@ class ScheduledPushAutoConfigurationTest {
 
     @Test
     fun `when on it wires the service, the sweep, its wake task and the erasure hook`() {
-        runner.withUserConfiguration(Store::class.java).withPropertyValues("skeleton.notification.scheduled.enabled=true", "skeleton.notification.scheduled.type=reminder").run { ctx ->
+        runner.withUserConfiguration(Store::class.java).withPropertyValues("skeleton.job-queue.mode=on-request", "skeleton.notification.scheduled.enabled=true", "skeleton.notification.scheduled.type=reminder").run { ctx ->
             ctx.getBean(ScheduledPushes::class.java)
             ctx.getBean(ScheduledPushSweep::class.java)
             assertEquals(listOf("notification-scheduled-sweep"), ctx.getBeansOfType(OnRequestTask::class.java).values.map { it.name })
@@ -46,25 +46,39 @@ class ScheduledPushAutoConfigurationTest {
 
     @Test
     fun `on without a store or a type fails startup and says what to add`() {
-        runner.withPropertyValues("skeleton.notification.scheduled.enabled=true", "skeleton.notification.scheduled.type=reminder").run { ctx ->
+        runner.withPropertyValues("skeleton.job-queue.mode=on-request", "skeleton.notification.scheduled.enabled=true", "skeleton.notification.scheduled.type=reminder").run { ctx ->
             assertTrue(failure(ctx).contains("notification-scheduled-jdbc"))
         }
-        runner.withUserConfiguration(Store::class.java).withPropertyValues("skeleton.notification.scheduled.enabled=true").run { ctx ->
+        runner.withUserConfiguration(Store::class.java).withPropertyValues("skeleton.job-queue.mode=on-request", "skeleton.notification.scheduled.enabled=true").run { ctx ->
             assertTrue(failure(ctx).contains("scheduled.type"))
+        }
+    }
+
+    @Test
+    fun `on with nothing to run the sweep fails startup instead of silently never sending`() {
+        runner.withUserConfiguration(Store::class.java).withPropertyValues("skeleton.notification.scheduled.enabled=true", "skeleton.notification.scheduled.type=reminder").run { ctx ->
+            assertTrue(failure(ctx).contains("scheduler") && failure(ctx).contains("on-request"))
         }
     }
 
     @Test
     fun `an advertising type outside the advertising list fails startup so the consent gate cannot be bypassed`() {
         runner.withUserConfiguration(Store::class.java)
-            .withPropertyValues("skeleton.notification.scheduled.enabled=true", "skeleton.notification.scheduled.type=reminder", "skeleton.notification.scheduled.advertising-type=reminder.ad")
+            .withPropertyValues("skeleton.job-queue.mode=on-request", "skeleton.notification.scheduled.enabled=true", "skeleton.notification.scheduled.type=reminder", "skeleton.notification.scheduled.advertising-type=reminder.ad")
             .run { ctx -> assertTrue(failure(ctx).contains("advertising.types")) }
+    }
+
+    @Test
+    fun `a daily limit needs the finished rows kept for at least a day`() {
+        runner.withUserConfiguration(Store::class.java)
+            .withPropertyValues("skeleton.job-queue.mode=on-request", "skeleton.notification.scheduled.enabled=true", "skeleton.notification.scheduled.type=reminder", "skeleton.notification.scheduled.daily-limit=3", "skeleton.notification.scheduled.keep-finished=1h")
+            .run { ctx -> assertTrue(failure(ctx).contains("keep-finished")) }
     }
 
     @Test
     fun `a daily limit of zero fails startup`() {
         runner.withUserConfiguration(Store::class.java)
-            .withPropertyValues("skeleton.notification.scheduled.enabled=true", "skeleton.notification.scheduled.type=reminder", "skeleton.notification.scheduled.daily-limit=0")
+            .withPropertyValues("skeleton.job-queue.mode=on-request", "skeleton.notification.scheduled.enabled=true", "skeleton.notification.scheduled.type=reminder", "skeleton.notification.scheduled.daily-limit=0")
             .run { ctx -> assertTrue(failure(ctx).contains("daily-limit")) }
     }
 }

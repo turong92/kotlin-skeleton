@@ -1256,7 +1256,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 문서: `docs/modules/notification-scheduled.md`
 - 쓰지 않는 경우:
   - notification-scheduled 는 저장소를 모른다 — notification-scheduled-jdbc 를 같이 고른다
-  - 꺼짐이 기본이다 — skeleton.notification.scheduled.enabled=true 와 알림 종류(type)를 앱 yml 이 정한다
+  - 꺼짐이 기본이다 — skeleton.notification.scheduled.enabled=true 와 알림 종류(type)를 앱 yml 이 정한다. 훑기를 돌릴 scheduler 모듈이나 요청 구동 모드(skeleton.job-queue.mode=on-request)가 없으면 시작이 실패한다
   - 모든 사람에게 한 번에 보내는 공지는 notification-broadcast 의 몫이다
   - 언제 예약할지(읽다 만 사람 · 가입 다음 날 …)는 앱 코드가 정한다 — 이 모듈은 예약과 취소만 안다
   - 푸시로 닿으려면 notification-push 를 켜고 push.types 에 종류를 넣는다 — 아니면 알림함에만 쌓인다

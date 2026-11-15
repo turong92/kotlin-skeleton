@@ -32,8 +32,7 @@ class ScheduledPushSweep(
     fun run(): Int {
         val now = time.now()
         val due = store.claimDue(now, properties.lease, properties.batchSize)
-        due.forEach { handle(it.push) }
-        store.purgeFinishedBefore(now.minus(properties.keepFinished))
+        due.forEach { handle(it) }
         return due.size
     }
 
@@ -43,22 +42,35 @@ class ScheduledPushSweep(
         run()
     }
 
-    private fun handle(push: ScheduledPush) {
+    /** 끝난 줄 중 `keep-finished` 보다 오래된 것을 지운다 - 훑기마다가 아니라 한 시간에 한 번이면 충분하다 */
+    fun purge(): Int = store.purgeFinishedBefore(time.now().minus(properties.keepFinished))
+
+    @SkeletonScheduled(id = "notification.scheduled.purge", fixedDelay = 1, timeUnit = TimeUnit.HOURS, lockKey = "notification.scheduled.purge")
+    fun purgeScheduled() {
+        purge()
+    }
+
+    private fun handle(due: DuePush) {
+        val push = due.push
+        val token = due.claimToken
         try {
             val now = time.now()
+            if (due.attempts > properties.maxAttempts) {
+                return store.finish(push.key, token, ScheduledPushStatus.SKIPPED, SkipReason.TOO_MANY_ATTEMPTS, now)
+            }
             if (push.advertising) {
                 when (val decision = gate.decide(push.recipientId)) {
-                    AdvertisingDecision.Skip -> return store.finish(push.key, ScheduledPushStatus.SKIPPED, SkipReason.NO_CONSENT, now)
-                    is AdvertisingDecision.Hold -> return store.reschedule(push.key, decision.runAt, now)
+                    AdvertisingDecision.Skip -> return store.finish(push.key, token, ScheduledPushStatus.SKIPPED, SkipReason.NO_CONSENT, now)
+                    is AdvertisingDecision.Hold -> return store.reschedule(push.key, token, decision.runAt, now)
                     AdvertisingDecision.SendNow -> Unit
                 }
             }
             val limit = properties.dailyLimit
             if (limit != null && store.sentCountSince(push.recipientId, now.minus(DAY)) >= limit) {
-                return store.finish(push.key, ScheduledPushStatus.SKIPPED, SkipReason.DAILY_LIMIT, now)
+                return store.finish(push.key, token, ScheduledPushStatus.SKIPPED, SkipReason.DAILY_LIMIT, now)
             }
             publisher.publish(event(push, now))
-            store.finish(push.key, ScheduledPushStatus.SENT, null, now)
+            store.finish(push.key, token, ScheduledPushStatus.SENT, null, now)
         } catch (e: Exception) {
             // 집은 줄은 lease 가 지나면 다시 집힌다. 내용 · 받는 사람은 싣지 않는다
             log.warn("scheduled push failed, it will be retried after the lease: {}", e.javaClass.simpleName)

@@ -3,6 +3,7 @@ package dev.sumin.skeleton.notification.scheduled
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.wake.OnRequestTask
+import dev.sumin.skeleton.common.wake.PeriodicRunCheck
 import dev.sumin.skeleton.common.wake.SimpleOnRequestTask
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationPublisher
@@ -13,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
+import org.springframework.core.env.Environment
 
 /**
  * 사람마다 따로 예약하는 푸시. **모듈 기본은 꺼짐** - `skeleton.notification.scheduled.enabled=true` 일 때만 선다. 저장소([ScheduledPushStore])는 `notification-scheduled-jdbc` 가 낸다.
@@ -26,7 +28,9 @@ import org.springframework.context.annotation.Bean
 @ConditionalOnProperty(prefix = "skeleton.notification.scheduled", name = ["enabled"], havingValue = "true")
 class ScheduledPushAutoConfiguration {
     @Bean
-    fun scheduledPushSetupCheck(properties: ScheduledPushProperties, store: ObjectProvider<ScheduledPushStore>, gate: AdvertisingGate): ScheduledPushSetupCheck {
+    fun scheduledPushSetupCheck(properties: ScheduledPushProperties, store: ObjectProvider<ScheduledPushStore>, gate: AdvertisingGate, environment: Environment): ScheduledPushSetupCheck {
+        // 훑기를 돌릴 길이 없으면(scheduler 도 요청 구동 모드도 없다) 예약이 한 통도 안 나가는데 아무 소리도 없다
+        PeriodicRunCheck.require("skeleton.notification.scheduled.enabled", environment)
         check(store.getIfAvailable() != null) {
             "skeleton.notification.scheduled.enabled=true needs a ScheduledPushStore - add the notification-scheduled-jdbc module " +
                 "(implementation(project(\":modules:notification-scheduled-jdbc\"))) and its migration"
@@ -62,7 +66,10 @@ class ScheduledPushAutoConfiguration {
     /** 요청 구동 모드(인스턴스 0대 배포)의 깨우기가 부른다 - 집기가 조건부 갱신이라 타이머와 겹쳐 돌아도 한 번만 나간다 */
     @Bean
     @ConditionalOnMissingBean(name = ["scheduledPushSweepTask"])
-    fun scheduledPushSweepTask(sweep: ScheduledPushSweep): OnRequestTask = SimpleOnRequestTask("notification-scheduled-sweep") { sweep.run() }
+    fun scheduledPushSweepTask(sweep: ScheduledPushSweep): OnRequestTask = SimpleOnRequestTask("notification-scheduled-sweep") {
+        sweep.run()
+        sweep.purge()
+    }
 
     @Bean
     @ConditionalOnMissingBean(name = ["scheduledPushErasureListener"])
