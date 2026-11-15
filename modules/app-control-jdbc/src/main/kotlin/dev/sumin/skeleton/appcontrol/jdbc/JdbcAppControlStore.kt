@@ -23,6 +23,11 @@ class JdbcAppControlStore(
             AppControlEntry(rs.getString("name"), rs.getString("payload"), rs.getString("updated_by"), dialect.readInstant(rs, "updated_at")!!)
         }
 
+    override fun find(name: String): AppControlEntry? =
+        jdbc.query("select name, payload, updated_by, updated_at from app_control_entries where name = :name", mapOf("name" to name)) { rs, _ ->
+            AppControlEntry(rs.getString("name"), rs.getString("payload"), rs.getString("updated_by"), dialect.readInstant(rs, "updated_at")!!)
+        }.firstOrNull()
+
     override fun put(entry: AppControlEntry) {
         val params = MapSqlParameterSource()
             .addValue("name", entry.name)

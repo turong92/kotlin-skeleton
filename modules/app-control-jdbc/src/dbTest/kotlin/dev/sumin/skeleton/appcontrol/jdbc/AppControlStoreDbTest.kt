@@ -63,6 +63,25 @@ class AppControlStoreDbTest {
     }
 
     @Test
+    fun `find reads one row by name and says nothing for a missing one`() {
+        store.put(entry("platform:find-me", """{"minVersion":"1.0"}""", by = "acc_7"))
+
+        assertEquals(entry("platform:find-me", """{"minVersion":"1.0"}""", by = "acc_7"), store.find("platform:find-me"))
+        assertEquals(null, store.find("platform:nobody"))
+    }
+
+    @Test
+    fun `a patch merges with the stored platform in the database too`() {
+        val control = AppControl(store, OperatorAuditLog { }, TimeProvider.fixed(t0), AppControlProperties(), mapper)
+        control.setPlatform("acc_op", "ios", "1.9", "1.10", "https://apps.apple.com/app/id1")
+
+        val merged = control.patchPlatform("acc_op", "ios", null, "1.11", null)
+
+        assertEquals("1.9", merged.minVersion)
+        assertEquals("1.11", AppControl(store, OperatorAuditLog { }, TimeProvider.fixed(t0), AppControlProperties(), mapper).snapshot().platforms.getValue("ios").recommendedVersion)
+    }
+
+    @Test
     fun `delete says whether it removed a row`() {
         store.put(entry("flag:gone"))
 

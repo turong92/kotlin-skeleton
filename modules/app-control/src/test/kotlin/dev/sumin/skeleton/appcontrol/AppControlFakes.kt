@@ -15,13 +15,19 @@ class FakeAppControlStore : AppControlStore {
     var reads = 0
     var failReads = false
 
+    /** 읽기 도중에 할 일(느린 DB 흉내: 시계를 보내거나 기다린다) */
+    var duringRead: () -> Unit = {}
+
     override fun <T> transaction(block: () -> T): T = block()
 
     override fun all(): List<AppControlEntry> {
         reads++
+        duringRead()
         check(!failReads) { "db down" }
         return rows.values.sortedBy { it.name }
     }
+
+    override fun find(name: String): AppControlEntry? = rows[name]
 
     override fun put(entry: AppControlEntry) {
         rows[entry.name] = entry

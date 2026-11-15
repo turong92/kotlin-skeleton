@@ -9,6 +9,9 @@ interface AppControlStore {
 
     fun all(): List<AppControlEntry>
 
+    /** 한 줄(없으면 null) */
+    fun find(name: String): AppControlEntry?
+
     /** 없으면 만들고 있으면 덮어쓴다 (마지막 쓴 것이 이긴다) */
     fun put(entry: AppControlEntry)
 

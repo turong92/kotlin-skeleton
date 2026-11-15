@@ -15,6 +15,7 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -73,13 +74,24 @@ class AppControlAdminController(
         if (body.minVersion == null && body.recommendedVersion == null && body.storeUrl == null) {
             throw FieldValidationException("minVersion", "Required", "Give at least one of minVersion, recommendedVersion, storeUrl (DELETE removes the platform)")
         }
-        val s = control.setPlatform(operator.accountId, platform, body.minVersion, body.recommendedVersion, body.storeUrl)!!
+        val s = control.setPlatform(operator.accountId, platform, body.minVersion, body.recommendedVersion, body.storeUrl)
+        return Response.ok(PlatformResponse(s.platform, s.minVersion, s.recommendedVersion, s.storeUrl, s.updatedBy, s.updatedAt))
+    }
+
+    /** 준 칸만 바꾸고 나머지는 유지한다 (PUT 은 통째로 바꾼다) */
+    @PatchMapping("/platforms/{platform}")
+    fun patchPlatform(authentication: Authentication?, @PathVariable platform: String, @RequestBody body: PlatformBody): DataResponse<PlatformResponse> {
+        val operator = operator(authentication, AppControlPermissions.WRITE)
+        if (body.minVersion == null && body.recommendedVersion == null && body.storeUrl == null) {
+            throw FieldValidationException("minVersion", "Required", "Give at least one of minVersion, recommendedVersion, storeUrl")
+        }
+        val s = control.patchPlatform(operator.accountId, platform, body.minVersion, body.recommendedVersion, body.storeUrl)
         return Response.ok(PlatformResponse(s.platform, s.minVersion, s.recommendedVersion, s.storeUrl, s.updatedBy, s.updatedAt))
     }
 
     @DeleteMapping("/platforms/{platform}")
     fun deletePlatform(authentication: Authentication?, @PathVariable platform: String): ResponseEntity<Void> {
-        control.setPlatform(operator(authentication, AppControlPermissions.WRITE).accountId, platform, null, null, null)
+        control.deletePlatform(operator(authentication, AppControlPermissions.WRITE).accountId, platform)
         return ResponseEntity.noContent().build()
     }
 

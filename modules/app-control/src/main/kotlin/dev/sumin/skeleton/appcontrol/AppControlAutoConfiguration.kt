@@ -4,6 +4,7 @@ import dev.sumin.skeleton.appcontrol.web.AppConfigController
 import dev.sumin.skeleton.common.authz.NoOpOperatorAuditLog
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
+import dev.sumin.skeleton.common.project.ProjectUnscopedPaths
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import org.springframework.beans.factory.ObjectProvider
@@ -74,6 +75,7 @@ class AppControlAutoConfiguration {
         control: AppControl,
         time: ObjectProvider<TimeProvider>,
         properties: AppControlProperties,
+        unscoped: ObjectProvider<ProjectUnscopedPaths>,
         objectMapper: ObjectMapper,
     ): FilterRegistrationBean<MaintenanceFilter> {
         // 이 모듈이 여는 경로는 점검 중에도 열려 있어야 한다 (클라이언트가 점검을 알아내고 · 운영자가 끈다) - 설정으로 경로를 옮겨도 따라간다
@@ -81,7 +83,7 @@ class AppControlAutoConfiguration {
             properties.config.basePath.takeIf { properties.config.enabled },
             properties.admin.basePath.takeIf { properties.admin.enabled }?.let { "$it/**" },
         )
-        val filter = MaintenanceFilter(control, time.getIfAvailable { TimeProvider.systemUtc() }, (properties.maintenance.passPaths + own).distinct(), properties.maintenance.retryAfter, objectMapper)
+        val filter = MaintenanceFilter(control, time.getIfAvailable { TimeProvider.systemUtc() }, (properties.maintenance.passPaths + own).distinct(), properties.maintenance.retryAfter, objectMapper) { unscoped.orderedStream().toList().flatMap { it.paths() } }
         return FilterRegistrationBean(filter).apply { order = Ordered.HIGHEST_PRECEDENCE + 50 }
     }
 

@@ -45,7 +45,7 @@ data class AppConfigResponse(
 
 internal fun AppControlSnapshot.toConfigResponse(now: Instant) = AppConfigResponse(
     serverTime = now,
-    maintenance = AppConfigMaintenance(maintenance.enabled, maintenance.message.takeIf { maintenance.enabled }, maintenance.endsAt.takeIf { maintenance.enabled }),
+    maintenance = AppConfigMaintenance(maintenance.enabled, maintenance.message.takeIf { maintenance.enabled }, maintenance.endsAt?.takeIf { maintenance.enabled && it.isAfter(now) }),
     flags = flags.values.filter { it.clientVisible }.sortedBy { it.key }.associate { it.key to it.enabled },
     platforms = platforms.values.sortedBy { it.platform }.associate { it.platform to AppConfigPlatform(it.minVersion, it.recommendedVersion, it.storeUrl) },
 )

@@ -165,12 +165,97 @@ class AppControlTest {
     }
 
     @Test
-    fun `setting a platform with nothing in it removes it`() {
-        control.setPlatform("acc_op", "android", "2.0", null, null)
-        control.setPlatform("acc_op", "android", null, null, null)
+    fun `deleting a platform removes it and is recorded, a missing one is a 404`() {
+        control.setPlatform("acc_op", "android", "2.0", null, "https://play.google.com/store/apps/details?id=x")
+        control.deletePlatform("acc_op", "android")
 
         assertNull(control.snapshot().platforms["android"])
-        assertEquals("app-control.platform.updated", audit.actions.last().action)
+        assertEquals("app-control.platform.deleted", audit.actions.last().action)
+        assertEquals(404, assertFailsWith<ApplicationException> { control.deletePlatform("acc_op", "android") }.status.value())
+    }
+
+    @Test
+    fun `a mobile platform with a minimum needs the store link, the web does not`() {
+        assertFailsWith<FieldValidationException> { control.setPlatform("acc_op", "ios", "2.0", null, null) }
+        assertFailsWith<FieldValidationException> { control.setPlatform("acc_op", "android", "2.0", "2.1", null) }
+        control.setPlatform("acc_op", "web", "2026.1", null, null)
+
+        assertEquals("2026.1", control.snapshot().platforms.getValue("web").minVersion)
+    }
+
+    @Test
+    fun `patching a platform changes only the given parts and keeps the rest, put replaces it whole`() {
+        control.setPlatform("acc_op", "ios", "1.9", "1.10", "https://apps.apple.com/app/id1")
+
+        control.patchPlatform("acc_op", "ios", minVersion = null, recommendedVersion = "1.11", storeUrl = null)
+        val patched = control.snapshot().platforms.getValue("ios")
+        assertEquals("1.9", patched.minVersion)
+        assertEquals("1.11", patched.recommendedVersion)
+        assertEquals("https://apps.apple.com/app/id1", patched.storeUrl)
+
+        control.setPlatform("acc_op", "ios", "2.0", null, "https://apps.apple.com/app/id1")
+        assertNull(control.snapshot().platforms.getValue("ios").recommendedVersion)
+    }
+
+    @Test
+    fun `a patch is checked against what it makes - below the stored minimum, or a first minimum without a link`() {
+        control.setPlatform("acc_op", "ios", "1.9", null, "https://apps.apple.com/app/id1")
+        assertFailsWith<FieldValidationException> { control.patchPlatform("acc_op", "ios", null, "1.5", null) }
+        assertFailsWith<FieldValidationException> { control.patchPlatform("acc_op", "android", "2.0", null, null) }
+        assertNull(control.snapshot().platforms["android"])
+    }
+
+    @Test
+    fun `a platform record says whether the store link changed, not the link itself`() {
+        control.setPlatform("acc_op", "ios", "1.9", null, "https://apps.apple.com/app/id1")
+
+        assertEquals(mapOf("minVersion" to "1.9", "storeUrlSet" to "true"), audit.actions.last().detail)
+    }
+
+    @Test
+    fun `a slow read that fails does not queue the others, they get the last values at once`() {
+        control.setFlag("acc_op", "beta", enabled = true)
+        assertTrue(flags.isEnabled("beta"))
+        time.instant = time.instant.plusSeconds(6)
+        val inRead = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        store.failReads = true
+        store.duringRead = { inRead.countDown(); release.await(30, java.util.concurrent.TimeUnit.SECONDS) }
+        val slow = Thread { flags.isEnabled("beta") }.also { it.start() }
+        assertTrue(inRead.await(10, java.util.concurrent.TimeUnit.SECONDS))
+
+        val answered = java.util.concurrent.CompletableFuture.supplyAsync { flags.isEnabled("beta") }.get(5, java.util.concurrent.TimeUnit.SECONDS)
+
+        assertTrue(answered, "the others do not wait for the slow read")
+        release.countDown()
+        slow.join(10_000)
+    }
+
+    @Test
+    fun `the cache lifetime counts from the end of the read, so a slow failing read is not retried at once`() {
+        store.failReads = true
+        store.duringRead = { time.instant = time.instant.plusSeconds(10) }   // 읽다가 10초가 갔다(ttl 5초보다 길다)
+
+        control.snapshot()
+        control.snapshot()
+
+        assertEquals(1, store.reads)
+    }
+
+    @Test
+    fun `a change made while another read is on its way is not hidden by that older read`() {
+        val inRead = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        store.duringRead = { inRead.countDown(); release.await(30, java.util.concurrent.TimeUnit.SECONDS) }
+        val reader = Thread { control.snapshot() }.also { it.start() }
+        assertTrue(inRead.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        store.duringRead = {}
+
+        control.setFlag("acc_op", "late", enabled = true)   // 읽기 도중의 쓰기
+        release.countDown()
+        reader.join(10_000)
+
+        assertTrue(flags.isEnabled("late"), "the next read sees it, the older read's result is not kept for a whole ttl")
     }
 
     @Test
@@ -183,6 +268,7 @@ class AppControlTest {
             override fun all() = current().all()
             override fun put(entry: AppControlEntry) = current().put(entry)
             override fun delete(name: String) = current().delete(name)
+            override fun find(name: String) = current().find(name)
         }
         val shared = AppControl(routed, audit, time, AppControlProperties(), testMapper)
         fun project(id: String) = Project(id, listOf("$id.example.com"), id, ProjectDatasource(), emptyMap())

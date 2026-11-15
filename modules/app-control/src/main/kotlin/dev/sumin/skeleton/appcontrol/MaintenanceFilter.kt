@@ -25,12 +25,14 @@ class MaintenanceFilter(
     private val passPaths: List<String>,
     private val fallbackRetryAfter: Duration,
     private val objectMapper: ObjectMapper,
+    /** 다른 모듈이 프로젝트 없이 지나가게 한 경로 - 요청마다 읽는다 */
+    private val extraPassPaths: () -> List<String> = { emptyList() },
 ) : OncePerRequestFilter() {
     private val patterns = passPaths.map { RequestPaths.pattern(it) }
 
     override fun doFilterInternal(request: HttpServletRequest, response: HttpServletResponse, filterChain: FilterChain) {
         // 통과 경로는 상태를 읽지도 않는다 - 프로젝트 없이 오는 헬스체크가 DB 를 프로젝트 문맥 없이 쓰지 않게
-        if (CorsUtils.isPreFlightRequest(request) || patterns.any { RequestPaths.matches(it, request) }) {
+        if (CorsUtils.isPreFlightRequest(request) || patterns.any { RequestPaths.matches(it, request) } || extraPassPaths().any { RequestPaths.matches(RequestPaths.pattern(it), request) }) {
             filterChain.doFilter(request, response)
             return
         }

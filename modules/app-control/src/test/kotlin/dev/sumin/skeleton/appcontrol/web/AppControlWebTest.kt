@@ -26,6 +26,7 @@ import org.springframework.security.authentication.TestingAuthenticationToken
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -51,6 +52,8 @@ class PlainController {
     @RequireFeature("legacy-on", defaultEnabled = true) @GetMapping("/legacy") fun legacy() = mapOf("ok" to true)
 
     @GetMapping("/healthy-not") fun lookalike() = mapOf("ok" to true)
+
+    @GetMapping("/unscoped") fun unscoped() = mapOf("ok" to true)
 }
 
 @TestConfiguration(proxyBeanMethods = false)
@@ -63,6 +66,7 @@ class AppControlTestBeans {
     @Bean fun audit(): OperatorAuditLog = OperatorAuditLog { ACTIONS += it }
     @Bean fun gatedClass() = GatedClassController()
     @Bean fun plain() = PlainController()
+    @Bean fun unscopedPaths() = dev.sumin.skeleton.common.project.ProjectUnscopedPaths { listOf("/test/unscoped") }
 
     companion object {
         val GRANTS = ConcurrentHashMap<String, Set<String>>()
@@ -203,12 +207,13 @@ class AppControlWebTest {
     fun `every change is recorded with who did it`() {
         flag("beta", true, visible = true)
         putAs(admin, "/maintenance", """{"enabled":false}""").andExpect(status().isOk)
-        putAs(admin, "/platforms/ios", """{"minVersion":"1.9"}""").andExpect(status().isOk)
+        putAs(admin, "/platforms/ios", """{"minVersion":"1.9","storeUrl":"https://apps.apple.com/app/id1"}""").andExpect(status().isOk)
+        mvc.perform(patch("$base/platforms/ios").principal(admin).contentType(MediaType.APPLICATION_JSON).content("""{"recommendedVersion":"1.10"}""")).andExpect(status().isOk)
         mvc.perform(delete("$base/platforms/ios").principal(admin)).andExpect(status().isNoContent)
         mvc.perform(delete("$base/flags/beta").principal(admin)).andExpect(status().isNoContent)
 
         assertEquals(
-            listOf("app-control.flag.updated", "app-control.maintenance.updated", "app-control.platform.updated", "app-control.platform.updated", "app-control.flag.deleted"),
+            listOf("app-control.flag.updated", "app-control.maintenance.updated", "app-control.platform.updated", "app-control.platform.updated", "app-control.platform.deleted", "app-control.flag.deleted"),
             AppControlTestBeans.ACTIONS.map { it.action },
         )
         assertEquals(setOf("acc_op"), AppControlTestBeans.ACTIONS.map { it.actorId }.toSet())
@@ -220,6 +225,8 @@ class AppControlWebTest {
         putAs(admin, "/flags/beta", """{"clientVisible":true}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("enabled"))
         putAs(admin, "/platforms/ios", """{"minVersion":"1.10","recommendedVersion":"1.9"}""").andExpect(status().isBadRequest)
         putAs(admin, "/platforms/ios", """{}""").andExpect(status().isBadRequest)
+        putAs(admin, "/platforms/ios", """{"minVersion":"2.0"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("storeUrl"))
+        mvc.perform(delete("$base/platforms/ghost").principal(admin)).andExpect(status().isNotFound)
         mvc.perform(delete("$base/flags/ghost").principal(admin)).andExpect(status().isNotFound)
     }
 
@@ -257,6 +264,40 @@ class AppControlWebTest {
             .andExpect(jsonPath("$.value.platforms.ios.storeUrl").value("https://apps.apple.com/app/id1"))
             .andExpect(jsonPath("$.value.serverTime").exists())
             .andExpect(jsonPath("$.value.platforms.ios.updatedBy").doesNotExist())
+    }
+
+    @Test
+    fun `a patch keeps what it does not name and read alone cannot patch`() {
+        putAs(admin, "/platforms/ios", """{"minVersion":"1.9","storeUrl":"https://apps.apple.com/app/id1"}""").andExpect(status().isOk)
+
+        mvc.perform(patch("$base/platforms/ios").principal(viewer).contentType(MediaType.APPLICATION_JSON).content("""{"recommendedVersion":"1.10"}"""))
+            .andExpect(status().isForbidden)
+        mvc.perform(patch("$base/platforms/ios").principal(admin).contentType(MediaType.APPLICATION_JSON).content("""{"recommendedVersion":"1.10"}"""))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.minVersion").value("1.9"))
+            .andExpect(jsonPath("$.value.recommendedVersion").value("1.10"))
+            .andExpect(jsonPath("$.value.storeUrl").value("https://apps.apple.com/app/id1"))
+        mvc.perform(patch("$base/platforms/ios").principal(admin).contentType(MediaType.APPLICATION_JSON).content("""{}""")).andExpect(status().isBadRequest)
+    }
+
+    @Test
+    fun `an expected end that has passed is left out of the app config`() {
+        val ends = (time as MutableTime).instant.plusSeconds(600)
+        maintenanceOn("""{"enabled":true,"message":"Soon","endsAt":"$ends"}""")
+        mvc.perform(get("/api/v1/app/config")).andExpect(jsonPath("$.value.maintenance.endsAt").value(ends.toString()))
+
+        (time as MutableTime).instant = ends.plusSeconds(1)
+
+        mvc.perform(get("/api/v1/app/config"))
+            .andExpect(jsonPath("$.value.maintenance.enabled").value(true))
+            .andExpect(jsonPath("$.value.maintenance.endsAt").doesNotExist())
+    }
+
+    @Test
+    fun `a path another module keeps free of projects also passes during maintenance`() {
+        maintenanceOn()
+
+        mvc.perform(get("/test/unscoped")).andExpect(status().isOk)
     }
 
     @Test

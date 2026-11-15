@@ -10,6 +10,8 @@ import java.net.URI
 import dev.sumin.skeleton.common.project.ProjectContext
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.ReentrantLock
 import org.slf4j.LoggerFactory
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
@@ -28,36 +30,52 @@ class AppControl(
 ) {
     private class Cached(val snapshot: AppControlSnapshot, val expiresAt: Instant)
 
-    /** 프로젝트마다 DB 스키마가 따로라 캐시도 프로젝트마다 둔다(프로젝트 밖이면 하나) */
-    private val cache = ConcurrentHashMap<String, Cached>()
-
-    private fun cacheKey() = ProjectContext.scopedKey("app-control")
-
-    fun snapshot(): AppControlSnapshot {
-        val current = cache[cacheKey()]
-        if (current != null && time.now() < current.expiresAt) return current.snapshot
-        return reload()
+    /** 프로젝트마다 DB 스키마가 따로라 캐시 · 잠금 · 세대를 프로젝트마다 둔다(프로젝트 밖이면 하나) */
+    private class Slot {
+        @Volatile var cached: Cached? = null
+        val lock = ReentrantLock()
+        val generation = AtomicLong()
     }
 
-    @Synchronized
-    private fun reload(): AppControlSnapshot {
-        val key = cacheKey()
-        val now = time.now()
-        val current = cache[key]
-        if (current != null && now < current.expiresAt) return current.snapshot   // 기다리는 사이 다른 스레드가 읽었다
-        val snapshot = try {
-            load()
-        } catch (e: Exception) {
-            log.warn("app-control: reading the store failed, keeping the last known values: {}", e.toString())
-            current?.snapshot ?: AppControlSnapshot.EMPTY
+    private val slots = ConcurrentHashMap<String, Slot>()
+
+    private fun slot() = slots.computeIfAbsent(ProjectContext.scopedKey("app-control")) { Slot() }
+
+    fun snapshot(): AppControlSnapshot {
+        val slot = slot()
+        val current = slot.cached
+        if (current != null && time.now() < current.expiresAt) return current.snapshot
+        return reload(slot)
+    }
+
+    /**
+     * 읽는 사람은 프로젝트마다 한 명이다 - 읽는 동안 온 다른 요청은 줄 서지 않고 직전 값(없으면 중립)을 바로 받는다.
+     * 만료는 **읽기가 끝난 시각**부터 ttl 이라 느리게 실패한 읽기를 곧바로 다시 하지 않는다. 읽는 도중 이 인스턴스가 값을 바꿨으면(세대가 달라짐) 그 읽기의 결과는 바로 만료로 둔다.
+     */
+    private fun reload(slot: Slot): AppControlSnapshot {
+        val before = slot.cached
+        if (!slot.lock.tryLock()) return before?.snapshot ?: AppControlSnapshot.EMPTY
+        try {
+            val current = slot.cached
+            if (current != null && time.now() < current.expiresAt) return current.snapshot   // 방금 다른 스레드가 읽었다
+            val generation = slot.generation.get()
+            val snapshot = try {
+                load()
+            } catch (e: Exception) {
+                log.warn("app-control: reading the store failed, keeping the last known values: {}", e.toString())
+                current?.snapshot ?: AppControlSnapshot.EMPTY
+            }
+            slot.cached = Cached(snapshot, if (slot.generation.get() != generation) Instant.MIN else time.now().plus(properties.cacheTtl))
+            return snapshot
+        } finally {
+            slot.lock.unlock()
         }
-        cache[key] = Cached(snapshot, now.plus(properties.cacheTtl))
-        return snapshot
     }
 
     private fun expire() {
-        val key = cacheKey()
-        cache[key]?.let { cache[key] = Cached(it.snapshot, Instant.MIN) }
+        val slot = slot()
+        slot.generation.incrementAndGet()
+        slot.cached?.let { slot.cached = Cached(it.snapshot, Instant.MIN) }
     }
 
     fun setFlag(actor: String, key: String, enabled: Boolean, clientVisible: Boolean = false, description: String? = null): FlagState {
@@ -94,24 +112,46 @@ class AppControl(
         return MaintenanceState(enabled, payload.message, endsAt, actor, now)
     }
 
-    /** 세 칸이 모두 null 이면 그 플랫폼의 규칙을 지운다 */
-    fun setPlatform(actor: String, platform: String, minVersion: String?, recommendedVersion: String?, storeUrl: String?): PlatformVersions? {
+    /** 통째로 바꾼다(PUT) — 주지 않은 칸은 지워진다. 한 칸은 있어야 한다 */
+    fun setPlatform(actor: String, platform: String, minVersion: String?, recommendedVersion: String?, storeUrl: String?): PlatformVersions =
+        savePlatform(actor, platform, minVersion, recommendedVersion, storeUrl, merge = false)
+
+    /** 준 칸만 바꾸고 나머지는 저장된 값을 유지한다(PATCH). 합친 결과를 검증한다 */
+    fun patchPlatform(actor: String, platform: String, minVersion: String?, recommendedVersion: String?, storeUrl: String?): PlatformVersions =
+        savePlatform(actor, platform, minVersion, recommendedVersion, storeUrl, merge = true)
+
+    private fun savePlatform(actor: String, platform: String, minVersion: String?, recommendedVersion: String?, storeUrl: String?, merge: Boolean): PlatformVersions {
         requireField("platform", PLATFORM.matches(platform), "Pattern", "Platform names are lowercase letters, digits and '-' (e.g. android, ios)")
-        val min = minVersion?.let { parseVersion("minVersion", it) }
-        val recommended = recommendedVersion?.let { parseVersion("recommendedVersion", it) }
-        requireField("recommendedVersion", min == null || recommended == null || recommended >= min, "Range", "The recommended version cannot be below the minimum")
-        requireField("storeUrl", storeUrl == null || isHttpsUrl(storeUrl), "Pattern", "An https:// store link")
         val now = time.now()
-        val payload = PlatformPayload(min?.text, recommended?.text, storeUrl)
-        val empty = min == null && recommended == null && storeUrl == null
-        store.transaction {
-            if (empty) store.delete(PLATFORM_PREFIX + platform) else store.put(AppControlEntry(PLATFORM_PREFIX + platform, mapper.writeValueAsString(payload), actor, now))
+        val saved = store.transaction {
+            val kept = if (merge) store.find(PLATFORM_PREFIX + platform)?.let { runCatching { mapper.readValue<PlatformPayload>(it.payload) }.getOrNull() } else null
+            val min = (minVersion ?: kept?.minVersion)?.let { parseVersion("minVersion", it) }
+            val recommended = (recommendedVersion ?: kept?.recommendedVersion)?.let { parseVersion("recommendedVersion", it) }
+            val url = storeUrl ?: kept?.storeUrl
+            requireField("minVersion", min != null || recommended != null || url != null, "Required", "Give at least one of minVersion, recommendedVersion, storeUrl")
+            requireField("recommendedVersion", min == null || recommended == null || recommended >= min, "Range", "The recommended version cannot be below the minimum")
+            requireField("storeUrl", url == null || isHttpsUrl(url), "Pattern", "An https:// store link")
+            requireField("storeUrl", min == null || url != null || platform !in MOBILE, "Required", "A mobile platform with a minimum version needs its store link")
+            val payload = PlatformPayload(min?.text, recommended?.text, url)
+            store.put(AppControlEntry(PLATFORM_PREFIX + platform, mapper.writeValueAsString(payload), actor, now))
             audit.record(
-                OperatorAction(actor, "app-control.platform.updated", "app-control", platform, listOfNotNull(min?.let { "minVersion" to it.text }, recommended?.let { "recommendedVersion" to it.text }).toMap()),
+                OperatorAction(
+                    actor, "app-control.platform.updated", "app-control", platform,
+                    listOfNotNull(min?.let { "minVersion" to it.text }, recommended?.let { "recommendedVersion" to it.text }, "storeUrlSet" to (url != null).toString()).toMap(),
+                ),
             )
+            PlatformVersions(platform, payload.minVersion, payload.recommendedVersion, payload.storeUrl, actor, now)
         }
         expire()
-        return if (empty) null else PlatformVersions(platform, payload.minVersion, payload.recommendedVersion, payload.storeUrl, actor, now)
+        return saved
+    }
+
+    fun deletePlatform(actor: String, platform: String) {
+        val removed = store.transaction {
+            store.delete(PLATFORM_PREFIX + platform).also { if (it) audit.record(OperatorAction(actor, "app-control.platform.deleted", "app-control", platform)) }
+        }
+        if (!removed) throw ApplicationException("No platform '$platform'", PlatformErrorCode.NOT_FOUND)
+        expire()
     }
 
     private fun load(): AppControlSnapshot {
@@ -163,6 +203,7 @@ class AppControl(
         val log = LoggerFactory.getLogger(AppControl::class.java)
         val FLAG_KEY = Regex("^[a-z][a-z0-9._-]{0,63}$")
         val PLATFORM = Regex("^[a-z][a-z0-9-]{0,19}$")
+        val MOBILE = setOf("android", "ios")
         const val FLAG_PREFIX = "flag:"
         const val PLATFORM_PREFIX = "platform:"
         const val MAINTENANCE = "maintenance"
