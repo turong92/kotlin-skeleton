@@ -19,12 +19,14 @@ class AdvertisingNoticeMailer(
     registry: NotificationSubscriptionRegistry,
     private val mail: () -> MailSender?,
     private val contacts: () -> ContactAddresses?,
-) : AutoCloseable {
+) : AutoCloseable, NoticeMedium {
     private val log = LoggerFactory.getLogger(javaClass)
     private val types = setOf(AdvertisingNotificationTypes.CONSENT_CHANGED, AdvertisingNotificationTypes.CONSENT_RECONFIRM)
 
     private val subscription: NotificationSubscription =
         registry.subscribe(topics = setOf(ADVERTISING_NOTICE_TOPIC), subscriber = NotificationSubscriber { event -> onNotification(event) })
+
+    override fun ready(): Boolean = mail() != null && contacts() != null
 
     fun onNotification(event: NotificationEvent) {
         if (event.type !in types) return

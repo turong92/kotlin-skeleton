@@ -17,7 +17,6 @@ import dev.sumin.skeleton.notification.advertising.AdvertisingNoticeStore
 import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.ListableBeanFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.beans.factory.annotation.Qualifier
@@ -90,10 +89,16 @@ class NotificationLegalAutoConfiguration {
         )
     }
 
-    /** 요청 구동 모드(인스턴스 0대 배포)의 깨우기가 부른다 - 안내 표시가 멱등이라 타이머와 겹쳐 돌아도 한 번만 나간다 */
+    /** 스캔을 도는 한 곳 - 타이머와 깨우기가 같이 쓴다(프로젝트 모드면 프로젝트마다) */
+    @Bean
+    @ConditionalOnMissingBean
+    fun advertisingReconfirmRunner(scanner: AdvertisingReconfirmScanner, properties: AdvertisingProperties, projects: ObjectProvider<ProjectRegistry>, time: ObjectProvider<TimeProvider>): AdvertisingReconfirmRunner =
+        AdvertisingReconfirmRunner({ scanner.run() }, { projects.getIfAvailable() }, properties.reconfirmScanInterval, time.getIfAvailable { TimeProvider.systemUtc() })
+
+    /** 요청 구동 모드(인스턴스 0대 배포)의 깨우기가 부른다 - `reconfirm-scan-interval` 이 안 지났으면 건너뛴다. 안내 표시가 멱등이라 타이머와 겹쳐 돌아도 한 번만 나간다 */
     @Bean
     @ConditionalOnMissingBean(name = ["advertisingReconfirmTask"])
-    fun advertisingReconfirmTask(scanner: AdvertisingReconfirmScanner): OnRequestTask = SimpleOnRequestTask("advertising-reconfirm") { scanner.run() }
+    fun advertisingReconfirmTask(runner: AdvertisingReconfirmRunner): OnRequestTask = SimpleOnRequestTask("advertising-reconfirm") { runner.runIfDue() }
 
     /**
      * 법정 통지는 전송매체가 있어야 닿는다 - 받은편지함 · SSE 는 앱 안 기록이다. 푸시 채널도 메일 통지(`notification-mail` + `ContactAddresses`)도 없으면 경고한다
@@ -101,13 +106,14 @@ class NotificationLegalAutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean(name = ["advertisingNoticeMediumCheck"])
-    fun advertisingNoticeMediumCheck(context: ListableBeanFactory, channels: ObjectProvider<NotificationChannelDeclaration>): SmartInitializingSingleton = SmartInitializingSingleton {
-        val push = channels.orderedStream().anyMatch { it.key == "push" }
-        if (!push && !context.containsBean("advertisingNoticeMailer")) {
-            LoggerFactory.getLogger(AdvertisingConsentNotifier::class.java).warn(
-                "advertising consent notices (advertising.consent.*) have no delivery medium: push is off and the mail notice is not wired (needs notification-mail + a ContactAddresses bean from account). They only reach the inbox, which is not a transmission - deliver them by your own channel",
-            )
-        }
+    fun advertisingNoticeMediumCheck(
+        channels: ObjectProvider<NotificationChannelDeclaration>,
+        mediums: ObjectProvider<NoticeMedium>,
+        environment: Environment,
+    ): SmartInitializingSingleton = SmartInitializingSingleton {
+        val pushTypes = Binder.get(environment).bind("skeleton.notification.push.types", Bindable.listOf(String::class.java)).orElse(emptyList()).orEmpty().map { it.trim() }.toSet()
+        val problem = noticeMediumProblem(channels.orderedStream().anyMatch { it.key == "push" }, pushTypes, mediums.orderedStream().anyMatch { it.ready() })
+        if (problem != null) LoggerFactory.getLogger(AdvertisingConsentNotifier::class.java).warn(problem)
     }
 
     /**
@@ -117,10 +123,9 @@ class NotificationLegalAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["advertisingReconfirmSchedule"])
     fun advertisingReconfirmSchedule(
-        scanner: AdvertisingReconfirmScanner,
+        runner: AdvertisingReconfirmRunner,
         properties: AdvertisingProperties,
         @Qualifier("skeletonTaskScheduler") schedulers: ObjectProvider<TaskScheduler>,
-        projects: ObjectProvider<ProjectRegistry>,
     ): SmartInitializingSingleton = SmartInitializingSingleton {
         val log = LoggerFactory.getLogger(AdvertisingReconfirmScanner::class.java)
         val scheduler = schedulers.getIfAvailable()
@@ -129,24 +134,7 @@ class NotificationLegalAutoConfiguration {
         } else {
             val interval = properties.reconfirmScanInterval
             scheduler.scheduleWithFixedDelay(
-                {
-                    try {
-                        val registry = projects.getIfAvailable()
-                        if (registry == null) {
-                            scanner.run()
-                        } else {
-                            registry.forEachProject { project ->
-                                try {
-                                    scanner.run()
-                                } catch (e: Exception) {
-                                    log.warn("advertising reconfirm scan failed for project '{}': {}", project.id, e.toString())
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        log.warn("advertising reconfirm scan failed: {}", e.toString())
-                    }
-                },
+                { runner.run() },
                 Instant.now().plus(interval),
                 interval,
             )

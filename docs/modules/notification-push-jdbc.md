@@ -1,7 +1,7 @@
 # notification-push-jdbc
 
 `notification-push` 의 기기 저장소 `PushDeviceStore` · 「푸시만 끄기」 저장소 `PushTypeMuteStore` · 재확인 안내 표시 저장소 `PushAdvertisingNoticeStore` · 작업 포트 `PushTasks` 를 JDBC(PostgreSQL · MySQL)로 구현하고, 발송 처리기를 `job-queue-jdbc` 위에 얹는다.
-표 넷(재확인 안내 표시는 푸시 없는 앱을 위해 `notification-jdbc` 의 `advertising_notices` 에도 같은 계약 `AdvertisingNoticeStore` 로 있다 - 둘 다 있으면 이 모듈의 것이 쓰인다): `push_devices`(한 행 = 한 설치) · `push_type_mutes`(푸시만 끈 종류만 줄이 있다) · `push_advertising_notices`(광고 동의 재확인 안내를 이 동의 주기에 이미 보냈다는 표시 — (계정 · 종류 · 동의 시각)이 키). `push_opens`(푸시를 눌러 연 첫 한 번 — (이벤트 id · 받는 사람)이 키라 같은 보고를 몇 번 받아도 한 줄, 기본 키 충돌로 판정해 동시에 와도 하나만 첫 기록). 시각은 PostgreSQL `timestamptz` · MySQL `datetime(6)`(UTC).
+표 넷(재확인 안내 표시는 푸시 없는 앱을 위해 `notification-jdbc` 의 `advertising_notices` 에도 같은 계약 `AdvertisingNoticeStore` 로 있다 - 둘 다 있으면 이 모듈의 것이 쓰인다. 이 모듈을 빼면 표가 바뀌어 이미 안내받은 사람에게 재확인 안내가 한 번 더 갈 수 있다): `push_devices`(한 행 = 한 설치) · `push_type_mutes`(푸시만 끈 종류만 줄이 있다) · `push_advertising_notices`(광고 동의 재확인 안내를 이 동의 주기에 이미 보냈다는 표시 — (계정 · 종류 · 동의 시각)이 키). `push_opens`(푸시를 눌러 연 첫 한 번 — (이벤트 id · 받는 사람)이 키라 같은 보고를 몇 번 받아도 한 줄, 기본 키 충돌로 판정해 동시에 와도 하나만 첫 기록). 시각은 PostgreSQL `timestamptz` · MySQL `datetime(6)`(UTC).
 
 규칙: `installation_id` 유니크(클라이언트가 만든 무작위 값, 한 설치 = 한 줄) · `address_hash` 유니크(sha256(`kind` + 개행 + 주소) — 같은 주소는 한 줄에만).
 **등록은 한 트랜잭션**이다: 같은 주소의 **다른 설치** 줄 지우기(주소가 다른 계정으로 넘어가도 옛 줄이 없어진다) → 넣기(`SqlDialect.insertIgnore`) → 갱신(주인 · 세션 · 주소 · 열쇠 · 키 지문 · `last_seen_at`) → 그 계정 기기가 `max-devices-per-account`(기본 20)를 넘으면 `last_seen_at` 이 가장 오랜 것부터 지우기.
