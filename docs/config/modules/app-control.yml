@@ -1,0 +1,15 @@
+# app-control — 기능 스위치 · 점검 모드 · 모바일 최소 버전(재배포 없이 끄고 켜기). 기본 꺼짐. 접두사는 skeleton.app-control. 저장은 app-control-jdbc, 클라이언트는 @skeleton/app-control · skeleton_app_control.
+skeleton:
+  app-control:
+    enabled: false                 # true 면 읽기 · @RequireFeature · 점검 필터가 선다 (켰는데 app-control-jdbc 가 없으면 기동 실패)
+    cache-ttl: 5s                  # 읽은 값을 메모리에 두는 시간 - 다른 인스턴스에서 바꾼 값은 늦어도 이 시간 안에 보인다
+    maintenance:
+      retry-after: 5m              # 점검 중 Retry-After - 점검 끝 예정이 없을 때(있으면 그때까지 남은 초)
+      # pass-paths 는 점검 중에도 통과하는 경로(PathPattern). 설정 경로 · 운영자 경로는 적지 않아도 통과한다. 기본:
+      # pass-paths: ["/health/**", "/info", "/actuator/health/**", "/api/v1/auth/**", "/api/v1/admin/**"]
+    config:
+      enabled: false               # true 면 클라이언트가 읽는 GET /api/v1/app/config 가 열린다 (익명 · 점검 중에도 열림, 꺼져 있으면 404)
+      base-path: /api/v1/app/config
+    admin:
+      enabled: false               # true 면 /api/v1/admin/app-control 운영자 경로가 열린다 (꺼져 있으면 404). 권한 app-control.read · .write - 기본 역할 없음(전권만)
+      base-path: /api/v1/admin/app-control

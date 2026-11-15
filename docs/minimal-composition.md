@@ -102,6 +102,7 @@ fails when this table and the prefixes found in module code differ.
 | `alert-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration, as above) | — |
 | `account` | `skeleton.account` |
 | `api-key` | `skeleton.api-key` |
+| `app-control` | `skeleton.app-control` |
 | `inquiry` | `skeleton.inquiry` |
 | `audit-jdbc` | `skeleton.audit` |
 | `booking` | `skeleton.booking` |
@@ -247,6 +248,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `notification-push-jdbc` | yes | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migrations `push_devices` · `push_type_mutes`, as above) | — |
 | `notification-broadcast` | off until `skeleton.notification.broadcast.enabled=true` + `types` | the `BroadcastStore` · `BroadcastTasks` beans — `notification-broadcast-jdbc` provides them — plus at least one `AudienceSource` bean (`account` gives `all` · `role`, `workspace` gives `workspace`); startup fails naming what is missing | `notification-push` for push, `skeleton.notification.broadcast.admin.enabled=true` for the operator routes |
 | `notification-broadcast-jdbc` | wired only when broadcast is on | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migrations `broadcasts` · `broadcast_channel_stats`, as above) | — |
+| `app-control` | off until `skeleton.app-control.enabled=true` (the maintenance filter is then always in front of the security chain, passing everything while maintenance is off) | an `AppControlStore` bean — `app-control-jdbc` provides it; startup fails naming what is missing | `skeleton.app-control.config.enabled=true` for the public `GET /api/v1/app/config`, `admin.enabled=true` for the operator routes |
+| `app-control-jdbc` | wired only when app-control is on | a `DataSource` + one `db-*` module (+ its migration `app_control_entries`, as above) | — |
 | `notification-scheduled` | off until `skeleton.notification.scheduled.enabled=true` + `type` | the `ScheduledPushStore` bean — `notification-scheduled-jdbc` provides it, startup fails naming the module | `notification-push` (+ `push.types`) to reach devices, `notification-legal` for advertising pushes |
 | `notification-scheduled-jdbc` | wired only when scheduled push is on | a `DataSource` + one `db-*` module (+ its migration `scheduled_pushes`, as above) | — |
 | `notification-webpush` | off until `skeleton.notification.webpush.enabled=true` | a VAPID key pair (`public-key` · `private-key`) + `subject` — protected environments (`skeleton.env=stage\|prod`) refuse to start without them, with a mismatched pair, or with the sample test key; elsewhere there is just no sender | `notification-push` to feed it |

@@ -63,6 +63,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | 다크 모드 · 디자인 토큰 · 화면 부품 · 대시보드/목록/폼 화면 틀 | (백엔드 모듈 없음) | (덧붙일 것 없음) | (기본 포함) — react `theme` `tokens` `ui` `screen-patterns` | 백엔드는 할 일이 없다 — react-skeleton 에 기본 포함. |
 | 이용약관 · 개인정보 처리방침 · 가입 동의 기록 · 새 판 재동의 · 마케팅 수신 동의(선택, 철회) | `legal` + `legal-jdbc` | (덧붙일 것 없음) | (기본 포함) — react `legal` | 스타터에 기본 포함(legal-jdbc) — 문서는 모듈의 TEMPLATE(ko/en)이라 stage · prod 에서는 기동이 거부된다: src/main/resources/legal/ 에 자기 문서와 manifest.json 을 두고(검토 끝난 판은 REVIEWED + sha256), skeleton.legal.facts.* 를 채운다. 시험 배포는 <P>_LEGAL_ACKNOWLEDGE_TEMPLATE=true. MySQL 은 log_bin_trust_function_creators=1. 동의 화면 · 가입 폼 체크박스는 프런트(docs/legal-http-contract.md). |
 | 운영자 역할을 화면에서 만들고 권한을 고른다 (예: CS 담당자는 결제 보기 + 환불만) | `authz` + `authz-jdbc` | `--modules authz,authz-jdbc` | (기본 포함) — react `account-admin` | 켜기 skeleton.authz.admin.enabled=true(기본 꺼짐 → 404). 없으면 역할 → 권한은 skeleton.authz.roles(yml)로 고정. 첫 기동에 yml 매핑이 표로 한 번 옮겨지고 그 뒤는 표가 진실이다. 계정에 역할을 주는 건 account 의 관리자 API. 역할 표 화면은 프런트 @skeleton/auth/admin. |
+| 재배포 없이 기능을 끄고 켜기 (기능 스위치 · 킬 스위치) · 점검 모드 · 모바일 강제 업데이트(최소 버전) · 새 버전 안내 | `app-control` + `app-control-jdbc` | `--modules app-control,app-control-jdbc` | `--packages app-control` — react `app-control` | 켜기 skeleton.app-control.enabled=true(+ 클라이언트가 읽는 config.enabled=true, 운영자 경로 admin.enabled=true — 모두 기본 꺼짐). 코드에서는 featureFlags.isEnabled("키") · 컨트롤러는 @RequireFeature("키")(꺼지면 404). 점검은 운영자 경로에서 켜면 통과 경로 밖이 503 + Retry-After. 모바일 최소 · 권장 버전은 플랫폼(android · ios · web)마다 운영자 경로로 정한다 — 서버는 낡은 앱을 거절하지 않고 클라이언트가 설정을 읽어 막는다. 운영 기록은 OperatorAuditLog 가 남긴다. |
 
 ## 전체 목록
 
@@ -77,6 +78,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `alert-jdbc` | 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL). | `--modules alert-jdbc` | 경보 기록, 경보 중복 접기, 경보 DB / alert ledger, alert dedupe, alert database | — |
 | `api-key` | API 키(B2B 호출자용 장기 자격) — 사용자가 이름 · 범위 · 만료를 골라 발급(다시 인증)하고 본인이 회수하며, 키로 온 요청은 `@ApiKeyScope` 로 표시한 경로에 한해(기본 거부) 주인 계정으로 움직인다. 키별 한도 · 활성 키 상한 · 만료 상한은 앱이 정한다. 저장은 해시뿐. | `--modules api-key,api-key-jdbc` | API 키, 액세스 토큰, 개인 액세스 토큰, B2B API, 키 발급, 범위, 키 회수 / api key, personal access token, scoped key, api token, key revocation, per-key rate limit | — |
 | `api-key-jdbc` | API 키를 DB 에 둔다 (PostgreSQL · MySQL) — 토큰 해시만 저장하고, 회수 · 마지막 사용(1분 해상도)은 한 문장의 조건부 갱신이라 동시에 몰려도 한 번만 쓴다. | `--modules api-key-jdbc` | API 키 저장소, API 키 DB / api key storage, api key repository | — |
+| `app-control` | 재배포 없이 끄고 켜기 — 기능 스위치(켜짐 / 꺼짐, 코드는 FeatureFlags.isEnabled · 컨트롤러는 @RequireFeature → 꺼지면 404), 점검 모드(켜면 통과 경로 밖은 503 + Retry-After + 안내 문구), 모바일 최소 · 권장 버전과 스토어 주소(강제 업데이트). 값은 DB 에 두고 짧은 캐시(기본 5초)로 여러 인스턴스가 곧 같은 값을 본다. 클라이언트는 익명 GET /api/v1/app/config 한 번으로 점검 · 보이는 스위치 · 플랫폼별 버전 정책을 읽고, 운영자 경로(권한 · 운영 기록 포함)로 바꾼다. 저장은 app-control-jdbc, 화면은 @skeleton/app-control · skeleton_app_control. | `--modules app-control,app-control-jdbc` | 기능 스위치, 기능 플래그, 킬 스위치, 점검 모드, 점검 화면, 강제 업데이트, 최소 버전, 재배포 없이 끄기, 원격 설정 / feature flag, feature toggle, kill switch, maintenance mode, force update, minimum app version, remote config, app config endpoint | `@skeleton/app-control` |
+| `app-control-jdbc` | 기능 스위치 · 점검 · 플랫폼 버전을 DB 에 둔다 (PostgreSQL · MySQL) — 표 하나(app_control_entries), 읽기는 전체 한 번(캐시가 통째로 바꿔 끼운다), 쓰기는 없으면 넣고 덮어써서 처음 만드는 두 요청이 겹쳐도 오류가 없다, 운영 기록과 같은 트랜잭션. | `--modules app-control-jdbc` | 스위치 저장, 점검 상태 저장 / feature flag storage, maintenance state store | `@skeleton/app-control` |
 | `async` | @Async · CompletableFuture 작업이 호출 스레드의 trace id · MDC · 보안 컨텍스트를 이어받는 실행기와 작업 그룹. | `--modules async` | 비동기, 백그라운드 작업, 스레드 풀, @Async, 작업 그룹 / async, background task, thread pool, mdc propagation, completable future | — |
 | `async-notification` | 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로 흘려 보낸다. | `--modules async-notification` | 비동기 예외 알림, 백그라운드 오류 알림, 비동기 에러 / async exception alert, background error notification, uncaught async exception | — |
 | `audit-jdbc` | 운영자 행동 기록(OperatorAuditLog)을 DB 에 남긴다 (PostgreSQL · MySQL) — 누가 · 언제 · 무엇을 · 대상 · 결과 · 접속 IP/기기, 트리거로 더하기만(수정 불가 · 30일 안 삭제 불가), 행동과 같은 트랜잭션, 운영자 조회(기간 · 운영자 · 대상 필터 + 커서, 권한 audit.read), 보관 기한(기본 없음 — 정하면 매일 지움). | `--modules audit-jdbc` | 운영 기록, 감사 로그, 감사 기록, 운영자 행동 기록, 누가 바꿨나 / audit log, operator audit, admin activity log, who changed what | — |
@@ -358,6 +361,38 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 쓰지 않는 경우:
   - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: API 키 저장소, API 키 DB / api key storage, api key repository
+
+### `app-control` — 재배포 없이 끄고 켜기 — 기능 스위치(켜짐 / 꺼짐, 코드는 FeatureFlags.isEnabled · 컨트롤러는 @RequireFeature → 꺼지면 404), 점검 모드(켜면 통과 경로 밖은 503 + Retry-After + 안내 문구), 모바일 최소 · 권장 버전과 스토어 주소(강제 업데이트). 값은 DB 에 두고 짧은 캐시(기본 5초)로 여러 인스턴스가 곧 같은 값을 본다. 클라이언트는 익명 GET /api/v1/app/config 한 번으로 점검 · 보이는 스위치 · 플랫폼별 버전 정책을 읽고, 운영자 경로(권한 · 운영 기록 포함)로 바꾼다. 저장은 app-control-jdbc, 화면은 @skeleton/app-control · skeleton_app_control.
+
+- 종류 · 상태: module · experimental — 위치 `modules/app-control`
+- 켜는 법: `--modules app-control,app-control-jdbc`
+- 의존 한 줄: `implementation(project(":modules:app-control"))`
+- 함께 골라야 한다: `app-control-jdbc`
+- 설정 접두사 `skeleton.app-control` — 키와 기본값 `docs/config/modules/app-control.yml`
+- HTTP 경로: `/api/v1/app/config`, `/api/v1/admin/app-control`
+- 문서: `docs/modules/app-control.md`, `docs/app-control-http-contract.md`
+- 짝 프런트(react-skeleton): 항목 `app-control` · 패키지 `@skeleton/app-control` · 조각 `--packages app-control`
+- 쓰지 않는 경우:
+  - app-control 은 저장소를 모른다 — app-control-jdbc 를 같이 고른다
+  - 꺼짐이 기본이다 — skeleton.app-control.enabled=true, 클라이언트 설정 경로는 config.enabled=true, 운영자 경로는 admin.enabled=true 를 앱 yml 이 정한다
+  - 스위치는 켜짐 / 꺼짐 둘뿐이다 — 사용자 · 비율 단위 단계적 공개는 없다(필요하면 FeatureFlags 뒤에 앱이 그 규칙을 얹는다)
+  - 서버가 낡은 앱의 요청을 거절하지는 않는다 — 최소 버전은 클라이언트가 설정을 읽어 판정한다
+  - 기동 때 한 번 읽는 설정 · 비밀은 config-aws-ssm 의 몫이다 — 이쪽은 실행 중에 바뀌는 값이다
+  - 점검 중에도 /health · 로그인(/api/v1/auth/**) · 운영자 경로(/api/v1/admin/**) · 설정 경로는 통과한다 — maintenance.pass-paths 로 바꾼다
+  - 운영자 화면은 없다 — 운영자 경로(권한 app-control.read · .write, 기본 역할 없음)를 부른다
+- 키워드: 기능 스위치, 기능 플래그, 킬 스위치, 점검 모드, 점검 화면, 강제 업데이트, 최소 버전, 재배포 없이 끄기, 원격 설정 / feature flag, feature toggle, kill switch, maintenance mode, force update, minimum app version, remote config, app config endpoint
+
+### `app-control-jdbc` — 기능 스위치 · 점검 · 플랫폼 버전을 DB 에 둔다 (PostgreSQL · MySQL) — 표 하나(app_control_entries), 읽기는 전체 한 번(캐시가 통째로 바꿔 끼운다), 쓰기는 없으면 넣고 덮어써서 처음 만드는 두 요청이 겹쳐도 오류가 없다, 운영 기록과 같은 트랜잭션.
+
+- 종류 · 상태: module · experimental — 위치 `modules/app-control-jdbc`
+- 켜는 법: `--modules app-control-jdbc`
+- 의존 한 줄: `implementation(project(":modules:app-control-jdbc"))`
+- 자동으로 따라온다: `app-control`
+- 문서: `docs/modules/app-control-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `app-control` · 패키지 `@skeleton/app-control` · 조각 `--packages app-control`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 스위치 저장, 점검 상태 저장 / feature flag storage, maintenance state store
 
 ### `async` — @Async · CompletableFuture 작업이 호출 스레드의 trace id · MDC · 보안 컨텍스트를 이어받는 실행기와 작업 그룹.
 
@@ -2048,7 +2083,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `ads-admob`, `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `audit-jdbc`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-apple`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `auth-web-handoff`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `idempotency-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-scheduled`, `notification-scheduled-jdbc`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-appstore`, `payment-googleplay`, `payment-iap`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `request-routing`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `ads-admob`, `alert-jdbc`, `api-key`, `api-key-jdbc`, `app-control`, `app-control-jdbc`, `async`, `async-notification`, `audit-jdbc`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-apple`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `auth-web-handoff`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `idempotency-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-scheduled`, `notification-scheduled-jdbc`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-appstore`, `payment-googleplay`, `payment-iap`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `request-routing`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

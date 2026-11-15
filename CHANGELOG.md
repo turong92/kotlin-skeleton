@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### app-control · app-control-jdbc - 재배포 없이 끄고 켜기: 기능 스위치 · 점검 모드 · 모바일 최소 버전 (2026-11-16)
+
+- 새 모듈 `app-control`(+ 저장소 `app-control-jdbc`): **기본 꺼짐**(`skeleton.app-control.enabled=false`). 값은 표 하나(`app_control_entries`, PostgreSQL · MySQL 마이그레이션 `V20261116120000`, 새 표)에 두고 짧은 캐시(`cache-ttl` 5초)로 읽는다 — 만료 뒤 첫 읽기가 표 전체를 쿼리 한 번으로 통째로 바꿔 끼우고, DB 를 못 읽으면 직전 값을 그대로 쓴다(한 번도 못 읽었으면 중립). 바꾼 인스턴스는 바로, 다른 인스턴스는 `cache-ttl` 안에 같은 값을 본다.
+- 기능 스위치: 코드 입구 `FeatureFlags.isEnabled("키", default = false)`, 컨트롤러는 `@RequireFeature("키")`(클래스 · 메서드, 꺼지면 `404 APP_CONTROL.FEATURE_DISABLED`). 켜짐 / 꺼짐 둘뿐 — 사용자 · 비율 단위 단계적 공개는 없다. 스위치마다 `clientVisible`(기본 false)이 있어 true 인 것만 클라이언트 설정에 실린다.
+- 점검 모드: 켜면 통과 경로 밖의 모든 요청이 `503` + `Retry-After`(끝 예정이 있으면 남은 초, 없으면 `maintenance.retry-after` 5분) + `APP_CONTROL.MAINTENANCE`(안내 문구)로 막힌다. 보안 체인 앞의 필터라 로그인 전 요청도 막고, `/health/**` · `/api/v1/auth/**` · `/api/v1/admin/**` · 설정 경로 · CORS preflight 는 통과한다(`maintenance.pass-paths`). 경로는 `RequestPaths` 로 읽는다.
+- 모바일 최소 버전: 플랫폼(`android` · `ios` · `web`)마다 최소 · 권장 버전과 `https` 스토어 주소. 버전은 `1`~`4`칸 숫자를 칸마다 숫자로 비교한다(`1.10` > `1.9`); 서버는 `recommended >= min` 만 확인하고 낡은 앱의 요청을 거절하지는 않는다(클라이언트가 설정을 읽어 판정).
+- 클라이언트 설정 `GET /api/v1/app/config`(`config.enabled`, 기본 꺼짐 → 404): 익명 · 점검 중에도 열림. 운영자 경로 `/api/v1/admin/app-control`(`admin.enabled`, 기본 꺼짐 → 404, 권한 `app-control.read` · `.write` 기본 역할 없음): 스위치 · 점검 · 플랫폼 버전을 바꾸고, 바꾼 것은 같은 트랜잭션에서 `OperatorAuditLog` 에 남는다(`app-control.flag.updated` …, 점검 문구 같은 글은 싣지 않는다). 계약: `docs/app-control-http-contract.md`, 모듈: `docs/modules/app-control.md`.
+
 ### account · account-jdbc · audit-jdbc · coupon-jdbc · docs - 리뷰 반영 (2026-11-16)
 
 - 감사 기록의 트랜잭션 설명을 사실대로: `audit-jdbc` 는 호출자가 연 트랜잭션에 합류할 뿐이라 **쓰기 트랜잭션 안에서 부른 곳만** 행동과 함께 커밋 · 롤백된다. 서비스 호출이 커밋된 뒤 컨트롤러가 따로 부르는 곳(여럿)은 기록이 실패하면 행동이 남는다 — 알려진 한계로 `docs/modules/audit-jdbc.md` 에 적었다(호출처 정리는 이번 범위 밖).

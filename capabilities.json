@@ -396,6 +396,86 @@
       }
     },
     {
+      "id": "app-control",
+      "kind": "module",
+      "module": "app-control",
+      "path": "modules/app-control",
+      "status": "experimental",
+      "summary": "재배포 없이 끄고 켜기 — 기능 스위치(켜짐 / 꺼짐, 코드는 FeatureFlags.isEnabled · 컨트롤러는 @RequireFeature → 꺼지면 404), 점검 모드(켜면 통과 경로 밖은 503 + Retry-After + 안내 문구), 모바일 최소 · 권장 버전과 스토어 주소(강제 업데이트). 값은 DB 에 두고 짧은 캐시(기본 5초)로 여러 인스턴스가 곧 같은 값을 본다. 클라이언트는 익명 GET /api/v1/app/config 한 번으로 점검 · 보이는 스위치 · 플랫폼별 버전 정책을 읽고, 운영자 경로(권한 · 운영 기록 포함)로 바꾼다. 저장은 app-control-jdbc, 화면은 @skeleton/app-control · skeleton_app_control.",
+      "starter": false,
+      "newProjectFlag": "--modules app-control,app-control-jdbc",
+      "autoIncludes": [],
+      "needs": {
+        "requires": ["app-control-jdbc"],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.app-control"],
+        "snippet": "docs/config/modules/app-control.yml"
+      },
+      "basePaths": ["/api/v1/app/config", "/api/v1/admin/app-control"],
+      "secrets": [],
+      "docs": ["docs/modules/app-control.md", "docs/app-control-http-contract.md"],
+      "frontend": {
+        "capabilities": ["app-control"],
+        "newProjectFlag": "--packages app-control",
+        "packages": ["@skeleton/app-control"]
+      },
+      "notFor": [
+        "app-control 은 저장소를 모른다 — app-control-jdbc 를 같이 고른다",
+        "꺼짐이 기본이다 — skeleton.app-control.enabled=true, 클라이언트 설정 경로는 config.enabled=true, 운영자 경로는 admin.enabled=true 를 앱 yml 이 정한다",
+        "스위치는 켜짐 / 꺼짐 둘뿐이다 — 사용자 · 비율 단위 단계적 공개는 없다(필요하면 FeatureFlags 뒤에 앱이 그 규칙을 얹는다)",
+        "서버가 낡은 앱의 요청을 거절하지는 않는다 — 최소 버전은 클라이언트가 설정을 읽어 판정한다",
+        "기동 때 한 번 읽는 설정 · 비밀은 config-aws-ssm 의 몫이다 — 이쪽은 실행 중에 바뀌는 값이다",
+        "점검 중에도 /health · 로그인(/api/v1/auth/**) · 운영자 경로(/api/v1/admin/**) · 설정 경로는 통과한다 — maintenance.pass-paths 로 바꾼다",
+        "운영자 화면은 없다 — 운영자 경로(권한 app-control.read · .write, 기본 역할 없음)를 부른다"
+      ],
+      "keywords": {
+        "ko": ["기능 스위치", "기능 플래그", "킬 스위치", "점검 모드", "점검 화면", "강제 업데이트", "최소 버전", "재배포 없이 끄기", "원격 설정"],
+        "en": [
+          "feature flag",
+          "feature toggle",
+          "kill switch",
+          "maintenance mode",
+          "force update",
+          "minimum app version",
+          "remote config",
+          "app config endpoint"
+        ]
+      }
+    },
+    {
+      "id": "app-control-jdbc",
+      "kind": "module",
+      "module": "app-control-jdbc",
+      "path": "modules/app-control-jdbc",
+      "status": "experimental",
+      "summary": "기능 스위치 · 점검 · 플랫폼 버전을 DB 에 둔다 (PostgreSQL · MySQL) — 표 하나(app_control_entries), 읽기는 전체 한 번(캐시가 통째로 바꿔 끼운다), 쓰기는 없으면 넣고 덮어써서 처음 만드는 두 요청이 겹쳐도 오류가 없다, 운영 기록과 같은 트랜잭션.",
+      "starter": false,
+      "newProjectFlag": "--modules app-control-jdbc",
+      "autoIncludes": ["app-control"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/app-control-jdbc.md"],
+      "frontend": {
+        "capabilities": ["app-control"],
+        "newProjectFlag": "--packages app-control",
+        "packages": ["@skeleton/app-control"]
+      },
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["스위치 저장", "점검 상태 저장"],
+        "en": ["feature flag storage", "maintenance state store"]
+      }
+    },
+    {
       "id": "async",
       "kind": "module",
       "module": "async",
@@ -4791,6 +4871,8 @@
         "alert-jdbc",
         "api-key",
         "api-key-jdbc",
+        "app-control",
+        "app-control-jdbc",
         "async",
         "async-notification",
         "audit-jdbc",
@@ -5827,6 +5909,17 @@
       "modules": ["authz", "authz-jdbc"],
       "flag": "--modules authz,authz-jdbc",
       "byHand": "켜기 skeleton.authz.admin.enabled=true(기본 꺼짐 → 404). 없으면 역할 → 권한은 skeleton.authz.roles(yml)로 고정. 첫 기동에 yml 매핑이 표로 한 번 옮겨지고 그 뒤는 표가 진실이다. 계정에 역할을 주는 건 account 의 관리자 API. 역할 표 화면은 프런트 @skeleton/auth/admin."
+    },
+    {
+      "frontend": {
+        "capabilities": ["app-control"],
+        "flag": "--packages app-control"
+      },
+      "oneOf": [],
+      "need": "재배포 없이 기능을 끄고 켜기 (기능 스위치 · 킬 스위치) · 점검 모드 · 모바일 강제 업데이트(최소 버전) · 새 버전 안내",
+      "modules": ["app-control", "app-control-jdbc"],
+      "flag": "--modules app-control,app-control-jdbc",
+      "byHand": "켜기 skeleton.app-control.enabled=true(+ 클라이언트가 읽는 config.enabled=true, 운영자 경로 admin.enabled=true — 모두 기본 꺼짐). 코드에서는 featureFlags.isEnabled(\"키\") · 컨트롤러는 @RequireFeature(\"키\")(꺼지면 404). 점검은 운영자 경로에서 켜면 통과 경로 밖이 503 + Retry-After. 모바일 최소 · 권장 버전은 플랫폼(android · ios · web)마다 운영자 경로로 정한다 — 서버는 낡은 앱을 거절하지 않고 클라이언트가 설정을 읽어 막는다. 운영 기록은 OperatorAuditLog 가 남긴다."
     }
   ],
   "examples": [

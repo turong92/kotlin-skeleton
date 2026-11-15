@@ -63,6 +63,7 @@
 - 다크 모드 · 디자인 토큰 · 화면 부품 · 대시보드/목록/폼 화면 틀 → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 백엔드는 할 일이 없다
 - 이용약관 · 개인정보 처리방침 · 가입 동의 기록 · 새 판 재동의 · 마케팅 수신 동의(선택, 철회) [legal, legal-jdbc] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함(legal-jdbc)
 - 운영자 역할을 화면에서 만들고 권한을 고른다 (예: CS 담당자는 결제 보기 + 환불만) [authz, authz-jdbc] → kotlin `--modules authz,authz-jdbc` · react 기본 포함 — 손으로: 켜기 skeleton.authz.admin.enabled=true(기본 꺼짐 → 404).
+- 재배포 없이 기능을 끄고 켜기 (기능 스위치 · 킬 스위치) · 점검 모드 · 모바일 강제 업데이트(최소 버전) · 새 버전 안내 [app-control, app-control-jdbc] → kotlin `--modules app-control,app-control-jdbc` · react `--packages app-control` — 손으로: 켜기 skeleton.app-control.enabled=true(+ 클라이언트가 읽는…
 
 ## 작업 예 (두 레포의 명령 — 순서 · 설정 · 검증 · 배포는 docs/new-project-recipe.md)
 
@@ -85,6 +86,8 @@
 - alert-jdbc: 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은… [경보 기록, 경보 중복 접기]
 - api-key: API 키(B2B 호출자용 장기 자격) [API 키, 액세스 토큰]
 - api-key-jdbc: API 키를 DB 에 둔다 (PostgreSQL · MySQL) [API 키 저장소, API 키 DB]
+- app-control: 재배포 없이 끄고 켜기 — 기능 스위치(켜짐 / 꺼짐, 코드는… [기능 스위치, 기능 플래그]
+- app-control-jdbc: 기능 스위치 · 점검 · 플랫폼 버전을 DB 에 둔다… [스위치 저장, 점검 상태 저장]
 - async: @Async · CompletableFuture 작업이 호출 스레드의… [비동기, 백그라운드 작업]
 - async-notification: 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로… [비동기 예외 알림, 백그라운드 오류 알림]
 - audit-jdbc: 운영자 행동 기록(OperatorAuditLog)을 DB 에 남긴다… [운영 기록, 감사 로그]

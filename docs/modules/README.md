@@ -95,6 +95,8 @@
 | `reward-jdbc` | 지급 건 저장 · 작업을 DB 에 두고 일꾼을 job-queue 에 얹기 | [reward-jdbc](reward-jdbc.md) |
 | `api-key` | API 키 — 발급(다시 인증) · 범위(표시한 경로만, 기본 거부) · 만료 · 회수 · 키별 한도 · 요청 인증 | [api-key](api-key.md) |
 | `api-key-jdbc` | API 키 저장을 DB 에 두기 (해시만 저장) | [api-key-jdbc](api-key-jdbc.md) |
+| `app-control` | 재배포 없이 끄고 켜기 — 기능 스위치 · 점검 모드(503 + Retry-After) · 모바일 최소 버전(강제 업데이트), 클라이언트가 읽는 GET /api/v1/app/config | [app-control](app-control.md) |
+| `app-control-jdbc` | 스위치 · 점검 · 플랫폼 버전을 DB 에 두기 (읽기는 전체 한 번 + 짧은 캐시) | [app-control-jdbc](app-control-jdbc.md) |
 | `inquiry` | 문의 · 의견 받기 (질문 · 기능 제안 · 오류 신고 — 공개 POST · 접수 경보 · 운영자 목록 · 처리 표시) | [inquiry](inquiry.md) |
 | `inquiry-jdbc` | 문의 저장을 DB 에 두기 | [inquiry-jdbc](inquiry-jdbc.md) |
 | `audit-jdbc` | 운영자 행동 기록을 DB 에 — 더하기만(수정 · 30일 안 삭제 불가) · 운영자 조회(기간 · 운영자 · 대상 필터, 커서) · 보관 기한(기본 없음) | [audit-jdbc](audit-jdbc.md) |
