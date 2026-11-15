@@ -1,0 +1,27 @@
+# request-routing
+
+내 요청만 후보 · 로컬 서버로 보내는 머리표 라우팅 — 직원이 `baggage: route=<서비스>:<대상>` 를 실어 보내면, 서비스들이 그 표시를 이어 넘기고 허용 목록의 후보 · 로컬 주소로 그 요청(과 그 요청이 넣은 작업 · 메시지)만 보낸다. 나머지 호출은 원래 서버가 받는다. 핫픽스를 빌드 · 배포 없이 몇 초 단위로 고쳐 보는 고리다.
+표시엔 **이름만** 싣고 이름 → 주소는 서버 설정의 허용 목록(`skeleton.routing.services`)이 정한다 — 표시로 아무 주소나 부를 수 없다. 로컬 대상(`local: true`)은 관리 API 로 연 창 안에서만 열린다(창을 여는 API · 저장소는 같은 모듈 · `request-routing-jdbc` 의 몫이다).
+설계 · 작업 순서: `docs/superpowers/specs/2026-11-16-request-routing-design.md`.
+
+**표시 모양**(`platform` 의 `RouteBaggage`): `baggage` 멤버 하나 `route=orders:alice|api:candidate`. 이름은 `^[a-z][a-z0-9-]{0,39}$`, 쌍은 8개 · 값은 256자까지, 같은 서비스를 두 번 쓸 수 없다. 요청 동안 값은 MDC 키 `route`.
+**허용 목록 검사**: 기동 때 `RouteTargets` 가 이름 모양과 대상 `url`(http · https 원점만, 경로 없음)을 검사하고 어기면 기동이 실패한다 — 메시지엔 속성 이름만 있고 값은 없다.
+**창 판정**: `LocalRouteWindow` — 저장소 빈(`LocalRouteWindowStore`)이 있으면 `cache-ttl` 동안 캐시해서 읽고, 없으면 창은 늘 닫혀 있다. 시각이 지나면 캐시 안에서도 닫힌 것으로 본다.
+
+**오류 코드**: `ROUTING.MALFORMED` 400 · `ROUTING.UNKNOWN_TARGET` 400 · `ROUTING.LOCAL_CLOSED` 403 · `ROUTING.LOOP` 508 · `ROUTING.TARGET_UNREACHABLE` 502.
+**권한**(기본 역할 없음 → 전권만): `routing.use`(표시 쓰기) · `routing.window`(창 열고 닫기).
+
+| 항목 | 내용 |
+|---|---|
+| 의존성 한 줄 | `implementation(project(":modules:request-routing"))` |
+| 함께 오는 모듈 | `platform` |
+| 컴파일 전용 | 없음 |
+| 설정 접두사 | `skeleton.routing` — [docs/config/modules/request-routing.yml](../config/modules/request-routing.yml) |
+| 기본 동작 | 꺼짐. `skeleton.routing.enabled=true` 일 때만 허용 목록 · 창 판정 · 권한 선언이 선다 (표시를 받고 · 넘기는 필터는 같은 스위치 아래 이어서 붙는다). |
+| 부팅에 필요한 것 | `TimeProvider` 빈(platform). 창을 열려면 `LocalRouteWindowStore` 구현(`request-routing-jdbc`). 대상 `url` 이 원점이 아니면 기동 실패. |
+| 교체 지점 | `RouteTargets`, `LocalRouteWindow`, `LocalRouteWindowStore`, `requestRoutingPermissionDeclaration` |
+| 마이그레이션 | 없음 (`request-routing-jdbc` 가 가진다) |
+| 프론트 짝 | 없음 |
+| 테스트 | `modules/request-routing/src/test` |
+
+[모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

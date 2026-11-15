@@ -172,6 +172,7 @@ fails when this table and the prefixes found in module code differ.
 | `redis-core` | `skeleton.redis` |
 | `redis-lock` | `skeleton.redis-lock` |
 | `redis-rate-limit` | `skeleton.redis-rate-limit` |
+| `request-routing` | `skeleton.routing` |
 | `review` | `skeleton.review` |
 | `reward` | `skeleton.reward` |
 | `scheduler` | `skeleton.scheduler` |
@@ -269,6 +270,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `redis-lock` | yes — the Redisson client connects lazily; **startup check is opt-in** (`startup-check.enabled=true`, recommended in production) | nothing | a Redis server at first lock; without it `@DistributedLock` fails loudly |
 | `redis-cache` | yes — `FAIL_OPEN`: cache errors are ignored | nothing | a Redis server for hits |
 | `redis-rate-limit` | yes — replaces the in-memory store, used only when `skeleton.web.rate-limit.enabled=true`; `FAIL_OPEN` | nothing | a Redis server when rate limiting is on |
+| `request-routing` | off until `skeleton.routing.enabled=true` (then the target allowlist, the local-window check and the two permissions; nothing is routed until `services` lists targets) | nothing; a target `url` that is not an http(s) origin stops startup | the window store (`LocalRouteWindowStore`) to open local targets — without it the window stays closed |
 | `review` | yes (services stay off until a `ReviewStore` exists; no target type is open until the app lists one) | `review-jdbc` | — |
 | `review-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `reviews`, as above) | — |
 | `scheduler` | yes (no-op lock, single instance; its own `skeletonTaskScheduler`, replaced by a bean of the same name) | nothing | `redis-lock` for several instances |

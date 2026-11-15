@@ -111,6 +111,7 @@
 | `badge-jdbc` | 배지 저장을 DB 에 두기 (정의 · 보유 · 수여/회수 내역) | [badge-jdbc](badge-jdbc.md) |
 | `workspace` | 워크스페이스(팀) — 만들기 · 역할(소유자 · 관리자 · 멤버) · slug · 멤버 관리 · 소유권 이전 · 요청 경계 `CurrentWorkspace` | [workspace](workspace.md) |
 | `workspace-jdbc` | 워크스페이스 저장을 DB 에 두기 (워크스페이스 · slug 기록 · 멤버 · 초대) | [workspace-jdbc](workspace-jdbc.md) |
+| `request-routing` | 내 요청만 후보 · 로컬 서버로 보내는 머리표 라우팅 (baggage `route=서비스:대상` · 이름 허용 목록 · 로컬 창) | [request-routing](request-routing.md) |
 | `review` | 리뷰 · 평점 — 별점 1~5 · 본문 · 계정×대상 하나 · 평균/분포 · 도움돼요 · 구매 인증 · 비로그인 읽기 (상품 · 결제 · 보상을 모른다) | [review](review.md) |
 | `review-jdbc` | 리뷰 저장을 DB 에 두기 (리뷰 · 대상별 집계 · 도움돼요 · 구매 신호) | [review-jdbc](review-jdbc.md) |
 | `search` | DB 전문 검색 — 한국어 2글자 조각, 밀어 넣기 포트(`SearchIndexer`) · 질의 · 재색인 · 하이라이트 위치 (다른 모듈을 모른다) | [search](search.md) |

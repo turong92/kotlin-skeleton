@@ -1,0 +1,20 @@
+# request-routing — 직원의 baggage 머리표(route=서비스:대상) 요청만 후보 · 로컬 서버로. 기본 꺼짐. 접두사는 skeleton.routing. 창 저장은 request-routing-jdbc.
+skeleton:
+  routing:
+    enabled: false          # 모듈 스위치 — 꺼지면 빈 · 필터 · 커스터마이저가 하나도 없다
+    service: ""             # 이 서비스 이름 — 프록시 · 큐 차선 · Kafka 거르기의 기준(후보 인스턴스는 꼭 적는다)
+    instance: ""            # 이 인스턴스가 대상이면 그 이름(candidate · alice). 비면 원래 서버
+    inbound: edge           # edge(직원 권한 routing.use 만 표시를 받는다) | internal(앞 서비스가 보낸 표시를 믿는다 — 공개 주소 없는 서비스만)
+    # services 는 표시를 넘길 서비스(= skeleton.http.clients 이름)와 대상 허용 목록. url 은 원점만(경로 없음, http · https). local: true 는 관리 API 로 연 창 안에서만 닿는다:
+    # services:
+    #   orders:
+    #     targets:
+    #       candidate: { url: "https://candidate---orders-abc.a.run.app" }
+    #       alice: { url: "https://alice-orders.example.com", local: true, headers: { CF-Access-Client-Id: "${ORDERS_ALICE_ACCESS_ID}", CF-Access-Client-Secret: "${ORDERS_ALICE_ACCESS_SECRET}" } }
+    admin:
+      enabled: false        # true 면 로컬 창 관리 API(/api/v1/admin/routing/local-window). 꺼져 있으면 404. 권한 routing.window - 기본 역할 없음(전권만)
+    local:
+      max-window: 8h        # 창 하나의 최대 길이 — 줄일 수만 있다(8시간 초과는 기동 실패)
+      cache-ttl: 5s         # 창 판정 캐시 — 다른 인스턴스가 열고 닫은 것을 늦어도 이 시간 안에 따른다
+    proxy:
+      timeout: 30s          # 입구 서비스가 대상일 때, 대상이 응답 머리를 줄 때까지(콜드스타트 여유)

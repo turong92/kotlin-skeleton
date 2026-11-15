@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 새 `scripts/migration-risk.pl`(+ `MigrationRiskTest`, CI 한 줄): 후보 리비전 · 롤링 · 롤백 동안 옛 버전이 같은 DB 를 쓰므로, `migrations.lock` 의 `baseline` 보다 새 마이그레이션이 컬럼 · 표 삭제, 이름 변경, 기본값 없는 `NOT NULL` 컬럼 추가, `SET NOT NULL`, 타입 변경, 제약(UNIQUE · CHECK · FK · PK) 추가, `TRUNCATE` 를 하면 실패한다(PostgreSQL · MySQL). `drop default` · `drop view/type/sequence/function/schema` · enum `rename value` · `set schema` 도 잡는다. 문자열 · 주석 처리: MySQL `#` · 백슬래시 이스케이프 · PostgreSQL `E'…'` · `$tag$` 달러 인용(안은 읽지 않는다). 의도한 contract 단계는 파일 안 `-- allow-destructive: <이유>`(이유 필수). 같은 파일에서 만든 표 · 더한 NULL 허용 컬럼의 UNIQUE 는 통과. 찍은 프로젝트는 찍은 시점이 기준선이라 앱이 더하는 마이그레이션부터 검사한다(`test-new-project.sh` 가 확인). 절차: `docs/schema-management.md` 「Rolling deploys」. 기존 마이그레이션 · 잠금은 그대로다(검사를 통과한다).
 
+### request-routing · platform · event-kafka - 내 요청만 후보 · 로컬 서버로 보내는 머리표 라우팅 (2026-11-16)
+
+- 새 모듈 `request-routing`(**기본 꺼짐** `skeleton.routing.enabled=false`, 꺼지면 빈 · 필터 · 커스터마이저가 하나도 없다): 직원이 `baggage: route=<서비스>:<대상>` 을 실어 보내면 서비스들이 표시를 이어 넘기고 허용 목록(`skeleton.routing.services`)의 후보 · 로컬 주소로 그 요청만 보낸다. 표시엔 **이름만** 싣고 주소는 설정에서만 정한다(대상 `url` 은 http · https 원점만, 아니면 기동 실패). 권한 `routing.use` · `routing.window`(기본 역할 없음), 오류 코드 `ROUTING.*`.
+- `platform`: 표시 모양 `RouteBaggage`(`baggage` 의 `route` 멤버 파싱 · MDC `route` 복원). `event-kafka`: 발행 때 MDC 에 `route` 가 있으면 메시지 머리 `baggage` 에 싣는다(다른 멤버는 그대로).
+- 로컬 대상(`local: true`)은 관리 API 로 연 창 안에서만 닿는다 — 창 판정 포트 `LocalRouteWindowStore` · 캐시 판정 `LocalRouteWindow`(저장소가 없으면 늘 닫힘). 설계: `docs/superpowers/specs/2026-11-16-request-routing-design.md`, 모듈: `docs/modules/request-routing.md`.
+
 ### notification-broadcast - 앱 세그먼트로 보내기를 문서로 못박고, 대상을 비우면 전체 (2026-11-16)
 
 - 대상 고르기는 이미 `AudienceSource`(앱이 빈 하나로 등록 · 계정 id 오름차순 키셋 `page` · `count` · 보낼 때마다 다시 읽음)로 있다 - 앱 코드 쓰는 법 · 없는 `kind` · 제공자 예외 · 예약 때 재계산 · 광고 동의 / 야간이 대상에도 그대로임을 `docs/modules/notification-broadcast.md` 에 적고 시험으로 고정했다(`BroadcastAudienceStepTest`).

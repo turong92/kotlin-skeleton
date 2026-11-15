@@ -166,6 +166,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `redis-core` | Redis 연결 · StringRedisTemplate · JSON 템플릿 · 키 접두사 — 다른 redis-* 모듈의 바탕. | `--modules redis-core` | Redis, 레디스, 키 접두사 / redis, redis connection, key prefix | — |
 | `redis-lock` | Redisson 기반 분산 락 — @DistributedLock 어노테이션과 락 실행기. | `--modules redis-lock` | 분산 락, 락, 동시 실행 방지, 중복 실행 방지 / distributed lock, lock, mutex, redisson | — |
 | `redis-rate-limit` | platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유) — 경로 필터뿐 아니라 가입 · 로그인 · 인증 코드 · 비밀번호 찾기 · 로그인 링크 같은 모듈 한도도 같이 공유되고, Cloud Run 0대 · 여러 대에서 메모리 저장소의 N 배 느슨함 · 재시작 초기화를 없앤다. | `--modules redis-rate-limit` | 요청 제한, 속도 제한, API 호출 제한, 도배 방지 / rate limit, throttling, request limit, redis rate limit | — |
+| `request-routing` | 내 요청만 후보 · 로컬 서버로 보내는 머리표 라우팅 — 직원이 baggage 에 route=서비스:대상 을 실으면 서비스들이 표시를 이어 넘기고 허용 목록(설정)의 후보 · 로컬 주소로 그 요청만 보낸다. 표시엔 이름만 싣고 주소는 설정에서만 정한다. 기본 꺼짐, 권한 routing.use · routing.window. | `--modules request-routing` | 요청 라우팅, 후보 서버, 로컬 서버로 보내기, 내 요청만, 핫픽스 확인, 카나리, 머리표 / request routing, candidate revision, route to local, baggage routing, header-based routing, hotfix testing | — |
 | `review` | 리뷰 · 평점 — 아무 대상(종류 + id)에 별점 1~5 · 본문, 계정×대상 하나(고쳐 쓴다) · 대상별 평균/분포(원자적 집계) · 정렬/거르기 · 도움돼요 · 구매 인증(앱이 ReviewPurchases.record 로 신호를 준다) · 구매자만 옵션 · 신고 · 운영 큐 · 숨김/되살리기/문제없음 · 자동 가림(옵션) · 운영자 답글 · 사진(저장 키 + 서명 주소 302) · 이벤트 고리(쓰기 트랜잭션 안, 보상은 앱이 잇는다) · 비로그인 읽기(앱이 켠다) · 탈퇴. 상품 · 결제 · 보상을 모른다. | `--modules review,review-jdbc` | 리뷰, 후기, 별점, 평점, 구매 인증, 도움돼요, 상품 후기 / review, rating, star rating, verified purchase, helpful, product reviews | `@skeleton/reviews` |
 | `review-jdbc` | 리뷰 · 대상별 집계 · 도움돼요 · 구매 신호를 DB 에 둔다 (PostgreSQL · MySQL) — 집계는 원자적 UPDATE, 새 줄은 insertIgnore 먼저(틈 잠금 교착 없음), 목록 질의는 공개 줄만 읽는다. | `--modules review-jdbc` | 리뷰 저장소, 리뷰 DB / review storage, review repository | `@skeleton/reviews` |
 | `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고(재시도 · 멱등), 받았어요 알림과 운영자 다시 지급 · 취소까지. | `--modules reward,reward-jdbc` | 보상 지급, 지급 건, 쿠폰 지급, 포인트 지급, 다시 지급, 받았어요 알림 / reward grant, reward issuer, payout worker, retry grant | `@skeleton/rewards` |
@@ -1655,6 +1656,20 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 단일 인스턴스면 platform 의 인메모리 저장소로 충분하다
 - 키워드: 요청 제한, 속도 제한, API 호출 제한, 도배 방지 / rate limit, throttling, request limit, redis rate limit
 
+### `request-routing` — 내 요청만 후보 · 로컬 서버로 보내는 머리표 라우팅 — 직원이 baggage 에 route=서비스:대상 을 실으면 서비스들이 표시를 이어 넘기고 허용 목록(설정)의 후보 · 로컬 주소로 그 요청만 보낸다. 표시엔 이름만 싣고 주소는 설정에서만 정한다. 기본 꺼짐, 권한 routing.use · routing.window.
+
+- 종류 · 상태: module · experimental — 위치 `modules/request-routing`
+- 켜는 법: `--modules request-routing`
+- 의존 한 줄: `implementation(project(":modules:request-routing"))`
+- 설정 접두사 `skeleton.routing` — 키와 기본값 `docs/config/modules/request-routing.yml`
+- 문서: `docs/modules/request-routing.md`
+- 쓰지 않는 경우:
+  - 서비스 하나짜리 앱 — 서버가 둘 이상일 때 뜻이 있다
+  - ExternalHttpClient 를 안 거치는 호출 — 표시가 따라가지 않는다
+  - WebSocket 프록시 · 서비스 메시 · 터널 도구가 아니다 — 입구 서비스가 대상일 때의 HTTP 리버스 프록시와 이름 허용 목록만 한다
+  - 기본은 꺼짐(`skeleton.routing.enabled=false`) — 켜는 앱이 허용 목록(services)과 `inbound` 를 정한다
+- 키워드: 요청 라우팅, 후보 서버, 로컬 서버로 보내기, 내 요청만, 핫픽스 확인, 카나리, 머리표 / request routing, candidate revision, route to local, baggage routing, header-based routing, hotfix testing
+
 ### `review` — 리뷰 · 평점 — 아무 대상(종류 + id)에 별점 1~5 · 본문, 계정×대상 하나(고쳐 쓴다) · 대상별 평균/분포(원자적 집계) · 정렬/거르기 · 도움돼요 · 구매 인증(앱이 ReviewPurchases.record 로 신호를 준다) · 구매자만 옵션 · 신고 · 운영 큐 · 숨김/되살리기/문제없음 · 자동 가림(옵션) · 운영자 답글 · 사진(저장 키 + 서명 주소 302) · 이벤트 고리(쓰기 트랜잭션 안, 보상은 앱이 잇는다) · 비로그인 읽기(앱이 켠다) · 탈퇴. 상품 · 결제 · 보상을 모른다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/review`
@@ -2033,7 +2048,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `ads-admob`, `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `audit-jdbc`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-apple`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `auth-web-handoff`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `idempotency-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-scheduled`, `notification-scheduled-jdbc`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-appstore`, `payment-googleplay`, `payment-iap`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `ads-admob`, `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `audit-jdbc`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-apple`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `auth-web-handoff`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `idempotency-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-scheduled`, `notification-scheduled-jdbc`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-appstore`, `payment-googleplay`, `payment-iap`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `request-routing`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

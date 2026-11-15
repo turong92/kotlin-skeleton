@@ -3760,6 +3760,47 @@
       }
     },
     {
+      "id": "request-routing",
+      "kind": "module",
+      "module": "request-routing",
+      "path": "modules/request-routing",
+      "status": "experimental",
+      "summary": "내 요청만 후보 · 로컬 서버로 보내는 머리표 라우팅 — 직원이 baggage 에 route=서비스:대상 을 실으면 서비스들이 표시를 이어 넘기고 허용 목록(설정)의 후보 · 로컬 주소로 그 요청만 보낸다. 표시엔 이름만 싣고 주소는 설정에서만 정한다. 기본 꺼짐, 권한 routing.use · routing.window.",
+      "starter": false,
+      "newProjectFlag": "--modules request-routing",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.routing"],
+        "snippet": "docs/config/modules/request-routing.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/request-routing.md"],
+      "frontend": null,
+      "notFor": [
+        "서비스 하나짜리 앱 — 서버가 둘 이상일 때 뜻이 있다",
+        "ExternalHttpClient 를 안 거치는 호출 — 표시가 따라가지 않는다",
+        "WebSocket 프록시 · 서비스 메시 · 터널 도구가 아니다 — 입구 서비스가 대상일 때의 HTTP 리버스 프록시와 이름 허용 목록만 한다",
+        "기본은 꺼짐(`skeleton.routing.enabled=false`) — 켜는 앱이 허용 목록(services)과 `inbound` 를 정한다"
+      ],
+      "keywords": {
+        "ko": ["요청 라우팅", "후보 서버", "로컬 서버로 보내기", "내 요청만", "핫픽스 확인", "카나리", "머리표"],
+        "en": [
+          "request routing",
+          "candidate revision",
+          "route to local",
+          "baggage routing",
+          "header-based routing",
+          "hotfix testing"
+        ]
+      }
+    },
+    {
       "id": "review",
       "kind": "module",
       "module": "review",
@@ -4824,6 +4865,7 @@
         "redis-core",
         "redis-lock",
         "redis-rate-limit",
+        "request-routing",
         "review",
         "review-jdbc",
         "reward",
