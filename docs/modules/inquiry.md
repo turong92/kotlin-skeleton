@@ -13,7 +13,9 @@
 본문 · 답장 이메일은 로그에 싣지 않는다(`InquiryRequest.toString` 이 가린다).
 
 **사람 확인** `InquiryHumanCheck` — 기본은 **항상 통과**다. 공개 서비스는 하나를 켠다: `captcha-turnstile` 이 있으면 검증기를 자동으로 잇고(`InquiryTurnstileAutoConfiguration`, 앱이 `InquiryHumanCheck` 빈을 두면 그쪽이 이긴다), 아니면 앱이 직접 구현한다. 사람 확인 없이 열면 한도(`per-client`)만 남는다.
-**접수 경보** `InquiryListener` — 저장 뒤 불린다(여럿 가능, 던져도 접수는 이미 끝났으니 삼킨다). `alert` 모듈이 있으면 `OwnerAlerts` 로 「문의 #번호 (종류)」 한 줄을 알린다(`InquiryAlertAutoConfiguration` — 본문 · 이메일은 싣지 않는다). `inquiryOwnerAlert` 빈을 두면 바꿀 수 있다.
+**접수 경보** `InquiryListener` — 저장 뒤 불린다(여럿 가능, 던져도 접수는 이미 끝났으니 삼킨다). `alert` 모듈이 있으면 `OwnerAlerts` 로 「문의 #번호 (종류)」 한 줄을 알린다(`InquiryAlertAutoConfiguration` — 본문 · 이메일은 싣지 않는다). `inquiryOwnerAlert` 빈을 두면 바꿀 수 있다. 경보 키는 **문의마다가 아니라 고정 하나**이고 최소 간격은 `skeleton.inquiry.alert-interval`(기본 10분)이다 - 도배가 와도 간격 안에서는 한 줄로 접히고(접은 수가 다음 경보에 실린다) 주인에게 경보가 쏟아지지 않는다. 0 이면 접지 않는다.
+**입력 검사** 본문 · 답장 이메일에 NUL 글자(U+0000)가 있으면 DB 에 닿기 전에 400 `INQUIRY.INVALID` 이다(PostgreSQL `text` 가 NUL 을 거부해 500 이 되던 것).
+**보관 기한** `skeleton.inquiry.retention`(예 `365d`)을 정하면 처리 완료(DONE) 뒤 그만큼 지난 문의를 매일 04:50 에 지운다 - **기본은 비어 있어 지우지 않는다**(앱이 켠다), 정했는데 0 이하면 기동 실패. 미처리(NEW) · 처리 표시를 되돌린 문의는 남기고, 로그에는 지운 건수만 싣는다(본문 · 이메일 없음). `scheduler` 모듈이 있으면 그 타이머(`inquiry.retention`)로 돌고, 요청 구동 모드(인스턴스 0대 배포)는 깨우기가 `OnRequestTask` `inquiry-retention` 을 부른다. 지우기가 멱등이라 여러 인스턴스가 겹쳐 돌려도 안전하다. 저장소 포트에 `deleteHandledBefore(cutoff)` 가 늘었다(직접 구현한 `InquiryRepository` 는 이 메서드를 더한다).
 
 **운영자 경로**(`skeleton.inquiry.admin.enabled=true` 일 때만 — 모듈 기본 꺼짐, 꺼져 있으면 경로가 없어 404; 익명 401 · 권한 없음 403):
 
@@ -29,7 +31,7 @@
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:inquiry"))` |
 | 함께 오는 모듈 | `platform` |
-| 컴파일 전용 | `alert`, `captcha-turnstile` |
+| 컴파일 전용 | `alert`, `captcha-turnstile`, `scheduler` |
 | 설정 접두사 | `skeleton.inquiry` — [docs/config/modules/inquiry.yml](../config/modules/inquiry.yml) |
 | 기본 동작 | 켜짐. 저장은 인메모리, 사람 확인은 항상 통과, 서블릿 앱이면 `POST /api/v1/inquiries` 도 켜진다. 운영자 경로는 꺼짐(404). |
 | 부팅에 필요한 것 | `TimeProvider` 빈(platform). 운영에는 `inquiry-jdbc`(저장)와 사람 확인이 필요하다. |

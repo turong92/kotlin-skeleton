@@ -5,6 +5,8 @@ dependencies {
     // spring-security-core: 호출자(Authentication) — 없으면 엔드포인트를 등록하지 않는다
     compileOnly(project(":modules:captcha-turnstile"))
     compileOnly(project(":modules:alert"))
+    // scheduler: 보관 기한 지난 문의 지우기의 @SkeletonScheduled 표시만 쓴다 — 없으면 표시가 무시되고 요청 구동 모드(OnRequestTask)가 부른다
+    compileOnly(project(":modules:scheduler"))
     compileOnly("org.springframework.security:spring-security-core")
 
     api(project(":modules:platform"))   // 타입(ApplicationException · TimeProvider · AccountErasureListener)이 이 모듈의 공개 API 에 나온다

@@ -995,6 +995,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · experimental — 위치 `modules/inquiry`
 - 켜는 법: `--modules inquiry`
 - 의존 한 줄: `implementation(project(":modules:inquiry"))`
+- 자동으로 따라온다: `scheduler`
 - 설정 접두사 `skeleton.inquiry` — 키와 기본값 `docs/config/modules/inquiry.yml`
 - HTTP 경로: `/api/v1/admin/inquiries`, `/api/v1/inquiries`
 - 문서: `docs/modules/inquiry.md`
@@ -1012,7 +1013,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · experimental — 위치 `modules/inquiry-jdbc`
 - 켜는 법: `--modules inquiry-jdbc`
 - 의존 한 줄: `implementation(project(":modules:inquiry-jdbc"))`
-- 자동으로 따라온다: `inquiry`
+- 자동으로 따라온다: `inquiry`, `scheduler`
 - 문서: `docs/modules/inquiry-jdbc.md`
 - 짝 프런트(react-skeleton): 항목 `inquiry` · 패키지 `@skeleton/inquiry` · 조각 `--packages inquiry`
 - 쓰지 않는 경우:

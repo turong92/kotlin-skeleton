@@ -26,6 +26,11 @@ class InMemoryInquiryRepository : InquiryRepository {
     override fun setStatus(id: Long, status: InquiryStatus, at: Instant): Inquiry? =
         rows.computeIfPresent(id) { _, row -> row.copy(status = status, handledAt = if (status == InquiryStatus.DONE) at else null) }
 
+    override fun deleteHandledBefore(cutoff: Instant): Int {
+        val doomed = rows.values.filter { it.status == InquiryStatus.DONE && it.handledAt != null && it.handledAt.isBefore(cutoff) }
+        return doomed.count { rows.remove(it.id, it) }
+    }
+
     override fun detachAccount(accountId: String): Int {
         var count = 0
         rows.replaceAll { _, row -> if (row.accountId == accountId) row.copy(accountId = null).also { count++ } else row }

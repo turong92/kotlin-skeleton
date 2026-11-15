@@ -62,6 +62,20 @@ class InquiryRepositoryDbTest {
     }
 
     @Test
+    fun `deleting handled inquiries before a cutoff keeps unhandled and recent ones and is idempotent`() {
+        val longAgo = Instant.parse("2001-01-01T00:00:00Z")
+        val cutoff = Instant.parse("2002-01-01T00:00:00Z")
+        val old = repository.create(new("보관 기한 지난 문의입니다", at = longAgo)).also { repository.setStatus(it.id, InquiryStatus.DONE, longAgo) }
+        val unhandled = repository.create(new("처리 전 오래된 문의입니다", at = longAgo))
+        val recent = repository.create(new("최근 처리한 문의입니다")).also { repository.setStatus(it.id, InquiryStatus.DONE, at) }
+        assertEquals(1, repository.deleteHandledBefore(cutoff))
+        assertEquals(0, repository.deleteHandledBefore(cutoff))
+        assertNull(repository.find(old.id))
+        assertEquals(unhandled.id, repository.find(unhandled.id)!!.id)
+        assertEquals(recent.id, repository.find(recent.id)!!.id)
+    }
+
+    @Test
     fun `detaching an account keeps the row and is idempotent`() {
         val acc = "acc_detach_${System.nanoTime()}"
         val saved = repository.create(new("계정 끊기 시험 문의입니다", acc))

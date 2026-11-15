@@ -47,13 +47,28 @@ class InquiryOptionalIntegrationsTest {
         runner.withUserConfiguration(FakeAlerts::class.java).run { ctx ->
             val service = ctx.getBean(InquiryService::class.java)
             val saved = service.submit(InquiryRequest(kind = "BUG", body = "비밀 본문이 들어 있어요 열 글자", replyEmail = "me@example.com", captchaToken = "t"), null, "ip", null)
-            val (kind, key, detail) = (ctx.getBean(OwnerAlerts::class.java) as Alerts).emitted.single()
+            val (kind, _, detail) = (ctx.getBean(OwnerAlerts::class.java) as Alerts).emitted.single()
             assertEquals("INQUIRY_RECEIVED", kind.name)
-            assertEquals(saved.id.toString(), key)
+            assertTrue(detail.contains("#${saved.id}"))
             assertTrue(detail.contains("BUG"))
             assertFalse(detail.contains("비밀 본문") || detail.contains("me@example.com"))
         }
         runner.run { ctx -> assertTrue(ctx.getBeansOfType(InquiryListener::class.java).isEmpty()) }
+    }
+
+    @Test
+    fun `alerts share one key and fold within the configured interval - a flood is not one alert per inquiry`() {
+        runner.withUserConfiguration(FakeAlerts::class.java).run { ctx ->
+            val service = ctx.getBean(InquiryService::class.java)
+            repeat(2) { service.submit(InquiryRequest(kind = "BUG", body = "도배 시험 문의 열 글자 이상", captchaToken = "t"), null, "ip$it", null) }
+            val emitted = (ctx.getBean(OwnerAlerts::class.java) as Alerts).emitted
+            assertEquals(1, emitted.map { it.second }.distinct().size)
+            assertEquals(java.time.Duration.ofMinutes(10), emitted.first().first.minInterval)
+        }
+        runner.withUserConfiguration(FakeAlerts::class.java).withPropertyValues("skeleton.inquiry.alert-interval=2m").run { ctx ->
+            ctx.getBean(InquiryService::class.java).submit(InquiryRequest(kind = "BUG", body = "간격 설정 시험 문의 열 글자", captchaToken = "t"), null, "ip", null)
+            assertEquals(java.time.Duration.ofMinutes(2), (ctx.getBean(OwnerAlerts::class.java) as Alerts).emitted.single().first.minInterval)
+        }
     }
 
     @Test

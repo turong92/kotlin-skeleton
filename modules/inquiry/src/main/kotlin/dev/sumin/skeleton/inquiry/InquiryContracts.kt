@@ -63,6 +63,9 @@ interface InquiryRepository {
 
     /** 계정 연결만 끊는다(본문 · 이메일은 남는다). 멱등 */
     fun detachAccount(accountId: String): Int
+
+    /** 처리 완료(DONE)이고 처리 시각이 [cutoff] 보다 이른 문의를 지우고 건수를 돌려준다. 미처리(NEW)는 건드리지 않는다. 멱등 */
+    fun deleteHandledBefore(cutoff: Instant): Int
 }
 
 /** 로그인하지 않은 호출의 사람 확인 — 기본은 통과(앱이 Turnstile 같은 것으로 갈아 끼운다) */

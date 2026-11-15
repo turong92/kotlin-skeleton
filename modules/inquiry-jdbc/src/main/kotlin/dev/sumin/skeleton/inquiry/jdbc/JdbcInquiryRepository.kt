@@ -66,6 +66,12 @@ class JdbcInquiryRepository(
     override fun detachAccount(accountId: String): Int =
         jdbc.update("update inquiries set account_id = null where account_id = :a", mapOf("a" to accountId))
 
+    override fun deleteHandledBefore(cutoff: Instant): Int =
+        jdbc.update(
+            "delete from inquiries where status = :done and handled_at < :cutoff",
+            MapSqlParameterSource().addValue("done", InquiryStatus.DONE.name).addValue("cutoff", dialect.instantParam(cutoff)),
+        )
+
     private fun ResultSet.toInquiry() = Inquiry(
         id = getLong("id"),
         kind = InquiryKind.valueOf(getString("kind")),

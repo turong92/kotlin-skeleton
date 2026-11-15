@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### inquiry - 방어 셋 (2026-11-15)
+
+- 본문 · 답장 이메일에 NUL 글자(U+0000)가 있으면 DB 에 닿기 전에 400 `INQUIRY.INVALID` (PostgreSQL `text` 가 거부해 500 이던 것).
+- 접수 경보 키를 문의 번호가 아닌 고정 키 하나로 바꾸고 최소 간격을 설정 `skeleton.inquiry.alert-interval`(기본 10분)로 뒀다 - 도배에도 경보가 한 줄로 접힌다. 공개 타입 `InquiryAlertKind` 는 enum 에서 간격을 받는 클래스가 됐다.
+- 새 설정 `skeleton.inquiry.retention`(기본 비어 있음 = 지우지 않는다): 정하면 처리 완료 뒤 그만큼 지난 문의를 매일 지운다(미처리 문의는 남김, 지운 건수만 로그, 0 이하면 기동 실패). `scheduler` 타이머 또는 요청 구동 모드의 `OnRequestTask` `inquiry-retention` 으로 돌고 멱등이다. **호환 변경**: `InquiryRepository` 에 `deleteHandledBefore(cutoff)` 가 늘었다(직접 구현한 저장소는 더한다). `inquiry` 는 `scheduler` 를 컴파일 전용으로 안다.
+
 ### storage - 멀티파트가 크기 상한을 우회하던 구멍 (2026-11-15)
 
 - `POST /api/v1/storage/multipart/complete` 가 합친 객체의 실제 크기를 `skeleton.storage.validation.max-size-bytes` 와 대 보고, 넘으면 객체를 지우고 400 `STORAGE.FILE_REJECTED`(`SIZE_TOO_LARGE`)로 거절한다. 조각 크기를 클라이언트가 정해 상한을 우회할 수 있었다(객체 저장소 비용 사고). `/multipart/part` 는 `contentLength` 가 상한보다 크면 서명 전에 같은 400 이다.

@@ -48,11 +48,11 @@ class InquiryService(
         val kind = InquiryKind.entries.firstOrNull { it.name == request.kind }
         if (kind == null) violations += InquiryViolation("kind", "INVALID_FORMAT", "종류를 골라 주세요")
         val body = request.body.orEmpty().trim()
-        if (body.length < BODY_MIN || body.length > BODY_MAX) {
+        if (body.length < BODY_MIN || body.length > BODY_MAX || body.hasNul()) {
             violations += InquiryViolation("body", "INVALID_LENGTH", "내용은 $BODY_MIN~${BODY_MAX}자로 적어 주세요")
         }
         val email = request.replyEmail?.trim()?.takeIf { it.isNotEmpty() }
-        if (email != null && (email.length > EMAIL_MAX || !EMAIL.matches(email))) {
+        if (email != null && (email.length > EMAIL_MAX || !EMAIL.matches(email) || email.hasNul())) {
             violations += InquiryViolation("replyEmail", "INVALID_FORMAT", "이메일 주소 모양이 아니에요")
         }
         val context = request.context?.trim()?.takeIf { it.isNotEmpty() }
@@ -63,6 +63,9 @@ class InquiryService(
         val lang = request.lang?.takeIf { it in LANGS } ?: "ko"
         return NewInquiry(kind!!, body, email, null, context, lang, time.now())
     }
+
+    /** NUL 글자(U+0000) — PostgreSQL `text` 가 거부한다(500). DB 에 닿기 전에 400 으로 막는다 */
+    private fun String.hasNul() = indexOf('\u0000') >= 0
 
     companion object {
         const val BODY_MIN = 10

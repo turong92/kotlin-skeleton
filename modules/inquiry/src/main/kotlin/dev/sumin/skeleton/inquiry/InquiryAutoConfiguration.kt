@@ -6,11 +6,15 @@ import dev.sumin.skeleton.common.erasure.ErasureRequest
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.time.asClock
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
+import dev.sumin.skeleton.common.wake.OnRequestTask
+import dev.sumin.skeleton.common.wake.SimpleOnRequestTask
 import dev.sumin.skeleton.common.web.RateLimitStore
 import java.time.Duration
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
@@ -23,6 +27,8 @@ import org.springframework.context.annotation.Bean
  *     per-client: 5       # 로그인하지 않은 호출: 클라이언트(IP)마다 window 동안 문의 수
  *     per-account: 10     # 로그인한 호출: 계정마다 window 동안 문의 수
  *     window: 1h
+ *     alert-interval: 10m # 접수 경보 최소 간격 (alert 모듈)
+ *     retention:          # 비워 두면 지우지 않는다. 예: 365d - 처리 완료 뒤 이만큼 지난 문의를 매일 지운다(0 이하면 기동 실패)
  *     admin:
  *       enabled: false    # true 면 운영자 경로(목록 · 처리 표시) - 권한 inquiry.read · inquiry.handle
  * ```
@@ -34,10 +40,16 @@ data class InquiryProperties(
     val perAccount: Int = 10,
     val window: Duration = Duration.ofHours(1),
     val admin: Admin = Admin(),
+    /** 접수 경보(`alert` 모듈)의 최소 간격 - 이 안에 또 들어온 문의는 경보를 접는다(문의마다가 아니라 하나의 키). 0 이면 접지 않는다 */
+    val alertInterval: Duration = Duration.ofMinutes(10),
+    /** 처리 완료(DONE) 문의를 처리 시각부터 이만큼 보관한 뒤 매일 지운다. **기본 null = 지우지 않는다**(앱이 켠다). 켰는데 0 이하면 기동 실패 */
+    val retention: Duration? = null,
 ) {
     init {
         require(perClient >= 1 && perAccount >= 1) { "skeleton.inquiry.per-client / per-account must be at least 1" }
         require(!window.isNegative && !window.isZero) { "skeleton.inquiry.window must be positive" }
+        require(!alertInterval.isNegative) { "skeleton.inquiry.alert-interval must not be negative" }
+        require(retention == null || (!retention.isNegative && !retention.isZero)) { "skeleton.inquiry.retention must be positive when set (leave it unset to keep handled inquiries)" }
     }
 
     data class Admin(
@@ -83,6 +95,19 @@ class InquiryAutoConfiguration {
         repository, humanCheck, listeners.orderedStream().toList(), properties, time,
         limits.getIfAvailable { InMemoryFixedWindowRateLimitStore(time.asClock()) },
     )
+
+    /** 보관 기한을 정했을 때만 - 기본 꺼짐 */
+    @Bean
+    @ConditionalOnProperty(prefix = "skeleton.inquiry", name = ["retention"])
+    @ConditionalOnMissingBean
+    fun inquiryRetention(repository: InquiryRepository, properties: InquiryProperties, time: TimeProvider): InquiryRetention =
+        InquiryRetention(repository, checkNotNull(properties.retention), time)
+
+    /** 요청 구동 모드(인스턴스 0대 배포)의 깨우기가 부른다 - 지우기가 멱등이다 */
+    @Bean
+    @ConditionalOnBean(InquiryRetention::class)
+    @ConditionalOnMissingBean(name = ["inquiryRetentionTask"])
+    fun inquiryRetentionTask(retention: InquiryRetention): OnRequestTask = SimpleOnRequestTask("inquiry-retention") { retention.purge() }
 
     @Bean
     @ConditionalOnMissingBean

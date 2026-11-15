@@ -33,6 +33,18 @@ class InquiryServiceTest {
     }
 
     @Test
+    fun `a NUL character is a 400 instead of reaching the database`() {
+        val nul = "\u0000"
+        listOf<InquiryRequest.() -> InquiryRequest>(
+            { copy(body = "도움말에서 못 찾은 ${nul}질문이 있어요") },
+            { copy(replyEmail = "a${nul}@b.co") },
+        ).forEach { change ->
+            assertFailsWith<InquiryInvalidException> { service().submit(request { change() }, null, "ip1", null) }
+        }
+        assertTrue(repository.list(null, 10).isEmpty())
+    }
+
+    @Test
     fun `signed-in inquiry links the account and skips the human check`() {
         humanOk = false
         val saved = service().submit(request(), "acc_1", "ip1", null)
