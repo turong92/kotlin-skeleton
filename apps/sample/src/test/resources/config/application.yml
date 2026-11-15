@@ -25,6 +25,18 @@ skeleton:
     worker-token-sha256: f92b39493425520f575f770808281d12c98cb84d962841461c0aac2798dd3cd5   # 시험의 가짜 일꾼 토큰 'test-only-video-worker-token' 의 SHA-256 (NoteVideoJourneyIntegrationTest)
   auth-mfa:
     required-for: NONE   # 견본은 운영자에게 2단계를 필수로 정했다(OPERATORS) - 시험의 ADMIN 은 로그인 토큰만 들고 보호된 경로를 부른다. 필수 문은 MfaJourneyIntegrationTest 가 켜서 시험한다
+  account:
+    sign-up:
+      per-ip: 10          # main 은 민감 경로 한도를 모듈 기본보다 조인다 — 여러 계정을 만들고 로그인하는 시험은 모듈 기본으로 돈다. main 의 값은 SensitiveRateLimitConfigTest 가 읽는다
+    login:
+      per-ip: 30
+      per-account: 10
+    verification:
+      attempts-per-ip: 30
+    reset:
+      per-ip: 10
+  auth-magic-link:
+    per-ip: 10
   notification:
     push:
       open-report:

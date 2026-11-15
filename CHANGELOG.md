@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### platform · redis-rate-limit · apps/sample - 민감 경로 속도 제한: 예시 · 인스턴스 0~N대 주의 (2026-11-16)
+
+- **스켈레톤 기본은 그대로다**(코드 변경 없음). 가입 · 로그인 · 인증 코드 · 비밀번호 찾기 · 로그인 링크 · 메일 폭탄의 한도는 이미 모듈에 있고 기본으로 켜져 있다 — 키와 모듈 기본 값을 표로 모으고, 조이는 앱 yml 예를 `docs/cloud-run-scale-to-zero.md` 「민감 경로 속도 제한」에 적었다.
+- 그 한도들은 `RateLimitStore` 의 **인스턴스마다 따로인 메모리**에서 센다: Cloud Run 에서 인스턴스가 N대면 한도가 약 N 배로 느슨해지고, 0대로 내려가거나 새 리비전이 되면 카운터가 사라진다. `RateLimitDeployGuard` 는 `skeleton.web.rate-limit` 을 켠 앱만 경고하므로 모듈 한도만 쓰는 앱은 이 문제에 경고가 없다는 점도 적었다. 고치는 길: `redis-rate-limit`(경로 필터뿐 아니라 **모듈의 한도 전부**를 공유시킨다 — 문서 · 능력 카탈로그의 「필터를 켤 때만 쓰인다」는 틀린 설명을 고쳤다), 앞단 규칙, 캡차, N 배가 돼도 괜찮은 값. `skeleton.web.rate-limit` 은 규칙이 하나라 목록의 경로가 한 카운터를 나눠 쓴다 — 읽기 규칙과 섞지 않는 이유와 민감 경로 전용 예.
+- `apps/sample`: `application.yml` 이 모듈 기본보다 조인 값을 명시한다(가입 IP 5/h · 로그인 IP 20 · 식별자 5 / 10m · 인증 코드 입력 IP 20/h · 비밀번호 찾기 · 로그인 링크 IP 5/h). local 프로필은 한 IP 라 풀어 두고(`application-local.yml`), 시험은 모듈 기본으로 되돌려 돈다(`src/test/resources/config/application.yml`). `SensitiveRateLimitConfigTest` 가 이 키들이 실제로 바인딩되는지 본다(잘못 적은 키는 스프링이 조용히 무시한다).
 ### audit-jdbc · platform - 운영자 감사 기록을 DB 에 남기고 조회한다 (2026-11-16)
 
 - 새 모듈 `audit-jdbc`: `OperatorAuditLog`(`platform`, 지금까지 아무것도 안 남기는 `NoOpOperatorAuditLog` 뿐이었다)의 DB 구현. 붙이면 그 기본 대신 서고, 앱이 같은 타입의 빈을 두면 물러난다. 표 `operator_audit_log`(PostgreSQL · MySQL 마이그레이션 `V20261116130000`, 새 표): 누가(`actor_id`) · 언제 · 무엇을(`action`) · 대상(`target_type` · `target_id`) · 결과(`result`) · 접속 IP · 기기 정보(지금 처리 중인 요청에서 읽는다 — IP 는 `skeleton.web.client-ip` 규칙) · `detail`(JSON). **더하기만 한다**(`legal-jdbc` 동의 기록과 같은 트리거 방식): 고치기는 항상 막고, 지우기는 기록한 지 30일이 안 된 줄을 막고, PostgreSQL 은 `TRUNCATE` 도 막는다. 기록은 부르는 쪽의 쓰기 트랜잭션에 합류해 행동이 롤백되면 같이 사라진다. MySQL 은 트리거를 만들므로 binlog 가 켜져 있으면 `log_bin_trust_function_creators=1` 이 필요하다(`legal-jdbc` 와 같다).

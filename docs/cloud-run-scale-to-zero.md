@@ -104,6 +104,56 @@ DB 는 인스턴스 밖(Cloud SQL 등)이다. 깨우기가 DB 를 깨우는 비�
 - 네이티브면 [리플렉션 규칙](native-image.md#리플렉션-규칙--새-코드를-쓸-때)(컨트롤러 밖에서 JSON 으로 바꾸는 타입은 등록 표시) · 새 의존성은 릴리스 전 `scripts/native-test.sh`.
 - 로그는 stdout, 포트는 `$PORT`(Cloud Run 이 8080 을 넣는다 — `server.port` 를 정하지 않는다).
 
+### 민감 경로 속도 제한 — 로그인 · 가입 · 비밀번호 찾기 · 메일 · 인증 코드
+
+민감 경로의 한도는 **이미 모듈에 있고 기본으로 켜져 있다**(스켈레톤 기본은 바꾸지 않는다 — 조이는 값은 앱 yml 의 명시적 override). 값은 모두 `platform` 의 `RateLimitStore` 에서 센다:
+
+| 막는 것 | 키 (모듈 기본) |
+|---|---|
+| 가입 요청 폭주 | `skeleton.account.sign-up.per-ip` (IP 당 10 / 1h) |
+| 로그인 대입 | `skeleton.account.login.per-ip` (30) · `per-account` (식별자당 10) / `window` 10m — 성공도 센다 |
+| 인증 코드(6자리) 추측 | `skeleton.account.verification.attempts-per-ip` (30 / 1h) · `max-attempts` (코드 하나당 5) · `guesses-per-email` (주소 하나의 총 추측 40) |
+| 메일 폭탄(주소 하나에 몇 통) | `verification.per-email` · `reset.per-email` · `skeleton.auth-magic-link.per-email` (각 3 / 1h) · 재전송 `verification.per-ip` (10) |
+| 비밀번호 찾기 · 로그인 링크 요청 | `skeleton.account.reset.per-ip` · `skeleton.auth-magic-link.per-ip` (각 10 / 1h) |
+| 이메일 변경 · 삭제 확인 · 다시 인증 코드 | `skeleton.account.email-change.per-account` (5 / 1h) |
+
+조이는 예(앱 `application.yml` — `apps/sample` 이 이렇게 쓴다, 시험 `SensitiveRateLimitConfigTest` 가 키가 실제로 바인딩되는지 본다):
+
+```yaml
+skeleton:
+  account:
+    sign-up:       { per-ip: 5 }                         # 모듈 기본 10
+    login:         { per-ip: 20, per-account: 5 }        # 30 · 10
+    verification:  { attempts-per-ip: 20 }               # 30
+    reset:         { per-ip: 5 }                         # 10
+  auth-magic-link: { per-ip: 5 }                         # 10
+```
+
+**인스턴스가 0~N대이면 이 한도는 느슨해진다.** 기본 저장소는 JVM 메모리라 인스턴스마다 따로 센다:
+
+- 인스턴스가 N대이면 실제 한도는 대략 **N 배**다(요청이 어느 인스턴스로 가느냐에 따라 나뉜다).
+- **0대로 내려가거나 새 리비전으로 바뀌면 카운터가 사라진다.** 기다렸다 콜드스타트를 일으키면 한도가 처음부터 다시 시작한다.
+- 보호 환경에서 `skeleton.web.rate-limit.enabled=true` 인데 메모리 저장소이면 `RateLimitDeployGuard` 가 경고한다. **모듈 한도(위 표)만 쓰는 앱은 이 경고가 없다** — 같은 문제가 있는데도 말이다.
+
+고치는 길(위에서부터, 겹쳐도 된다):
+
+1. **`redis-rate-limit` 을 붙이고 Redis 를 잇는다**(`implementation(project(":modules:redis-rate-limit"))` + `skeleton.redis.*` — 호스트 · `ssl.enabled` · 비밀번호는 환경변수). 모듈이 `RateLimitStore` 빈을 내므로 위 표의 **모든** 한도(가입 · 로그인 · 코드 · 메일)가 `skeleton.web.rate-limit` 을 안 켜도 인스턴스 사이에 공유된다. 오류 정책 `skeleton.redis-rate-limit.failure-policy` 기본은 `FAIL_OPEN`(Redis 가 죽으면 한도 없이 통과) — 로그인 · 가입을 닫아야 하면 `FAIL_CLOSED`(Redis 장애 = 로그인 장애가 되니 알고 고른다). 키 접두사 `key-prefix` 는 환경마다 다르게.
+2. **앞단 규칙**: 서비스 앞에 Cloudflare 같은 프록시가 있으면 `POST /api/v1/auth/login` · `/api/v1/account/sign-up` · `/api/v1/account/password/forgot` 에 IP 당 분당 몇 번 같은 규칙을 둔다 — 인스턴스 수와 콜드스타트에 흔들리지 않는다. 이때 클라이언트 IP 규칙(`skeleton.web.client-ip.mode`, [client-ip](client-ip.md))을 정해야 앱 쪽 한도의 키도 속이지 못한다.
+3. **캡차**: `captcha-turnstile` + `skeleton.account.captcha.required=true`(가입 · 재설정 · 재전송 · 매직 링크 요청에 토큰을 요구)는 카운터에 기대지 않아 인스턴스 수와 상관없다.
+4. 아무것도 못 붙이면: 한도를 **N 배가 돼도 괜찮은 값**으로 잡는다(최대 인스턴스 `--max-instances` 를 작게 유지하는 것과 같이). 메일 폭탄은 주소 하나당 한도(`per-email`)가 N 배여도 작아서 버티고, 로그인 대입은 `per-account` 가 N 배가 되므로 비밀번호 정책(`min-length` · `deny-common`)과 MFA 로 받친다.
+
+`skeleton.web.rate-limit`(경로 패턴 필터)로 민감 경로를 한 번 더 묶는 방법도 있다 — **규칙이 하나라 `path-patterns` 의 모든 경로가 한 클라이언트(IP)의 한 카운터를 나눠 쓴다**(한도 숫자도 하나). 그래서 읽기 경로 규칙(`apps/sample` 이 배지 · 리뷰 읽기에 쓴다)과 한 목록에 섞지 않는다 — 섞으면 읽기 몇 번에 로그인이 막힌다. 읽기 규칙이 없는 앱에서만:
+
+```yaml
+skeleton:
+  web:
+    rate-limit:
+      enabled: true
+      path-patterns: [/api/v1/auth/login, /api/v1/account/sign-up, /api/v1/account/password/forgot, /api/v1/account/verification/resend, /api/v1/auth/verify-email, /api/v1/auth/magic-link/request]
+      capacity: 20          # 한 IP 가 이 경로들을 통틀어 window 안에 부를 수 있는 수 — 본문을 읽기 전에 센다(429 + Retry-After)
+      window: 1m
+```
+
 ## 5. 콜드스타트와 로그인 — 응답을 잃어도 세션이 살아야 한다
 
 **실제 사례(요약)**: 0대에서 뜬 첫 `/auth/refresh` 가 콜드스타트로 21초 걸렸다. 서버는 회전에 성공해 새 토큰을 냈지만 앞단 프록시(BFF)가 5초에 504 를 돌려주었고, 클라이언트는 새 토큰을 못 받은 채 **옛 토큰**을 다시 냈다.

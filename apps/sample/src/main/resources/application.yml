@@ -104,8 +104,20 @@ skeleton:
       reserved: [admin, administrator, root, system, support, help, staff, moderator, notes]   # 내줄 수 없는 아이디 — 기호와 대소문자를 빼고 비교. 로컬 시드 계정은 예외
     deletion:
       self-restore: true                  # 이 앱의 선택: 탈퇴 유예 중인 주인이 로그인하면 403 AUTH.ACCOUNT_DELETION_PENDING + 취소 토큰으로 스스로 탈퇴를 취소한다 (모듈 기본은 꺼짐 — 운영자만 복구, docs/accounts.md)
+    # 민감 경로(가입 · 로그인 · 비밀번호 찾기 · 인증 코드 · 메일 발송)의 속도 제한 — 이 앱의 선택: 모듈 기본보다 조인다. 로컬은 application-local.yml 이 풀고(모두 같은 IP), 시험은 test config/application.yml 이 모듈 기본으로 돌린다.
+    # 이 한도들은 platform 의 RateLimitStore 에서 센다 — 기본은 인스턴스마다 따로인 메모리라 Cloud Run 에서 인스턴스 수만큼 느슨해지고 0대로 내려갔다 올라오면 비워진다: redis-rate-limit 과 Redis 를 붙이거나 앞단 규칙을 함께 둔다 (docs/cloud-run-scale-to-zero.md 「민감 경로 속도 제한」)
+    sign-up:
+      per-ip: 5                           # 같은 IP 의 가입 요청 / 1h (모듈 기본 10)
+    login:
+      per-ip: 20                          # 같은 IP 의 로그인 시도 / 10m (모듈 기본 30) — 성공도 센다
+      per-account: 5                      # 한 식별자(이메일 · 아이디)의 시도 / 10m (모듈 기본 10) — 돌려 대입을 막는다
+    verification:
+      attempts-per-ip: 20                 # 같은 IP 의 인증 코드 입력 / 1h (모듈 기본 30) — 6자리 코드 추측을 막는다. 한 주소의 총 추측은 guesses-per-email(40)이 따로 묶는다
+    reset:
+      per-ip: 5                           # 같은 IP 의 비밀번호 찾기 요청 / 1h (모듈 기본 10). 한 주소에 보낼 메일은 per-email 3 / 1h(모듈 기본 그대로)
   auth-magic-link:
     sign-up: true                         # 메일함을 증명하면 가입까지 끝나는 앱 — 이 앱의 선택 (모듈 기본은 이미 있는 계정으로만)
+    per-ip: 5                             # 같은 IP 의 로그인 링크 요청 / 1h (모듈 기본 10) — 한 주소에 보낼 링크는 per-email 3 / 1h(모듈 기본 그대로)
   # 글로벌 소셜 로그인 (google · LINE · X): client id 를 환경변수로 줄 때만 GET /auth/methods 에 나타난다 — 비어 있으면 아무것도 바뀌지 않는다.
   #   LINE: <PREFIX>_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID / _CLIENT_SECRET   X: <PREFIX>_AUTH_SOCIAL_X_CLIENT_ID / _CLIENT_SECRET   (docs/modules/auth-social-oidc.md · auth-social-x.md)
   job-queue:

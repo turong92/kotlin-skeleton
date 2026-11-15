@@ -165,7 +165,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `redis-cache` | 이름 있는 Redis 캐시(TTL · 접두사) · 안정적인 키 생성기 · 캐시 오류 정책(기본 FAIL_OPEN). | `--modules redis-cache` | 캐시, Redis 캐시, 캐싱, 응답 캐시 / cache, redis cache, caching, ttl | — |
 | `redis-core` | Redis 연결 · StringRedisTemplate · JSON 템플릿 · 키 접두사 — 다른 redis-* 모듈의 바탕. | `--modules redis-core` | Redis, 레디스, 키 접두사 / redis, redis connection, key prefix | — |
 | `redis-lock` | Redisson 기반 분산 락 — @DistributedLock 어노테이션과 락 실행기. | `--modules redis-lock` | 분산 락, 락, 동시 실행 방지, 중복 실행 방지 / distributed lock, lock, mutex, redisson | — |
-| `redis-rate-limit` | platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유). | `--modules redis-rate-limit` | 요청 제한, 속도 제한, API 호출 제한, 도배 방지 / rate limit, throttling, request limit, redis rate limit | — |
+| `redis-rate-limit` | platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유) — 경로 필터뿐 아니라 가입 · 로그인 · 인증 코드 · 비밀번호 찾기 · 로그인 링크 같은 모듈 한도도 같이 공유되고, Cloud Run 0대 · 여러 대에서 메모리 저장소의 N 배 느슨함 · 재시작 초기화를 없앤다. | `--modules redis-rate-limit` | 요청 제한, 속도 제한, API 호출 제한, 도배 방지 / rate limit, throttling, request limit, redis rate limit | — |
 | `review` | 리뷰 · 평점 — 아무 대상(종류 + id)에 별점 1~5 · 본문, 계정×대상 하나(고쳐 쓴다) · 대상별 평균/분포(원자적 집계) · 정렬/거르기 · 도움돼요 · 구매 인증(앱이 ReviewPurchases.record 로 신호를 준다) · 구매자만 옵션 · 신고 · 운영 큐 · 숨김/되살리기/문제없음 · 자동 가림(옵션) · 운영자 답글 · 사진(저장 키 + 서명 주소 302) · 이벤트 고리(쓰기 트랜잭션 안, 보상은 앱이 잇는다) · 비로그인 읽기(앱이 켠다) · 탈퇴. 상품 · 결제 · 보상을 모른다. | `--modules review,review-jdbc` | 리뷰, 후기, 별점, 평점, 구매 인증, 도움돼요, 상품 후기 / review, rating, star rating, verified purchase, helpful, product reviews | `@skeleton/reviews` |
 | `review-jdbc` | 리뷰 · 대상별 집계 · 도움돼요 · 구매 신호를 DB 에 둔다 (PostgreSQL · MySQL) — 집계는 원자적 UPDATE, 새 줄은 insertIgnore 먼저(틈 잠금 교착 없음), 목록 질의는 공개 줄만 읽는다. | `--modules review-jdbc` | 리뷰 저장소, 리뷰 DB / review storage, review repository | `@skeleton/reviews` |
 | `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고(재시도 · 멱등), 받았어요 알림과 운영자 다시 지급 · 취소까지. | `--modules reward,reward-jdbc` | 보상 지급, 지급 건, 쿠폰 지급, 포인트 지급, 다시 지급, 받았어요 알림 / reward grant, reward issuer, payout worker, retry grant | `@skeleton/rewards` |
@@ -1642,7 +1642,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 단일 인스턴스 스케줄러는 락 없이 된다(scheduler 의 no-op 락)
 - 키워드: 분산 락, 락, 동시 실행 방지, 중복 실행 방지 / distributed lock, lock, mutex, redisson
 
-### `redis-rate-limit` — platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유).
+### `redis-rate-limit` — platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유) — 경로 필터뿐 아니라 가입 · 로그인 · 인증 코드 · 비밀번호 찾기 · 로그인 링크 같은 모듈 한도도 같이 공유되고, Cloud Run 0대 · 여러 대에서 메모리 저장소의 N 배 느슨함 · 재시작 초기화를 없앤다.
 
 - 종류 · 상태: module · stable — 위치 `modules/redis-rate-limit`
 - 켜는 법: `--modules redis-rate-limit`
@@ -1651,7 +1651,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 설정 접두사 `skeleton.redis-rate-limit` — 키와 기본값 `docs/config/modules/redis-rate-limit.yml`
 - 문서: `docs/modules/redis-rate-limit.md`
 - 쓰지 않는 경우:
-  - skeleton.web.rate-limit.enabled=true 일 때만 쓰인다
+  - Redis 서버가 있어야 한다 — 오류 정책 기본은 FAIL_OPEN(Redis 가 죽으면 한도 없이 통과), 로그인 · 가입을 닫아야 하면 skeleton.redis-rate-limit.failure-policy=FAIL_CLOSED
   - 단일 인스턴스면 platform 의 인메모리 저장소로 충분하다
 - 키워드: 요청 제한, 속도 제한, API 호출 제한, 도배 방지 / rate limit, throttling, request limit, redis rate limit
 

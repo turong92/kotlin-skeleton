@@ -18,6 +18,8 @@ skeleton:
     verification:
       per-ip: 500
       attempts-per-ip: 500
+    reset:
+      per-ip: 500                            # 비밀번호 찾기 화면도 같은 IP 에서 여러 번 시험한다 (main 은 5/h 로 조인다)
     login:
       per-account: 200                       # e2e(Playwright)가 같은 시드 계정으로 자주 로그인한다 — 로컬에서만 한도를 넉넉히
       per-ip: 500
@@ -29,6 +31,8 @@ skeleton:
         - { id: acc_user, email: user@example.com, password: password, display-name: User, login-id: sample-user }
         - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN], display-name: Admin, login-id: sample-admin }
         - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR], display-name: Moderator, login-id: sample-moderator }
+  auth-magic-link:
+    per-ip: 500                              # 로컬은 모두가 같은 IP(localhost)다 — 로그인 링크를 여러 번 받아 봐도 429 가 나지 않게 (main 은 5/h 로 조인다)
   notification:
     push:
       open-report:

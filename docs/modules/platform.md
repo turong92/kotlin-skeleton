@@ -31,6 +31,10 @@
 - **`OperatorAuditLog`**: 운영 행동 기록 자리. 기본(`NoOpOperatorAuditLog`)은 아무것도 하지 않고 로그도 쓰지 않는다 — 저장하려면 [`audit-jdbc`](audit-jdbc.md) 를 붙이거나(append-only 표 · 운영자 조회 · 보관 기한) 앱이 빈 하나를 둔다. `OperatorAction` 은 누가 · 무엇을 · 대상(id) · 선택 `detail`(문자열 맵) · `result`(기본 `SUCCESS`, 거절 · 실패는 `DENIED` · `FAILED`)를 담고, 접속 IP · 기기 정보는 저장 구현이 지금 요청에서 읽는다.
 - **옛 키 네 개는 지웠다**: `skeleton.account.admin.role` → `skeleton.authz.super-role`, `skeleton.payment.admin.role` → `skeleton.authz.roles.<역할>: [payment.read, payment.refund, payment.operate]`, `skeleton.legal.admin-role` → `skeleton.authz.roles.<역할>: [legal.read]`, `skeleton.board.moderator-role` → `skeleton.authz.roles.<역할>: [board.moderate, board.manage]`. 값이 하나라도 있으면 기동이 실패하고 메시지가 새 자리를 알려 준다(`LegacyRoleKeysGuard`). 화면은 `GET /auth/me` 의 `permissions` 로 받는다.
 
+## 속도 제한 (`skeleton.web.rate-limit` · 모듈의 한도)
+
+두 층이다. ① **경로 패턴 필터** `skeleton.web.rate-limit`(기본 꺼짐): `path-patterns`(비면 `path-pattern` 하나, 기본 `/api/**`)에 맞는 요청을 클라이언트(IP) 기준으로 센다 — 본문을 읽기 전에, 초과는 `429` + `Retry-After`. **규칙이 하나다**: `capacity` · `window` 가 하나이고 목록의 모든 경로가 한 클라이언트의 **한 카운터**를 나눠 쓴다(읽기 경로와 로그인을 한 목록에 섞지 않는다). ② **모듈의 한도**(가입 · 로그인 · 인증 코드 · 비밀번호 찾기 · 로그인 링크 · 문의 …): 각 모듈이 자기 키(`skeleton.account.login.per-ip` …)로 켜 두고(기본 켜짐), 이쪽은 IP · 주소 · 계정별로 따로 센다. 두 층 모두 `RateLimitStore` 에서 세고, 기본 저장소는 **인스턴스마다 따로인 메모리**다 — Cloud Run 같은 여러 · 0대 인스턴스에서는 한도가 N 배로 느슨해지고 0대로 내려가면 비워진다. `redis-rate-limit` 이 저장소를 Redis 로 바꿔 두 층 모두를 공유시킨다. 민감 경로의 예 · 키 표 · 고치는 길: [Cloud Run 0대 · 여러 인스턴스 「민감 경로 속도 제한」](../cloud-run-scale-to-zero.md). 클라이언트 IP 규칙(`skeleton.web.client-ip.mode`)을 정하지 않으면 키를 호출자가 고를 수 있다([client-ip](../client-ip.md)).
+
 ## 대시보드 기여 계약 (`common/dashboard`)
 
 관리자 대시보드(`dashboard` 모듈)가 모으는 카드의 **타입만** 있고 빈은 없다 — `account-jdbc` · `auth-session-jdbc` · `payment-jdbc` 가 `dashboard` 를 컴파일에 끌어오지 않고 카드를 기여하게 하려는 자리다(기여 모듈은 자기 자동 설정을 `@ConditionalOnClass(name = …dashboard…)` 로 등록한다 — `dashboard` 를 안 붙인 앱에는 아무것도 생기지 않는다).

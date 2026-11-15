@@ -3733,7 +3733,7 @@
       "module": "redis-rate-limit",
       "path": "modules/redis-rate-limit",
       "status": "stable",
-      "summary": "platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유).",
+      "summary": "platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유) — 경로 필터뿐 아니라 가입 · 로그인 · 인증 코드 · 비밀번호 찾기 · 로그인 링크 같은 모듈 한도도 같이 공유되고, Cloud Run 0대 · 여러 대에서 메모리 저장소의 N 배 느슨함 · 재시작 초기화를 없앤다.",
       "starter": false,
       "newProjectFlag": "--modules redis-rate-limit",
       "autoIncludes": ["redis-core"],
@@ -3750,7 +3750,10 @@
       "secrets": [],
       "docs": ["docs/modules/redis-rate-limit.md"],
       "frontend": null,
-      "notFor": ["skeleton.web.rate-limit.enabled=true 일 때만 쓰인다", "단일 인스턴스면 platform 의 인메모리 저장소로 충분하다"],
+      "notFor": [
+        "Redis 서버가 있어야 한다 — 오류 정책 기본은 FAIL_OPEN(Redis 가 죽으면 한도 없이 통과), 로그인 · 가입을 닫아야 하면 skeleton.redis-rate-limit.failure-policy=FAIL_CLOSED",
+        "단일 인스턴스면 platform 의 인메모리 저장소로 충분하다"
+      ],
       "keywords": {
         "ko": ["요청 제한", "속도 제한", "API 호출 제한", "도배 방지"],
         "en": ["rate limit", "throttling", "request limit", "redis rate limit"]
