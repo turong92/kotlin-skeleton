@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.event.kafka
 
 import dev.sumin.skeleton.common.TraceIdFilter
+import dev.sumin.skeleton.common.routing.RouteBaggage
 import org.slf4j.MDC
 
 class KafkaEventMessageFactory(
@@ -30,6 +31,9 @@ class KafkaEventMessageFactory(
         }
         MDC.get(TraceIdFilter.MDC_SPAN_ID_KEY)?.takeIf { it.isNotBlank() }?.let { spanId ->
             headers[KafkaEventHeaders.SPAN_ID] = spanId
+        }
+        RouteBaggage.current()?.let { route ->
+            headers[KafkaEventHeaders.BAGGAGE] = RouteBaggage.withRoute(headers[KafkaEventHeaders.BAGGAGE], route)
         }
         return headers
     }

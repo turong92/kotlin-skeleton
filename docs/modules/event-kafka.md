@@ -16,4 +16,6 @@
 | 프론트 짝 | 없음 |
 | 테스트 | `modules/event-kafka/src/test` |
 
+발행하는 요청의 MDC 에 `route`(요청 라우팅 표시)가 있으면 메시지 머리 `baggage` 에 `route=…` 멤버를 싣는다 — 소비 쪽 거르기는 `request-routing` 의 몫이다.
+
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

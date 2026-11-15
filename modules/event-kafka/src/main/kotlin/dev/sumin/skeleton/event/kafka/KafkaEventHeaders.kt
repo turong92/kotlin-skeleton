@@ -6,4 +6,5 @@ object KafkaEventHeaders {
     const val EVENT_ID = "skeleton-event-id"
     const val TRACE_ID = "trace-id"
     const val SPAN_ID = "span-id"
+    const val BAGGAGE = "baggage"
 }
