@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment.jdbc
 
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import dev.sumin.skeleton.common.dashboard.DashboardAmount
 import dev.sumin.skeleton.common.dashboard.DashboardInterval
 import dev.sumin.skeleton.common.dashboard.DashboardRange
@@ -24,14 +25,14 @@ class DashboardRevenueTest {
 
     private fun range(from: String, to: String) = DashboardRange(Instant.parse(from), Instant.parse(to), ZoneOffset.UTC)
 
-    private fun paid(id: String, currency: String, amount: Long, at: String?, status: String = "PAID", provider: String = "scripted", mode: String = "TEST") {
+    private fun paid(id: String, currency: String, amount: Long, at: String?, status: String = "PAID", provider: String = "scripted", mode: String = "TEST", account: String = "acc_1") {
         val ts = at?.let { DbTestDatabase.dialect.instantParam(Instant.parse(it)) }
         val now = DbTestDatabase.dialect.instantParam(Instant.parse("2026-10-01T00:00:00Z"))
         PaymentDb.jdbc.update(
             """insert into payment_orders (id, account_id, kind, status, provider, provider_mode, currency, amount, paid_amount, item_type, item_ref, order_name,
                                            origin_type, checkout_expires_at, paid_at, created_at, updated_at)
-               values (:id, 'acc_1', 'ONE_TIME', :status, :provider, :mode, :currency, :amount, :paidAmount, 'cheer', 'c', 'Cheer', 'CHECKOUT', :now, :paidAt, :now, :now)""",
-            MapSqlParameterSource().addValue("id", id).addValue("status", status).addValue("provider", provider).addValue("mode", mode).addValue("currency", currency).addValue("amount", amount)
+               values (:id, :account, 'ONE_TIME', :status, :provider, :mode, :currency, :amount, :paidAmount, 'cheer', 'c', 'Cheer', 'CHECKOUT', :now, :paidAt, :now, :now)""",
+            MapSqlParameterSource().addValue("id", id).addValue("account", account).addValue("status", status).addValue("provider", provider).addValue("mode", mode).addValue("currency", currency).addValue("amount", amount)
                 .addValue("paidAmount", if (at != null) amount else null).addValue("paidAt", ts).addValue("now", now),
         )
     }
@@ -57,6 +58,24 @@ class DashboardRevenueTest {
 
         assertEquals(listOf(krw(15000)), net(week1))
         assertEquals(listOf(DashboardAmount(2)), count.value(week1).data)
+    }
+
+    @Test
+    fun `a test account's payments and refunds are left out of net revenue, the count and the series - the ledger still holds them`() {
+        paid("ord_1", "KRW", 10000, "2026-10-13T01:00:00Z")
+        paid("ord_t", "KRW", 7000, "2026-10-14T01:00:00Z", account = "acc_test")
+        refund("ord_1", 1000, "KRW", "SUCCEEDED", "2026-10-15T01:00:00Z")
+        refund("ord_t", 2000, "KRW", "SUCCEEDED", "2026-10-15T02:00:00Z")
+        val leaveTestOut = TestAccountFilter { column -> "$column <> 'acc_test'" }
+        val net = NetRevenueMetric(PaymentDb.jdbc, DbTestDatabase.dialect, orders, leaveTestOut)
+        val paidCount = PaidCountMetric(PaymentDb.jdbc, DbTestDatabase.dialect, orders, leaveTestOut)
+
+        assertEquals(listOf(krw(9000)), net.value(week1).data, "10000 - 1000; the test account's 7000 and its 2000 refund are not revenue")
+        assertEquals(listOf(DashboardAmount(1)), paidCount.value(week1).data)
+        assertEquals(9000L, net.series(week1, DashboardInterval.DAY, "KRW").data!!.sumOf { it.value })
+        assertEquals(1L, paidCount.series(week1, DashboardInterval.DAY, null).data!!.sumOf { it.value })
+        assertEquals(listOf(krw(14000)), net(week1), "without a filter nobody is left out")
+        assertEquals(2L, PaymentDb.jdbc.queryForObject("select count(*) from payment_orders", emptyMap<String, Any>(), Long::class.java), "the orders stay in the ledger")
     }
 
     @Test

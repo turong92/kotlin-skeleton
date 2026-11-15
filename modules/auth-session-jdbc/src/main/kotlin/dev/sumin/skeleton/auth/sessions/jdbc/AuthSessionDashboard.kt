@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.auth.sessions.jdbc
 
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import dev.sumin.skeleton.common.dashboard.DashboardAmount
 import dev.sumin.skeleton.common.dashboard.DashboardBuckets
 import dev.sumin.skeleton.common.dashboard.DashboardCohortMember
@@ -20,7 +21,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
  * 날짜는 활동 시간대(`skeleton.auth-session.activity.zone`)의 날짜이고, 기간은 대시보드 시간대의 날짜로 자른다 — 두 시간대를 같게 둔다.
  * 하루 안의 시간 단위는 기록하지 않는다: 시간별(`HOUR`) 그래프는 그날의 합계 한 점이다.
  */
-class ActiveUsersMetric(private val jdbc: NamedParameterJdbcTemplate) : DashboardMetric {
+class ActiveUsersMetric(private val jdbc: NamedParameterJdbcTemplate, private val filter: TestAccountFilter = TestAccountFilter.NONE) : DashboardMetric {
     override val key = "auth-session.active"
     override val label = "Active users"
     override val unit = DashboardUnit.PEOPLE
@@ -29,7 +30,7 @@ class ActiveUsersMetric(private val jdbc: NamedParameterJdbcTemplate) : Dashboar
 
     override fun value(range: DashboardRange): DashboardResult<List<DashboardAmount>> {
         val count = jdbc.queryForObject(
-            "select count(distinct account_id) from auth_account_activity where day >= :from and day <= :to",
+            "select count(distinct account_id) from auth_account_activity where day >= :from and day <= :to and ${filter.notTestSql("auth_account_activity.account_id")}",
             days(range), Long::class.java,
         ) ?: 0L
         return DashboardResult(DashboardResult.Status.OK, listOf(DashboardAmount(count)))
@@ -37,7 +38,9 @@ class ActiveUsersMetric(private val jdbc: NamedParameterJdbcTemplate) : Dashboar
 
     override fun series(range: DashboardRange, interval: DashboardInterval, currency: String?): DashboardResult<List<DashboardPoint>> {
         // 칸마다 세지 않는다 — (날짜, 계정) 만 한 번 읽어 칸마다 서로 다른 계정을 센다
-        val used = jdbc.query("select day, account_id from auth_account_activity where day >= :from and day <= :to", days(range)) { rs, _ ->
+        val used = jdbc.query(
+            "select day, account_id from auth_account_activity where day >= :from and day <= :to and ${filter.notTestSql("auth_account_activity.account_id")}", days(range),
+        ) { rs, _ ->
             rs.getObject("day", LocalDate::class.java).atStartOfDay(range.zone).toInstant() to rs.getString("account_id")
         }
         if (interval == DashboardInterval.HOUR) return DashboardResult(DashboardResult.Status.OK, listOf(DashboardPoint(range.from, used.map { it.second }.distinct().size.toLong())))

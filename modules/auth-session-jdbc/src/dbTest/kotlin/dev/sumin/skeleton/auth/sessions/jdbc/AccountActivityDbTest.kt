@@ -64,6 +64,18 @@ class AccountActivityDbTest {
     }
 
     @Test
+    fun `active users leave a test account out - in the count and in the series`() {
+        listOf("acc_a", "acc_test", "acc_b").forEach { store.recordActive(it, day("2026-10-21")) }
+        store.recordActive("acc_test", day("2026-10-22"))
+        val withFilter = ActiveUsersMetric(SessionDb.jdbc) { column -> "$column <> 'acc_test'" }
+        val current = week("2026-10-20", "2026-10-27")
+
+        assertEquals(listOf(DashboardAmount(2)), withFilter.value(current).data)
+        assertEquals(listOf(0L, 2L, 0L, 0L, 0L, 0L, 0L), withFilter.series(current, DashboardInterval.DAY).data!!.map { it.value })
+        assertEquals(listOf(DashboardAmount(3)), metric.value(current).data, "without a filter nobody is left out")
+    }
+
+    @Test
     fun `a member came back only when there is activity on a day after the sign-up day`() {
         store.recordActive("acc_a", day("2026-10-20"))   // 가입한 날만
         store.recordActive("acc_b", day("2026-10-20"))

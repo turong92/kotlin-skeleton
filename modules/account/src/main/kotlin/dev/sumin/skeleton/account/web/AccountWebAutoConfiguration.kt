@@ -108,6 +108,11 @@ class AccountWebAutoConfiguration {
     @ConditionalOnProperty(prefix = "skeleton.account.admin", name = ["enabled"], havingValue = "true")
     fun adminAccountController(callers: AccountCallers, admin: AdminService, purge: dev.sumin.skeleton.account.AccountPurgeService): AdminAccountController = AdminAccountController(callers, admin, purge)
 
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "skeleton.account.admin", name = ["enabled"], havingValue = "true")
+    fun adminTestAccountController(callers: AccountCallers, tests: dev.sumin.skeleton.account.TestAccountService): AdminTestAccountController = AdminTestAccountController(callers, tests)
+
     /** 켜졌을 때만 공개 경로에 더한다 — 꺼짐이면 허용 목록이 지금과 같다 */
     @Bean
     @ConditionalOnMissingBean(name = ["loginIdAvailabilityPublicEndpointContributor"])

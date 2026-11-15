@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.coupon.jdbc
 
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import dev.sumin.skeleton.common.dashboard.DashboardInterval
 import dev.sumin.skeleton.common.dashboard.DashboardRange
 import dev.sumin.skeleton.common.dashboard.DashboardResult
@@ -210,6 +211,27 @@ class CouponAdminDbTest {
         source.release("ord_held_$seq")
         assertEquals(CouponStatus.REVOKED, store.findCoupon(held.id)!!.status, "nobody is left to use it")
         assertEquals(2, reports.stats(later.id).revoked)
+    }
+
+    @Test
+    fun `the dashboard contribution leaves a test account's coupon use out - the coupon itself stays used`() {
+        time.current = Instant.parse("2032-03-03T10:00:00Z")   // 다른 시험이 쓰지 않는 먼 날
+        val def = define(name = "mixed $seq")
+        val real = give(def)
+        val test = give(def)
+        listOf(real, test).forEach {
+            source.reserve(DiscountClaim("coupon", it.id), target(it.accountId), "ord_${it.id}")
+            source.confirm("ord_${it.id}")
+        }
+        val template = NamedParameterJdbcTemplate(dataSource)
+        val range = DashboardRange(time.current.minusSeconds(60), time.current.plusSeconds(60), ZoneOffset.UTC)
+        val leaveTestOut = TestAccountFilter { column -> "$column <> '${test.accountId}'" }
+
+        assertEquals(2L, CouponUsedMetric(template, dialect).value(range).data!!.single().amount)
+        assertEquals(1L, CouponUsedMetric(template, dialect, leaveTestOut).value(range).data!!.single().amount)
+        assertEquals(1L, CouponUsedMetric(template, dialect, leaveTestOut).series(range, DashboardInterval.DAY).data!!.sumOf { it.value })
+        assertEquals(listOf("mixed $seq" to 1L), CouponTopUsedRanking(template, dialect, leaveTestOut).top(range, 10).data!!.map { it.label to it.values.single() })
+        assertEquals(CouponStatus.USED, store.findCoupon(test.id)!!.status)
     }
 
     @Test

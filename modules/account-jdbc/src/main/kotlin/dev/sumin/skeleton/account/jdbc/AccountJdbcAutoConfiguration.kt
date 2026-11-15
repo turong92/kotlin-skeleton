@@ -3,6 +3,8 @@ package dev.sumin.skeleton.account.jdbc
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountBlockStore
 import dev.sumin.skeleton.account.AccountMaintenanceLease
+import dev.sumin.skeleton.account.TestAccountMarks
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import dev.sumin.skeleton.common.audience.AudienceSource
 import dev.sumin.skeleton.common.time.TimeProvider
 import org.springframework.beans.factory.ObjectProvider
@@ -70,10 +72,20 @@ class AccountJdbcAutoConfiguration {
     @ConditionalOnProperty(prefix = "skeleton.account.audit", name = ["enabled"], havingValue = "true")
     fun jdbcAccountAuditListener(dataSource: DataSource, dialect: SqlDialect): AccountEventListener = JdbcAccountAuditListener(NamedParameterJdbcTemplate(dataSource), dialect)
 
-    /** 공지 대상 `all` · `role` — 공지 모듈이 없으면 아무도 읽지 않는 빈이다 (읽을 때만 DB 를 부른다) */
+    /** 운영자의 시험 계정 표시 저장소 */
+    @Bean
+    @ConditionalOnMissingBean(TestAccountMarks::class)
+    fun jdbcTestAccountMarks(dataSource: DataSource, dialect: SqlDialect): TestAccountMarks = JdbcTestAccountMarks(NamedParameterJdbcTemplate(dataSource), dialect)
+
+    /** 집계가 시험 계정을 빼는 조건 — 결제 · 쿠폰 · 활동 같은 모듈이 이 빈 하나만 보고 자기 질의에 붙인다 */
+    @Bean
+    @ConditionalOnMissingBean(TestAccountFilter::class)
+    fun jdbcTestAccountFilter(): TestAccountFilter = JdbcTestAccountFilter()
+
+    /** 공지 대상 `all` · `role` — 공지 모듈이 없으면 아무도 읽지 않는 빈이다 (읽을 때만 DB 를 부른다). `all` 은 시험 계정을 뺀다 */
     @Bean
     @ConditionalOnMissingBean(name = ["accountAllAudience"])
-    fun accountAllAudience(dataSource: DataSource): AudienceSource = JdbcAccountAudiences.all(NamedParameterJdbcTemplate(dataSource))
+    fun accountAllAudience(dataSource: DataSource, filter: TestAccountFilter): AudienceSource = JdbcAccountAudiences.all(NamedParameterJdbcTemplate(dataSource), filter)
 
     @Bean
     @ConditionalOnMissingBean(name = ["accountRoleAudience"])

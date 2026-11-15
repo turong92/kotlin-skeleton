@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.account.jdbc
 
 import dev.sumin.skeleton.common.audience.AudienceParam
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import dev.sumin.skeleton.common.audience.AudienceSource
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 
@@ -9,15 +10,17 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
  * 키셋: `id > after order by id limit n` — 계정 표의 기본키 순서라 쪽마다 새로 읽어도 겹치거나 빠지지 않는다.
  */
 object JdbcAccountAudiences {
-    fun all(jdbc: NamedParameterJdbcTemplate): AudienceSource = object : AudienceSource {
+    /** `all` 은 시험 계정으로 표시된 계정을 뺀다([filter]) — 「전체」에게 가는 공지 · 마케팅이 운영자의 시험 계정에 닿지 않게. 역할을 직접 고른 [role] 은 빼지 않는다(고른 사람 그대로) */
+    fun all(jdbc: NamedParameterJdbcTemplate, filter: TestAccountFilter = TestAccountFilter.NONE): AudienceSource = object : AudienceSource {
+        private val active = "select id from accounts where status = 'ACTIVE' and ${filter.notTestSql("accounts.id")}"
         override val kind = "all"
         override val param = AudienceParam.NONE
         override fun validate(param: String?) = if (param.isNullOrBlank()) null else "This audience takes no value."
         override fun count(param: String?): Long =
-            jdbc.queryForObject("select count(*) from accounts where status = 'ACTIVE'", emptyMap<String, Any>(), Long::class.java) ?: 0L
+            jdbc.queryForObject("select count(*) from ($active) c", emptyMap<String, Any>(), Long::class.java) ?: 0L
 
         override fun page(param: String?, after: String?, limit: Int): List<String> =
-            keyset(jdbc, "select id from accounts where status = 'ACTIVE'", "id", emptyMap(), after, limit)
+            keyset(jdbc, active, "id", emptyMap(), after, limit)
     }
 
     fun role(jdbc: NamedParameterJdbcTemplate): AudienceSource = object : AudienceSource {

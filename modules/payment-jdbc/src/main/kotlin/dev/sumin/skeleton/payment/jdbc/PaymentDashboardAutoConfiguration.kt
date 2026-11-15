@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment.jdbc
 
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import dev.sumin.skeleton.payment.PaymentGateway
 import dev.sumin.skeleton.payment.PaymentProviderRouter
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
@@ -26,13 +27,13 @@ class PaymentDashboardAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = ["paymentNetRevenueMetric"])
-    fun paymentNetRevenueMetric(dataSource: DataSource, dialect: SqlDialect, orders: CurrentModeOrders): NetRevenueMetric =
-        NetRevenueMetric(NamedParameterJdbcTemplate(dataSource), dialect, orders)
+    fun paymentNetRevenueMetric(dataSource: DataSource, dialect: SqlDialect, orders: CurrentModeOrders, filter: ObjectProvider<TestAccountFilter>): NetRevenueMetric =
+        NetRevenueMetric(NamedParameterJdbcTemplate(dataSource), dialect, orders, filter.getIfAvailable { TestAccountFilter.NONE })
 
     @Bean
     @ConditionalOnMissingBean(name = ["paymentPaidCountMetric"])
-    fun paymentPaidCountMetric(dataSource: DataSource, dialect: SqlDialect, orders: CurrentModeOrders): PaidCountMetric =
-        PaidCountMetric(NamedParameterJdbcTemplate(dataSource), dialect, orders)
+    fun paymentPaidCountMetric(dataSource: DataSource, dialect: SqlDialect, orders: CurrentModeOrders, filter: ObjectProvider<TestAccountFilter>): PaidCountMetric =
+        PaidCountMetric(NamedParameterJdbcTemplate(dataSource), dialect, orders, filter.getIfAvailable { TestAccountFilter.NONE })
 
     @Bean
     @ConditionalOnMissingBean(name = ["paymentPaidStep"])

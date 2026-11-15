@@ -1,7 +1,9 @@
 package dev.sumin.skeleton.coupon.jdbc
 
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -22,9 +24,11 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 class CouponDashboardAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["couponUsedMetric"])
-    fun couponUsedMetric(dataSource: DataSource, dialect: SqlDialect): CouponUsedMetric = CouponUsedMetric(NamedParameterJdbcTemplate(dataSource), dialect)
+    fun couponUsedMetric(dataSource: DataSource, dialect: SqlDialect, filter: ObjectProvider<TestAccountFilter>): CouponUsedMetric =
+        CouponUsedMetric(NamedParameterJdbcTemplate(dataSource), dialect, filter.getIfAvailable { TestAccountFilter.NONE })
 
     @Bean
     @ConditionalOnMissingBean(name = ["couponTopUsedRanking"])
-    fun couponTopUsedRanking(dataSource: DataSource, dialect: SqlDialect): CouponTopUsedRanking = CouponTopUsedRanking(NamedParameterJdbcTemplate(dataSource), dialect)
+    fun couponTopUsedRanking(dataSource: DataSource, dialect: SqlDialect, filter: ObjectProvider<TestAccountFilter>): CouponTopUsedRanking =
+        CouponTopUsedRanking(NamedParameterJdbcTemplate(dataSource), dialect, filter.getIfAvailable { TestAccountFilter.NONE })
 }

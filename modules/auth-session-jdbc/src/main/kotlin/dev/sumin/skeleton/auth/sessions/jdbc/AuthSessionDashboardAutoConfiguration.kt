@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.auth.sessions.jdbc
 
 import dev.sumin.skeleton.auth.sessions.ActivityZone
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import javax.sql.DataSource
 import java.time.ZoneId
 import org.springframework.beans.factory.ObjectProvider
@@ -20,7 +21,8 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 class AuthSessionDashboardAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["authSessionActiveUsersMetric"])
-    fun authSessionActiveUsersMetric(dataSource: DataSource): ActiveUsersMetric = ActiveUsersMetric(NamedParameterJdbcTemplate(dataSource))
+    fun authSessionActiveUsersMetric(dataSource: DataSource, filter: ObjectProvider<TestAccountFilter>): ActiveUsersMetric =
+        ActiveUsersMetric(NamedParameterJdbcTemplate(dataSource), filter.getIfAvailable { TestAccountFilter.NONE })
 
     @Bean
     @ConditionalOnMissingBean(name = ["authSessionReturnedStep"])

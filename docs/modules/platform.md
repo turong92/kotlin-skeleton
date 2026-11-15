@@ -13,7 +13,7 @@
 | 기본 동작 | 켜짐. 필터 · 예외 처리 · OpenAPI 는 기본값으로 동작하고, CORS · rate limit 은 설정으로 켠다. |
 | 부팅에 필요한 것 | 없음. |
 | 요청 로그의 오류 이유 | 4xx · 5xx 로 답한 요청의 종료 줄(`skeleton.debug.request`)은 끝에 `code=<오류 코드> reason=<고정 제목[ fields=<필드 이름>]>` 을 붙인다 (예: `← POST /api/v1/notes 400 (3ms) code=COMMON.IDEMPOTENCY_ERROR reason=Missing Idempotency-Key`). 응답 본문을 못 보는 운영 로그에서 "왜 400 인지" 찾는 단서이고, 코드 · 고정 제목 · 필드 이름만 싣는다(본문 · 헤더 값 · 토큰 · 키 없음). 오류를 직접 쓰는 인터셉터는 `RequestErrorNote.record` 로 같은 칸을 채운다 |
-| 교체 지점 | `GlobalExceptionHandler`, `TraceIdFilter`, `RequestLoggingFilter`, `TimeProvider`, `PublicEndpointRegistry`, `RateLimitStore`, `RateLimitKeyResolver`, `ExternalHttpClient`, `ExternalHttpErrorMapper`, `ExternalHttpTraceExtractor`, `SensitiveValueRedactor`, `ObservabilityLinkResolver`, `DeployGuardRunner`, `DeployEnvGuard`, `AuthorDirectory`, `OperatorAccess`, `RolePermissionSource`, `OperatorAuditLog` |
+| 교체 지점 | `GlobalExceptionHandler`, `TraceIdFilter`, `RequestLoggingFilter`, `TimeProvider`, `PublicEndpointRegistry`, `RateLimitStore`, `RateLimitKeyResolver`, `ExternalHttpClient`, `ExternalHttpErrorMapper`, `ExternalHttpTraceExtractor`, `SensitiveValueRedactor`, `ObservabilityLinkResolver`, `DeployGuardRunner`, `DeployEnvGuard`, `AuthorDirectory`, `OperatorAccess`, `RolePermissionSource`, `OperatorAuditLog`, `TestAccountFilter` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/api-client` |
 | 테스트 | `modules/platform/src/test` |
@@ -27,6 +27,7 @@
 - **판정**: 기본 `TokenOperatorAccess` 는 토큰 역할을 매핑에 통과시킨다(회수는 토큰 만료까지). `account` 가 있으면 저장소를 다시 읽는 구현이 대신 선다. 구현은 `AbstractOperatorAccess` 를 확장하면 한 요청 안의 같은 계정은 한 번만 계산한다(요청 사이 캐시 없음).
 - **`RoleHolders`**: 역할을 가진 활성 계정 수 계약(`account` 가 구현) — 「가진 계정이 있으면 역할 삭제 불가」를 `authz` 가 `account` 를 모르고 판정하게 한다.
 - **`AudienceSource`** (`common/audience`): 공지 대상 계약 — `kind` · `param`(`NONE`·`ROLE`·`WORKSPACE`·`TEXT`) · `validate(param)`(사유 또는 null) · `count(param)` · `page(param, after, limit)`(계정 id 오름차순 키셋, 활성 계정만, 겹침 없음). `account-jdbc` 가 `all` · `role`, `workspace-jdbc` 가 `workspace` 를 내고 앱은 세그먼트를 빈 하나로 더한다. 계약만 있고 이 빈들을 읽는 모듈이 없으면 아무 일도 하지 않는다.
+- **`TestAccountFilter`** (`common/account`): **시험 계정**(운영자가 `account` 의 `PUT /api/v1/admin/accounts/{id}/test-account` 로 표시한 계정 — 운영에서 점검 · 시험 결제를 하는 계정)을 집계에서 빼는 자리. `notTestSql(accountColumn)` 이 질의의 `where` 에 `and` 로 붙이는 SQL 조건(계정이 시험 계정이 **아니면** 참, 별칭 `tm`)을 돌려주고, `account-jdbc` 가 표시 표(`account_test_marks`)를 읽는 구현을 낸다 — 계정 표를 모르는 모듈은 이 조건만 붙인다. 구현이 없으면 부르는 쪽이 `TestAccountFilter.NONE`(아무도 안 뺀다)을 쓴다. 이 레포에서 건 곳: 대시보드의 신규 가입 · 가입 묶음(퍼널) · 활성 이용자 · 순매출 · 결제 건수 · 쿠폰 사용 수 · 쿠폰 순위, 쿠폰 현황의 할인 합계(`DiscountTotals`), 공지 대상 `all`. 건 규칙: 여러 계정을 합치는 집계에만 건다 — 계정 한 명을 보는 화면 · 운영자의 목록 · 그 계정 자신의 요청 · 장부(주문 · 환불 줄)에는 걸지 않는다. 앱이 새 집계(자기 매출표 · 가입 통계)를 만들면 같은 조건을 붙인다.
 - **`OperatorAuditLog`**: 운영 행동 기록 자리. 기본(`NoOpOperatorAuditLog`)은 아무것도 하지 않고 로그도 쓰지 않는다 — 저장하려면 앱이 빈 하나를 둔다. 공용 기록 표는 없다.
 - **옛 키 네 개는 지웠다**: `skeleton.account.admin.role` → `skeleton.authz.super-role`, `skeleton.payment.admin.role` → `skeleton.authz.roles.<역할>: [payment.read, payment.refund, payment.operate]`, `skeleton.legal.admin-role` → `skeleton.authz.roles.<역할>: [legal.read]`, `skeleton.board.moderator-role` → `skeleton.authz.roles.<역할>: [board.moderate, board.manage]`. 값이 하나라도 있으면 기동이 실패하고 메시지가 새 자리를 알려 준다(`LegacyRoleKeysGuard`). 화면은 `GET /auth/me` 의 `permissions` 로 받는다.
 

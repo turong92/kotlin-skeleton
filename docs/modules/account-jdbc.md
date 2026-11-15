@@ -1,12 +1,13 @@
 # account-jdbc
 
-`account` 의 저장을 DB 에 둔다 — `accounts` · `account_roles` · `account_identities`(수단 한 줄 = `(method, subject)` 유일) · `account_tokens`(한 번 쓰는 토큰, 해시만) · `account_challenges`(6자리 코드 챌린지 · 가입 시도) · `account_audit`(켜면) · `account_blocks`(운영자가 지운 계정의 재가입 차단 — **해시만**) · `account_locks`(주기 정리를 인스턴스 하나만 하게 하는 짧은 임대 — 이름 · 만료 · 소유 표).
+`account` 의 저장을 DB 에 둔다 — `accounts` · `account_roles` · `account_identities`(수단 한 줄 = `(method, subject)` 유일) · `account_tokens`(한 번 쓰는 토큰, 해시만) · `account_challenges`(6자리 코드 챌린지 · 가입 시도) · `account_audit`(켜면) · `account_blocks`(운영자가 지운 계정의 재가입 차단 — **해시만**) · `account_test_marks`(운영자가 표시한 시험 계정) · `account_locks`(주기 정리를 인스턴스 하나만 하게 하는 짧은 임대 — 이름 · 만료 · 소유 표).
 계정 행의 `display_name_key` · `display_tag`(닉네임의 비교용 키 · 꼬리표 — 유니크 `(키, 꼬리표)` 하나로 `NONE` · `UNIQUE` · `TAGGED` 를 모두 받는다, NULL 은 겹치지 않는다 — `JdbcDisplayNameDbTest` 두 DB) · `erased_at`(지운 시각) · `erase_claimed_at`(지우기 선점)은 `ANONYMIZE` 지우기 · 선점이 쓴다.
 유일성은 일반 insert 의 **유니크 위반**으로 판정하고(`insertIgnore` 의 행 수는 MySQL 에서 믿을 수 없다), 토큰 소비는 조건부 UPDATE 한 문장, 마지막 수단 보호는 계정 행 락이다 — 둘 다 16 스레드 경쟁으로 두 DB 에서 시험한다.
 
 - **대시보드 기여**: `dashboard` 모듈이 클래스패스에 있으면 신규 가입 타일(`account.signed-up`, 기간 안 `created_at` — 탈퇴로 지운 ERASED 계정도 센다)과 퍼널의 묶음(기간 안 가입자의 계정 id + 가입 시각, 메모리에서만)을 기여한다. 질의는 인덱스 `idx_accounts_created`(마이그레이션이라 `dashboard` 를 안 붙인 앱에도 들어간다) 로 범위를 끊는다.
 
-- **공지 대상**: `platform` 의 `AudienceSource` 로 `all`(활성 계정 전체) · `role`(그 역할을 가진 활성 계정, 값 = 역할 이름)을 낸다 - 대기 · 정지 · 삭제 유예 · 지워진 계정은 빠진다. 계정 id 오름차순 키셋(`id > after order by id limit n`)이라 쪽마다 새로 읽어도 겹치거나 빠지지 않고(`JdbcAccountAudienceDbTest` 두 DB), 이 빈들을 읽는 모듈이 없으면 부르는 곳이 없어 아무 일도 하지 않는다. 설정 키는 없다.
+- **시험 계정**: `account_test_marks`(계정당 한 줄 — 누가 · 언제, 계정 줄과 함께 지워진다)가 `account` 의 `TestAccountMarks` 를, 같은 표를 읽는 `JdbcTestAccountFilter` 가 `platform` 의 `TestAccountFilter` 를 구현한다. 이 모듈이 건 곳은 신규 가입 타일 · 가입 묶음 · 공지 대상 `all` — 다른 모듈의 집계는 그 모듈이 이 빈을 받아 건다([platform](platform.md)). `JdbcTestAccountDbTest` 두 DB. 표는 새 표라서 옛 버전이 그대로 돈다.
+- **공지 대상**: `platform` 의 `AudienceSource` 로 `all`(활성 계정 전체, **시험 계정 제외**) · `role`(그 역할을 가진 활성 계정, 값 = 역할 이름 — 역할을 직접 고른 것이라 시험 계정도 닿는다)을 낸다 - 대기 · 정지 · 삭제 유예 · 지워진 계정은 빠진다. 계정 id 오름차순 키셋(`id > after order by id limit n`)이라 쪽마다 새로 읽어도 겹치거나 빠지지 않고(`JdbcAccountAudienceDbTest` 두 DB), 이 빈들을 읽는 모듈이 없으면 부르는 곳이 없어 아무 일도 하지 않는다. 설정 키는 없다.
 
 | 항목 | 내용 |
 |---|---|
@@ -16,7 +17,7 @@
 | 설정 접두사 | 없음 (감사 기록을 켜는 키는 `account` 의 접두사 아래 `audit` 항목) |
 | 기본 동작 | 켜짐. 감사 기록은 꺼져 있다. |
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마. |
-| 교체 지점 | `JdbcAccountRepository`, `JdbcOneTimeTokenStore`, `JdbcChallengeStore`, `JdbcAccountBlockStore`, `JdbcAccountMaintenanceLease` |
+| 교체 지점 | `JdbcAccountRepository`, `JdbcOneTimeTokenStore`, `JdbcChallengeStore`, `JdbcAccountBlockStore`, `JdbcTestAccountMarks`, `JdbcTestAccountFilter`, `JdbcAccountMaintenanceLease` |
 | 마이그레이션 | `modules/account-jdbc/src/main/resources/db/migration/postgresql`, `modules/account-jdbc/src/main/resources/db/migration/mysql` |
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/account-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`)) |

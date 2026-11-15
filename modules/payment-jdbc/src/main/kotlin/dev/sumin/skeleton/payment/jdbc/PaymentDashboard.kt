@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment.jdbc
 
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import dev.sumin.skeleton.common.dashboard.DashboardAmount
 import dev.sumin.skeleton.common.dashboard.DashboardBuckets
 import dev.sumin.skeleton.common.dashboard.DashboardCohortMember
@@ -54,7 +55,10 @@ class NetRevenueMetric(
     private val jdbc: NamedParameterJdbcTemplate,
     private val dialect: SqlDialect,
     private val orders: CurrentModeOrders,
+    filter: TestAccountFilter = TestAccountFilter.NONE,
 ) : DashboardMetric {
+    /** 시험 계정으로 표시된 계정의 결제 · 환불은 매출이 아니다 — 주문은 장부에 그대로 남는다 */
+    private val notTest = filter.notTestSql("o.account_id")
     override val key = "payment.net-revenue"
     override val label = "Net revenue"
     override val unit = DashboardUnit.MONEY
@@ -66,12 +70,12 @@ class NetRevenueMetric(
         val (mode, modeParams) = orders.clause()
         val params = range(range) + modeParams
         val paid = sumByCurrency(
-            "select o.currency as currency, sum(o.paid_amount) as total from payment_orders o where o.paid_at >= :from and o.paid_at < :to and o.paid_amount is not null and $mode group by o.currency",
+            "select o.currency as currency, sum(o.paid_amount) as total from payment_orders o where o.paid_at >= :from and o.paid_at < :to and o.paid_amount is not null and $mode and $notTest group by o.currency",
             params,
         )
         val refunded = sumByCurrency(
             "select r.currency as currency, sum(r.amount) as total from payment_refunds r join payment_orders o on o.id = r.order_id " +
-                "where r.status = 'SUCCEEDED' and r.completed_at >= :from and r.completed_at < :to and $mode group by r.currency",
+                "where r.status = 'SUCCEEDED' and r.completed_at >= :from and r.completed_at < :to and $mode and $notTest group by r.currency",
             params,
         )
         return DashboardResult(DashboardResult.Status.OK, (paid.keys + refunded.keys).sorted().map { DashboardAmount((paid[it] ?: 0L) - (refunded[it] ?: 0L), it) })
@@ -83,12 +87,12 @@ class NetRevenueMetric(
         val params = range(range) + modeParams + ("currency" to currency)
         val samples = ArrayList<Pair<Instant, Long>>()
         jdbc.query(
-            "select o.paid_at as at, o.paid_amount as amount from payment_orders o where o.paid_at >= :from and o.paid_at < :to and o.paid_amount is not null and o.currency = :currency and $mode",
+            "select o.paid_at as at, o.paid_amount as amount from payment_orders o where o.paid_at >= :from and o.paid_at < :to and o.paid_amount is not null and o.currency = :currency and $mode and $notTest",
             params,
         ) { rs -> samples += dialect.readInstant(rs, "at")!! to rs.getLong("amount") }
         jdbc.query(
             "select r.completed_at as at, r.amount as amount from payment_refunds r join payment_orders o on o.id = r.order_id " +
-                "where r.status = 'SUCCEEDED' and r.completed_at >= :from and r.completed_at < :to and r.currency = :currency and $mode",
+                "where r.status = 'SUCCEEDED' and r.completed_at >= :from and r.completed_at < :to and r.currency = :currency and $mode and $notTest",
             params,
         ) { rs -> samples += dialect.readInstant(rs, "at")!! to -rs.getLong("amount") }
         return DashboardResult(DashboardResult.Status.OK, DashboardBuckets.series(range, interval, samples) { it.sum() })
@@ -104,7 +108,13 @@ class NetRevenueMetric(
 }
 
 /** 결제 건수 — 기간 안 `paid_at` 이 있는 주문 수 (대기 · 실패 · 만료는 `paid_at` 이 없다). 이후 환불돼도 센다. 모드 기준은 [CurrentModeOrders] */
-class PaidCountMetric(private val jdbc: NamedParameterJdbcTemplate, private val dialect: SqlDialect, private val orders: CurrentModeOrders) : DashboardMetric {
+class PaidCountMetric(
+    private val jdbc: NamedParameterJdbcTemplate,
+    private val dialect: SqlDialect,
+    private val orders: CurrentModeOrders,
+    filter: TestAccountFilter = TestAccountFilter.NONE,
+) : DashboardMetric {
+    private val notTest = filter.notTestSql("o.account_id")   // 시험 계정의 결제는 건수에 넣지 않는다
     override val key = "payment.paid-count"
     override val label = "Payments"
     override val unit = DashboardUnit.COUNT
@@ -115,7 +125,7 @@ class PaidCountMetric(private val jdbc: NamedParameterJdbcTemplate, private val 
     override fun value(range: DashboardRange): DashboardResult<List<DashboardAmount>> {
         val (mode, modeParams) = orders.clause()
         val count = jdbc.queryForObject(
-            "select count(*) from payment_orders o where o.paid_at >= :from and o.paid_at < :to and $mode",
+            "select count(*) from payment_orders o where o.paid_at >= :from and o.paid_at < :to and $mode and $notTest",
             mapOf("from" to dialect.instantParam(range.from), "to" to dialect.instantParam(range.to)) + modeParams,
             Long::class.java,
         ) ?: 0L
@@ -125,7 +135,7 @@ class PaidCountMetric(private val jdbc: NamedParameterJdbcTemplate, private val 
     override fun series(range: DashboardRange, interval: DashboardInterval, currency: String?): DashboardResult<List<DashboardPoint>> {
         val (mode, modeParams) = orders.clause()
         val times = jdbc.query(
-            "select o.paid_at as at from payment_orders o where o.paid_at >= :from and o.paid_at < :to and $mode",
+            "select o.paid_at as at from payment_orders o where o.paid_at >= :from and o.paid_at < :to and $mode and $notTest",
             mapOf("from" to dialect.instantParam(range.from), "to" to dialect.instantParam(range.to)) + modeParams,
         ) { rs, _ -> dialect.readInstant(rs, "at")!! to 1 }
         return DashboardResult(DashboardResult.Status.OK, DashboardBuckets.series(range, interval, times) { it.size.toLong() })

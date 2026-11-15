@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment.jdbc
 
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import dev.sumin.skeleton.common.discount.CurrencyAmount
 import dev.sumin.skeleton.common.discount.DiscountTotals
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
@@ -11,18 +12,22 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
  *   `discount_amount` 를 더한다. 전액 환불된(`REFUNDED`) 갱신은 매출이 없던 것으로 보아 뺀다(소진한 회차를 돌려주지는 않지만 깎아 준 돈으로 세지 않는다). 첫 주문은 `INITIAL` 이라 위와 겹치지 않는다.
  * 식별 목록은 1000 개씩 끊어 묻고 통화별로 합친다.
  */
-class JdbcDiscountTotals(private val jdbc: NamedParameterJdbcTemplate) : DiscountTotals {
+class JdbcDiscountTotals(private val jdbc: NamedParameterJdbcTemplate, filter: TestAccountFilter = TestAccountFilter.NONE) : DiscountTotals {
+    /** 시험 계정으로 표시된 계정의 주문이 깎은 돈은 합계에 넣지 않는다 */
+    private val notTest = filter.notTestSql("o.account_id")
+
     override fun confirmedTotals(kind: String, sourceRefs: Collection<String>): List<CurrencyAmount> {
         val sums = java.util.TreeMap<String, Long>()
         sourceRefs.distinct().chunked(CHUNK).forEach { refs ->
             jdbc.query(
-                "select currency, sum(amount) as total from payment_order_discounts where kind = :kind and status = 'CONFIRMED' and source_ref in (:refs) group by currency",
+                "select d.currency as currency, sum(d.amount) as total from payment_order_discounts d join payment_orders o on o.id = d.order_id " +
+                    "where d.kind = :kind and d.status = 'CONFIRMED' and d.source_ref in (:refs) and $notTest group by d.currency",
                 mapOf("kind" to kind, "refs" to refs),
             ) { rs -> sums.merge(rs.getString("currency").trim(), rs.getLong("total"), Long::plus) }
             jdbc.query(
                 "select o.currency as currency, sum(o.discount_amount) as total from payment_orders o join payment_subscription_discounts s on s.subscription_id = o.origin_ref " +
                     "where s.kind = :kind and s.source_ref in (:refs) and o.origin_type = 'SUBSCRIPTION' and o.kind = 'SUBSCRIPTION_RENEWAL' " +
-                    "and o.status in ('PAID', 'PARTIALLY_REFUNDED') and o.discount_amount > 0 group by o.currency",
+                    "and o.status in ('PAID', 'PARTIALLY_REFUNDED') and o.discount_amount > 0 and $notTest group by o.currency",
                 mapOf("kind" to kind, "refs" to refs),
             ) { rs -> sums.merge(rs.getString("currency").trim(), rs.getLong("total"), Long::plus) }
         }

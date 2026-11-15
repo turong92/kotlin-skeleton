@@ -1,7 +1,9 @@
 package dev.sumin.skeleton.account.jdbc
 
+import dev.sumin.skeleton.common.account.TestAccountFilter
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -20,9 +22,11 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 class AccountDashboardAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["accountSignedUpMetric"])
-    fun accountSignedUpMetric(dataSource: DataSource, dialect: SqlDialect): SignedUpMetric = SignedUpMetric(NamedParameterJdbcTemplate(dataSource), dialect)
+    fun accountSignedUpMetric(dataSource: DataSource, dialect: SqlDialect, filter: ObjectProvider<TestAccountFilter>): SignedUpMetric =
+        SignedUpMetric(NamedParameterJdbcTemplate(dataSource), dialect, filter.getIfAvailable { TestAccountFilter.NONE })
 
     @Bean
     @ConditionalOnMissingBean(name = ["accountSignedUpCohort"])
-    fun accountSignedUpCohort(dataSource: DataSource, dialect: SqlDialect): SignedUpCohort = SignedUpCohort(NamedParameterJdbcTemplate(dataSource), dialect)
+    fun accountSignedUpCohort(dataSource: DataSource, dialect: SqlDialect, filter: ObjectProvider<TestAccountFilter>): SignedUpCohort =
+        SignedUpCohort(NamedParameterJdbcTemplate(dataSource), dialect, filter.getIfAvailable { TestAccountFilter.NONE })
 }

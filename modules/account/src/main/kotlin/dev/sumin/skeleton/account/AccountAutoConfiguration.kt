@@ -369,6 +369,15 @@ class AccountAutoConfiguration {
     fun adminService(core: AccountCore): AdminService = AdminService(core)
 
     @Bean
+    @ConditionalOnMissingBean(TestAccountMarks::class)
+    fun inMemoryTestAccountMarks(): TestAccountMarks = InMemoryTestAccountMarks()
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun testAccountService(core: AccountCore, marks: TestAccountMarks, audit: ObjectProvider<dev.sumin.skeleton.common.authz.OperatorAuditLog>): TestAccountService =
+        TestAccountService(core, marks, audit.getIfAvailable { dev.sumin.skeleton.common.authz.NoOpOperatorAuditLog() })
+
+    @Bean
     @ConditionalOnMissingBean
     fun accountPurgeService(core: AccountCore, listeners: ObjectProvider<AccountErasureListener>): AccountPurgeService =
         AccountPurgeService(core) { listeners.orderedStream().toList() }

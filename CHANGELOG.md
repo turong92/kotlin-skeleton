@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### account · platform · account-jdbc · payment-jdbc · coupon-jdbc · auth-session-jdbc - 운영 시험 계정 표시와 집계에서 빼기 (2026-11-16)
+
+- 운영자가 계정을 「시험 계정」으로 표시한다: `PUT` · `DELETE` · `GET /api/v1/admin/accounts/{id}/test-account`(`skeleton.account.admin.enabled=true` 일 때만 — 켜고 끄기는 `account.manage`, 읽기는 `account.read`, 멱등, 없는 계정 404 · 지워진 계정 표시 410). 바뀔 때마다 `OperatorAuditLog` 에 `account.test-mark.set` · `account.test-mark.cleared` 한 줄(같은 트랜잭션, 이미 그 상태면 기록 없음). 저장은 새 표 `account_test_marks`(계정당 한 줄 — 누가 · 언제, PostgreSQL · MySQL 마이그레이션 `V20261116100000`, 새 표라 옛 버전이 그대로 돈다) — `Account` 모델 · 로그인 · 권한은 그대로다.
+- 집계에서 빼는 공통 자리 `TestAccountFilter`(platform `common/account`): `notTestSql(accountColumn)` 이 질의에 `and` 로 붙이는 SQL 조건을 돌려주고 `account-jdbc` 가 표시 표를 읽는 구현을 낸다(없으면 `TestAccountFilter.NONE` — 아무도 안 뺀다). 건 곳: 대시보드 신규 가입 · 가입 묶음(퍼널) · 활성 이용자 · 순매출(결제 · 환불) · 결제 건수 · 쿠폰 사용 수 · 쿠폰 순위, 쿠폰 현황의 할인 합계(`DiscountTotals`), 공지 대상 `all`. 건 규칙과 안 건 곳(역할을 직접 고른 `role` 대상 · 장부 · 계정 한 명 보기)은 `docs/modules/platform.md`. 새 집계는 같은 조건을 붙이면 된다. 이 레포에는 포인트의 전체 통계가 없어 걸 곳이 없다.
+- 운영에서 시험 결제: 실키로 소액 결제 → 환불, 계정은 시험 계정으로 표시(결제사 쪽 거래는 남는다) — 결제 면제 · 테스트 키와의 차이는 `docs/modules/payment.md` 「운영에서 시험 결제」. 배포 후 점검 계정(`scripts/post-deploy-check.sh`)도 이 표시를 쓴다(`docs/deploy.md`).
+- **호환 변경**: 집계 클래스(`SignedUpMetric` · `SignedUpCohort` · `ActiveUsersMetric` · `NetRevenueMetric` · `PaidCountMetric` · `CouponUsedMetric` · `CouponTopUsedRanking` · `JdbcDiscountTotals` · `JdbcAccountAudiences.all`)의 생성자 끝에 `TestAccountFilter` 인자가 기본값 `NONE` 으로 늘었다 — 직접 만드는 코드는 그대로 돈다. 표시를 한 계정이 없으면 숫자는 그대로다.
+
 ### alert - 웹 · 앱 기기에서 난 오류를 요청 ID 와 함께 받아 로그와 경보로 잇는다 (2026-11-16)
 
 - 새 공개 경로 `POST /api/v1/client-errors`(`alert` 모듈 안, **기본 꺼짐** `skeleton.alert.client-errors.enabled=false` — 꺼져 있으면 경로 자체가 없다). 로그인 없이 받는다(로그인 화면의 오류도 알아야 한다). 남용 막기: 호출자(IP)마다 `per-client` 건 / `window`(기본 10건 / 1분, `RateLimitStore` 빈이 있으면 그것을 공유)를 **본문을 보기 전에** 센다(429 + `retryAfterSeconds`), 본문 `max-body-bytes`(16 KiB) 초과는 읽지 않고 413, 모양이 아니면 400, 필드마다 길이 상한(message 500 · stack 4,000 · route 200 …), 틀린 형의 값 · 모르는 필드는 버린다. 민감값 제거: route 의 쿼리 · 조각, 글 속 URL 의 쿼리, `Bearer` · JWT 모양 · `…token=` / `…secret=` / `…password=`(`LogMasker`), 이메일, 제어 문자(로그 줄 위조 방지). 답은 `204`.

@@ -105,6 +105,36 @@ class DiscountTotalsDbTest {
     }
 
     @Test
+    fun `a test account's discounts are left out - the first order's line and a paid renewal alike`() {
+        val now = PaymentTestOrders.T0
+        fun firstOrder(key: String, account: String, amount: Long) {
+            val order = PaymentTestOrders.order(id = "ord_" + key.padEnd(32, 'a'), dedupeKey = "dk_$key", accountId = account, amount = PaymentAmount(1000, "KRW"))
+            PaymentDb.newStore().inTransaction { tx ->
+                tx.insertOrderIfAbsent(order)
+                tx.insertOrderDiscount(line(1, "coupon", "cpn_x", amount, "KRW", OrderDiscountStatus.CONFIRMED, order.id))
+            }
+        }
+        fun renewal(key: String, account: String, discount: Long) {
+            val sub = PaymentTestOrders.subscription(id = "sub_" + key.padEnd(32, 'c'), accountId = account)
+            val stages = listOf(dev.sumin.skeleton.common.discount.DiscountStage(dev.sumin.skeleton.common.discount.DiscountStageType.PERCENT, 50, null, null))
+            PaymentDb.newStore().inTransaction { tx ->
+                tx.insertSubscriptionIfAbsent(sub)
+                tx.insertSubscriptionDiscount(dev.sumin.skeleton.payment.SubscriptionDiscount(sub.id, "coupon", "cpn_x", "half", stages, 1, dev.sumin.skeleton.payment.SubscriptionDiscountStatus.ACTIVE, now, now))
+                tx.insertOrderIfAbsent(
+                    PaymentTestOrders.order(id = "ord_" + key.padEnd(32, 'd'), dedupeKey = "dk_$key", accountId = account, status = dev.sumin.skeleton.payment.PaymentOrderStatus.PAID, amount = PaymentAmount(10_000 - discount, "KRW"))
+                        .copy(kind = dev.sumin.skeleton.payment.PaymentOrderKind.SUBSCRIPTION_RENEWAL, originType = dev.sumin.skeleton.payment.PaymentOriginType.SUBSCRIPTION, originRef = sub.id, originalAmount = 10_000, discountAmount = discount),
+                )
+            }
+        }
+        firstOrder("real1", "acc_real", 600); firstOrder("test1", "acc_test", 900)
+        renewal("real2", "acc_real", 400); renewal("test2", "acc_test", 500)
+
+        assertEquals(listOf(CurrencyAmount("KRW", 2400)), totals.confirmedTotals("coupon", listOf("cpn_x")), "no filter - nobody is left out")
+        val withoutTest = JdbcDiscountTotals(PaymentDb.jdbc) { column -> "$column <> 'acc_test'" }
+        assertEquals(listOf(CurrencyAmount("KRW", 1000)), withoutTest.confirmedTotals("coupon", listOf("cpn_x")))
+    }
+
+    @Test
     fun `a reference list longer than one chunk is asked in pieces and added up`() {
         order("long", listOf({ id -> line(1, "coupon", "cpn_first", 100, "KRW", OrderDiscountStatus.CONFIRMED, id) }))
         order("long2", listOf({ id -> line(1, "coupon", "cpn_last", 250, "KRW", OrderDiscountStatus.CONFIRMED, id) }))
