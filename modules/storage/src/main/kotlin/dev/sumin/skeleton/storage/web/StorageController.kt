@@ -8,6 +8,7 @@ import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.storage.AbortMultipartUploadRequest
 import dev.sumin.skeleton.storage.CompleteMultipartUploadRequest
 import dev.sumin.skeleton.storage.CompletedUploadPart
+import dev.sumin.skeleton.storage.ListUploadedPartsRequest
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.PresignedDownloadRequest
 import dev.sumin.skeleton.storage.PresignedMultipartUploadPartRequest
@@ -229,11 +230,13 @@ class StorageController(
     fun presignPart(authentication: Authentication?, @Valid @RequestBody request: StorageMultipartPartRequest): Any {
         requireMultipart()
         val key = ownedKey(authentication.accountId(), request.key)
-        // 조각 하나가 파일 전체 상한보다 클 수는 없다 - 서명 전에 거절한다 (최종 크기는 완료 때 다시 본다)
+        // 서명 전에 거절한다 (최종 크기는 완료 때 다시 본다). 길이가 서명에 안 들어가면 조각이 얼마든 커질 수 있어 contentLength 는 필수다
         val max = validator.rule.maxSizeBytes
-        if (request.contentLength != null && request.contentLength > max) {
-            throw sizeRejected(request.contentLength, max)
-        }
+        val length = request.contentLength ?: throw partRejected("CONTENT_LENGTH_REQUIRED", "contentLength is required for a multipart part.")
+        if (length > max) throw sizeRejected(length, max)
+        // 마지막 조각 말고는 모두 5MiB 이상이라야 하므로 상한을 채우는 데 필요한 조각 수가 번호의 한도다
+        val maxParts = (max / MIN_PART_BYTES + if (max % MIN_PART_BYTES == 0L) 0 else 1).coerceAtLeast(1)
+        if (request.partNumber > maxParts) throw partRejected("PART_NUMBER_TOO_HIGH", "Part number ${request.partNumber} exceeds $maxParts, the most parts the size limit $max allows.")
         val part = storage.presignMultipartUploadPart(
             PresignedMultipartUploadPartRequest(key, request.uploadId, request.partNumber, request.contentLength),
         )
@@ -246,12 +249,22 @@ class StorageController(
     fun completeMultipart(authentication: Authentication?, @Valid @RequestBody request: StorageMultipartCompleteRequest): Any {
         requireMultipart()
         val key = ownedKey(authentication.accountId(), request.key)
+        val max = validator.rule.maxSizeBytes
+        // 마치기 전에 올라간 조각의 합을 본다 - 넘으면 마치지 않고 abort 해 객체가 아예 안 생긴다. 조각 목록을 모르는 저장소는 아래 마친 뒤 검사만 한다
+        val uploaded = try {
+            storage.listParts(ListUploadedPartsRequest(key, request.uploadId)).filter { part -> request.parts.any { it.partNumber == part.partNumber } }.sumOf { it.sizeBytes }
+        } catch (e: UnsupportedOperationException) {
+            null
+        }
+        if (uploaded != null && uploaded > max) {
+            storage.abortMultipartUpload(AbortMultipartUploadRequest(key, request.uploadId))
+            throw sizeRejected(uploaded, max)
+        }
         val completed = storage.completeMultipartUpload(
             CompleteMultipartUploadRequest(key, request.uploadId, request.parts.map { CompletedUploadPart(it.partNumber, it.eTag) }),
         )
         // 조각 크기는 클라이언트가 정하므로 합친 최종 크기가 상한을 넘으면 지우고 거절한다
         val size = storage.metadata(key)?.sizeBytes
-        val max = validator.rule.maxSizeBytes
         if (size != null && size > max) {
             storage.delete(key)
             throw sizeRejected(size, max)
@@ -273,11 +286,18 @@ class StorageController(
         if (!web.multipart.enabled) throw ApplicationException("Multipart upload is disabled", StorageErrorCode.MULTIPART_DISABLED)
     }
 
-    private fun sizeRejected(size: Long, max: Long) = ApplicationException(
-        message = "File rejected: SIZE_TOO_LARGE",
+    private fun sizeRejected(size: Long, max: Long) = partRejected(StorageFileValidationErrorCode.SIZE_TOO_LARGE.name, "File size $size exceeds maximum $max.")
+
+    private fun partRejected(code: String, message: String) = ApplicationException(
+        message = "File rejected: $code",
         errorCode = StorageErrorCode.FILE_REJECTED,
-        data = mapOf("errors" to listOf(StorageValidationIssue(StorageFileValidationErrorCode.SIZE_TOO_LARGE.name, "File size $size exceeds maximum $max."))),
+        data = mapOf("errors" to listOf(StorageValidationIssue(code, message))),
     )
+
+    private companion object {
+        /** S3 계열 멀티파트의 최소 조각 크기(마지막 조각 제외) */
+        const val MIN_PART_BYTES = 5L * 1024 * 1024
+    }
 
     private fun requireAccepted(request: StorageCandidateRequest) {
         val result = validator.validate(request.toCandidate())

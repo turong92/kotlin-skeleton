@@ -40,7 +40,18 @@ class FakePresignedStorage : PresignedStorage {
         return PresignedMultipartUploadPart(request.key, request.uploadId, request.partNumber, "PUT", URI("http://s3.test/${request.key}?part=${request.partNumber}"), emptyMap(), expires)
     }
 
-    override fun completeMultipartUpload(request: CompleteMultipartUploadRequest) = CompletedMultipartUpload(request.key, request.uploadId, "etag-all")
+    var completedUploads = 0
+
+    /** 이어 올리기 목록 - null 이면 이 저장소는 조각 목록을 모른다(기본 구현처럼 던진다) */
+    var listedParts: List<UploadedPart>? = null
+
+    override fun listParts(request: ListUploadedPartsRequest): List<UploadedPart> =
+        listedParts ?: throw UnsupportedOperationException("no listParts")
+
+    override fun completeMultipartUpload(request: CompleteMultipartUploadRequest): CompletedMultipartUpload {
+        completedUploads++
+        return CompletedMultipartUpload(request.key, request.uploadId, "etag-all")
+    }
 
     override fun abortMultipartUpload(request: AbortMultipartUploadRequest) {
         aborted += request

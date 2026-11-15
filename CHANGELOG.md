@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### storage - 멀티파트가 크기 상한을 우회하던 구멍 (2026-11-15)
 
 - `POST /api/v1/storage/multipart/complete` 가 합친 객체의 실제 크기를 `skeleton.storage.validation.max-size-bytes` 와 대 보고, 넘으면 객체를 지우고 400 `STORAGE.FILE_REJECTED`(`SIZE_TOO_LARGE`)로 거절한다. 조각 크기를 클라이언트가 정해 상한을 우회할 수 있었다(객체 저장소 비용 사고). `/multipart/part` 는 `contentLength` 가 상한보다 크면 서명 전에 같은 400 이다.
+- **호환 변경**: `/multipart/part` 는 `contentLength` 가 필수이고 조각 번호가 `ceil(max-size-bytes / 5MiB)` 이하여야 한다(아니면 400 `FILE_REJECTED`: `CONTENT_LENGTH_REQUIRED` · `PART_NUMBER_TOO_HIGH`). `/multipart/complete` 는 마치기 전에 올라간 조각의 합이 상한을 넘으면 마치지 않고 abort 한다.
 - 새 설정 `skeleton.storage.web.multipart.enabled`(기본 `true` = 지금 동작). `false` 면 멀티파트 네 길이 모두 404 `STORAGE.MULTIPART_DISABLED` 이고 `/presign` 은 그대로다.
 
 ### scheduler - 밖의 스케줄러로 돌리기 (2026-11-13)

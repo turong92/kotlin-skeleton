@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.storage.web
 
+import dev.sumin.skeleton.storage.UploadedPart
 import dev.sumin.skeleton.storagetest.FakePresignedStorage
 import dev.sumin.skeleton.storagetest.StorageWebTestApplication
 import kotlin.test.Test
@@ -85,9 +86,9 @@ class StorageWebTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.value.uploadId").value("upload-1"))
             .andExpect(jsonPath("$.value.key").value(org.hamcrest.Matchers.startsWith("uploads/acc_a/")))
-        postJson("/api/v1/storage/multipart/part", """{"key":"uploads/acc_a/z/v.txt","uploadId":"upload-1","partNumber":2,"contentLength":5}""")
-            .andExpect(jsonPath("$.value.partNumber").value(2))
-            .andExpect(jsonPath("$.value.url").value(org.hamcrest.Matchers.endsWith("part=2")))
+        postJson("/api/v1/storage/multipart/part", """{"key":"uploads/acc_a/z/v.txt","uploadId":"upload-1","partNumber":1,"contentLength":5}""")
+            .andExpect(jsonPath("$.value.partNumber").value(1))
+            .andExpect(jsonPath("$.value.url").value(org.hamcrest.Matchers.endsWith("part=1")))
         postJson("/api/v1/storage/multipart/complete", """{"key":"uploads/acc_a/z/v.txt","uploadId":"upload-1","parts":[{"partNumber":1,"eTag":"e1"}]}""")
             .andExpect(jsonPath("$.value.eTag").value("etag-all"))
         postJson("/api/v1/storage/multipart/abort", """{"key":"uploads/acc_a/z/v.txt","uploadId":"upload-1"}""")
@@ -126,6 +127,33 @@ class StorageWebTest {
             .andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("STORAGE.FILE_REJECTED"))
         assertEquals(before, storage.signedParts)
+    }
+
+    @Test
+    fun `a part without contentLength or with a number beyond what the limit allows is refused before signing`() {
+        val before = storage.signedParts
+        // contentLength 가 없으면 서명에 길이가 안 들어가 조각이 얼마든 커질 수 있다
+        postJson("/api/v1/storage/multipart/part", """{"key":"uploads/acc_a/z/v.txt","uploadId":"upload-1","partNumber":1}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("STORAGE.FILE_REJECTED"))
+        // 상한 1000 바이트는 5MiB 조각 하나면 충분하다 - 둘째 조각부터는 상한을 넘기려는 시도다
+        postJson("/api/v1/storage/multipart/part", """{"key":"uploads/acc_a/z/v.txt","uploadId":"upload-1","partNumber":2,"contentLength":5}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("STORAGE.FILE_REJECTED"))
+        assertEquals(before, storage.signedParts)
+    }
+
+    @Test
+    fun `multipart complete aborts instead of finishing when the uploaded parts already exceed the limit`() {
+        val key = "uploads/acc_a/big2/v.txt"
+        storage.listedParts = listOf(UploadedPart(1, "e1", 900), UploadedPart(2, "e2", 900))
+        val completedBefore = storage.completedUploads
+        postJson("/api/v1/storage/multipart/complete", """{"key":"$key","uploadId":"upload-9","parts":[{"partNumber":1,"eTag":"e1"},{"partNumber":2,"eTag":"e2"}]}""")
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.data.errors[0].code").value("SIZE_TOO_LARGE"))
+        assertTrue(storage.aborted.any { it.uploadId == "upload-9" })
+        assertEquals(completedBefore, storage.completedUploads)   // 마치지 않았으니 객체가 아예 안 생겼다
+        storage.listedParts = null
     }
 
     @Test
