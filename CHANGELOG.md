@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### notification-scheduled · notification-scheduled-jdbc - 사람마다 따로 예약하는 푸시 (2026-11-15)
+
+- 새 모듈 `notification-scheduled`(+ 저장소 `notification-scheduled-jdbc`, PostgreSQL · MySQL, 표 `scheduled_pushes`, 마이그레이션 `V20261115230000__scheduled_pushes.sql`). **기본 꺼짐** - `skeleton.notification.scheduled.enabled=true` + `type`. 앱이 계기마다 `ScheduledPushes.schedule(ScheduledPush(key, recipientId, runAt, title, body, link, advertising))` 로 한 사람에게 T 시각 푸시를 예약하고 `cancel(key)` 로 취소한다 - 계기는 앱이 정하고 모듈은 모른다. 같은 키로 다시 예약하면 아직 안 나간 예약을 바꾸고, 이미 나간 키는 그대로 둔다(같은 계기가 여러 번 일어나도 한 통).
+- 광고성(`advertising = true`)은 기존 광고 게이트를 그대로 탄다: 동의가 없으면 건너뛰고, 야간 동의가 없는 야간이면 다음 08시로 미루고, 제목에 `(광고)`. 광고 종류는 `advertising-type`(`advertising.types` 안이어야 한다), 정보성은 `type`. 한 사람이 24시간에 받는 개수 상한 `daily-limit`(기본 없음, 닿으면 건너뜀).
+- 여러 인스턴스에서 한 번만: 시각이 된 줄을 조건부 갱신으로 집고(임대 `lease` 5분, 집은 쪽이 죽으면 그 뒤 다시 나간다), 알림 이벤트 id 가 키에서 정해져 알림함이 중복을 합친다. 1분마다 `scheduler` 타이머가 훑고, 요청 구동 모드(인스턴스 0대 배포)는 `OnRequestTask` `notification-scheduled-sweep` 이 훑는다. 탈퇴 시 그 사람의 예약을 지운다(`AccountErasureListener`). 끝난 줄은 `keep-finished`(30일) 뒤 지운다. 통계는 `ScheduledPushes.stats()`(예약 중 · 보낸 · 건너뛴 수).
+
 ### inquiry - 방어 셋 (2026-11-15)
 
 - 본문 · 답장 이메일에 NUL 글자(U+0000)가 있으면 DB 에 닿기 전에 400 `INQUIRY.INVALID` (PostgreSQL `text` 가 거부해 500 이던 것).

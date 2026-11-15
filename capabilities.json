@@ -2669,6 +2669,74 @@
       }
     },
     {
+      "id": "notification-scheduled",
+      "kind": "module",
+      "module": "notification-scheduled",
+      "path": "modules/notification-scheduled",
+      "status": "experimental",
+      "summary": "사람마다 따로 예약하는 푸시 — 앱이 한 사람에게 T 시각에 보낼 푸시를 예약하고(같은 키로 다시 예약하면 바꾼다) 키로 취소한다. 계기는 앱이 정하고 모듈은 모른다. 광고성은 기존 동의 게이트(동의 없으면 안 보냄 · 야간은 다음 08시 · (광고) 표기)를 그대로 타고, 하루 상한은 설정(기본 없음), 여러 인스턴스에서 한 번만 나가며 0대 배포에서도 돈다, 탈퇴하면 예약이 지워진다. 저장은 notification-scheduled-jdbc.",
+      "starter": false,
+      "newProjectFlag": "--modules notification-scheduled,notification-scheduled-jdbc",
+      "autoIncludes": ["notification", "scheduler"],
+      "needs": {
+        "requires": ["notification-scheduled-jdbc"],
+        "oneOf": [],
+        "optional": ["notification-legal", "notification-push", "scheduler"]
+      },
+      "config": {
+        "prefixes": ["skeleton.notification.scheduled"],
+        "snippet": "docs/config/modules/notification-scheduled.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/notification-scheduled.md"],
+      "frontend": null,
+      "notFor": [
+        "notification-scheduled 는 저장소를 모른다 — notification-scheduled-jdbc 를 같이 고른다",
+        "꺼짐이 기본이다 — skeleton.notification.scheduled.enabled=true 와 알림 종류(type)를 앱 yml 이 정한다",
+        "모든 사람에게 한 번에 보내는 공지는 notification-broadcast 의 몫이다",
+        "언제 예약할지(읽다 만 사람 · 가입 다음 날 …)는 앱 코드가 정한다 — 이 모듈은 예약과 취소만 안다",
+        "푸시로 닿으려면 notification-push 를 켜고 push.types 에 종류를 넣는다 — 아니면 알림함에만 쌓인다",
+        "예약은 분 단위로 훑어 나간다(초 단위 정확도 없음), 이미 나가는 중인 예약은 취소로 막지 못한다"
+      ],
+      "keywords": {
+        "ko": ["예약 푸시", "개인 푸시 예약", "사람별 푸시", "리마인드 푸시", "푸시 예약 취소", "푸시 하루 상한"],
+        "en": [
+          "scheduled push",
+          "per-user push scheduling",
+          "reminder push",
+          "push cancel by key",
+          "push daily cap"
+        ]
+      }
+    },
+    {
+      "id": "notification-scheduled-jdbc",
+      "kind": "module",
+      "module": "notification-scheduled-jdbc",
+      "path": "modules/notification-scheduled-jdbc",
+      "status": "experimental",
+      "summary": "예약 푸시를 DB 에 저장하고 여러 인스턴스가 한 줄을 한 번만 집게 한다 (PostgreSQL · MySQL).",
+      "starter": false,
+      "newProjectFlag": "--modules notification-scheduled-jdbc",
+      "autoIncludes": ["notification", "notification-scheduled", "scheduler"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/notification-scheduled-jdbc.md"],
+      "frontend": null,
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["예약 푸시 저장"],
+        "en": ["scheduled push store"]
+      }
+    },
+    {
       "id": "notification-slack",
       "kind": "module",
       "module": "notification-slack",
@@ -4674,6 +4742,8 @@
         "notification-push",
         "notification-push-jdbc",
         "notification-push-legal",
+        "notification-scheduled",
+        "notification-scheduled-jdbc",
         "notification-slack",
         "notification-sse",
         "notification-webpush",

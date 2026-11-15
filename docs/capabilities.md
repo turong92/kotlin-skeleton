@@ -139,6 +139,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `notification-push` | 알림이 받는 사람의 기기로도 간다 — 기기 등록 · 종류 × 채널 푸시 끄기 · 잠금 화면 옵션 · 세션 연동. 저장은 notification-push-jdbc, 전달은 notification-webpush · notification-fcm. | `--modules notification-push,notification-push-jdbc` | 푸시 알림, 웹 푸시 기기 등록, 푸시 끄기, 종류별 푸시, 잠금 화면 내용 / push notification, device registration, per-type push mute, lock screen content | `@skeleton/push` |
 | `notification-push-jdbc` | 푸시 기기 · 「푸시만 끄기」를 DB 에 저장하고 발송 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules notification-push-jdbc` | 푸시 기기 저장, 푸시 작업 큐 / push device store, push job queue | — |
 | `notification-push-legal` | 광고성 푸시의 통지 · 안내 어댑터 — 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 판정은 notification 의 광고 게이트, 동의 정책은 notification-legal. | `--modules notification-push-legal` | 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark | `@skeleton/push` |
+| `notification-scheduled` | 사람마다 따로 예약하는 푸시 — 앱이 한 사람에게 T 시각에 보낼 푸시를 예약하고(같은 키로 다시 예약하면 바꾼다) 키로 취소한다. 계기는 앱이 정하고 모듈은 모른다. 광고성은 기존 동의 게이트(동의 없으면 안 보냄 · 야간은 다음 08시 · (광고) 표기)를 그대로 타고, 하루 상한은 설정(기본 없음), 여러 인스턴스에서 한 번만 나가며 0대 배포에서도 돈다, 탈퇴하면 예약이 지워진다. 저장은 notification-scheduled-jdbc. | `--modules notification-scheduled,notification-scheduled-jdbc` | 예약 푸시, 개인 푸시 예약, 사람별 푸시, 리마인드 푸시, 푸시 예약 취소, 푸시 하루 상한 / scheduled push, per-user push scheduling, reminder push, push cancel by key, push daily cap | — |
+| `notification-scheduled-jdbc` | 예약 푸시를 DB 에 저장하고 여러 인스턴스가 한 줄을 한 번만 집게 한다 (PostgreSQL · MySQL). | `--modules notification-scheduled-jdbc` | 예약 푸시 저장 / scheduled push store | — |
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
 | `notification-sse` | 알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만. | `--modules notification-sse` | 실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시 / realtime notification, sse, server-sent events, push notification | `@skeleton/realtime` |
 | `notification-webpush` | 웹 푸시(VAPID) 전달 수단 — 브라우저 구독으로 푸시를 보낸다. RFC 8291 암호화(JDK) · 끝점 허용 목록(SSRF 방어) · 키 쌍 기동 검사. notification-push 의 PushSender 로 끼운다. | `--modules notification-webpush` | 웹 푸시, 브라우저 푸시, VAPID / web push, browser push, VAPID | `@skeleton/push` |
@@ -1242,6 +1244,36 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다
 - 키워드: 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark
 
+### `notification-scheduled` — 사람마다 따로 예약하는 푸시 — 앱이 한 사람에게 T 시각에 보낼 푸시를 예약하고(같은 키로 다시 예약하면 바꾼다) 키로 취소한다. 계기는 앱이 정하고 모듈은 모른다. 광고성은 기존 동의 게이트(동의 없으면 안 보냄 · 야간은 다음 08시 · (광고) 표기)를 그대로 타고, 하루 상한은 설정(기본 없음), 여러 인스턴스에서 한 번만 나가며 0대 배포에서도 돈다, 탈퇴하면 예약이 지워진다. 저장은 notification-scheduled-jdbc.
+
+- 종류 · 상태: module · experimental — 위치 `modules/notification-scheduled`
+- 켜는 법: `--modules notification-scheduled,notification-scheduled-jdbc`
+- 의존 한 줄: `implementation(project(":modules:notification-scheduled"))`
+- 자동으로 따라온다: `notification`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `scheduler`
+- 함께 골라야 한다: `notification-scheduled-jdbc`
+- 설정 접두사 `skeleton.notification.scheduled` — 키와 기본값 `docs/config/modules/notification-scheduled.yml`
+- 문서: `docs/modules/notification-scheduled.md`
+- 쓰지 않는 경우:
+  - notification-scheduled 는 저장소를 모른다 — notification-scheduled-jdbc 를 같이 고른다
+  - 꺼짐이 기본이다 — skeleton.notification.scheduled.enabled=true 와 알림 종류(type)를 앱 yml 이 정한다
+  - 모든 사람에게 한 번에 보내는 공지는 notification-broadcast 의 몫이다
+  - 언제 예약할지(읽다 만 사람 · 가입 다음 날 …)는 앱 코드가 정한다 — 이 모듈은 예약과 취소만 안다
+  - 푸시로 닿으려면 notification-push 를 켜고 push.types 에 종류를 넣는다 — 아니면 알림함에만 쌓인다
+  - 예약은 분 단위로 훑어 나간다(초 단위 정확도 없음), 이미 나가는 중인 예약은 취소로 막지 못한다
+- 키워드: 예약 푸시, 개인 푸시 예약, 사람별 푸시, 리마인드 푸시, 푸시 예약 취소, 푸시 하루 상한 / scheduled push, per-user push scheduling, reminder push, push cancel by key, push daily cap
+
+### `notification-scheduled-jdbc` — 예약 푸시를 DB 에 저장하고 여러 인스턴스가 한 줄을 한 번만 집게 한다 (PostgreSQL · MySQL).
+
+- 종류 · 상태: module · experimental — 위치 `modules/notification-scheduled-jdbc`
+- 켜는 법: `--modules notification-scheduled-jdbc`
+- 의존 한 줄: `implementation(project(":modules:notification-scheduled-jdbc"))`
+- 자동으로 따라온다: `notification`, `notification-scheduled`, `scheduler`
+- 문서: `docs/modules/notification-scheduled-jdbc.md`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 예약 푸시 저장 / scheduled push store
+
 ### `notification-slack` — 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다.
 
 - 종류 · 상태: module · stable — 위치 `modules/notification-slack`
@@ -1979,7 +2011,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `ads-admob`, `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-apple`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `auth-web-handoff`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `idempotency-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-appstore`, `payment-googleplay`, `payment-iap`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `ads-admob`, `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-apple`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `auth-web-handoff`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `idempotency-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-scheduled`, `notification-scheduled-jdbc`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-appstore`, `payment-googleplay`, `payment-iap`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

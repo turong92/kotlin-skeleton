@@ -142,6 +142,7 @@ fails when this table and the prefixes found in module code differ.
 | `notification` | `skeleton.notification.advertising` |
 | `notification-push` | `skeleton.notification.push` |
 | `notification-broadcast` | `skeleton.notification.broadcast` |
+| `notification-scheduled` | `skeleton.notification.scheduled` |
 | `notification-mail` | `skeleton.notification-mail` |
 | `notification-slack` | `skeleton.notification.slack` |
 | `notification-webpush` | `skeleton.notification.webpush` |
@@ -243,6 +244,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `notification-push-jdbc` | yes | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migrations `push_devices` · `push_type_mutes`, as above) | — |
 | `notification-broadcast` | off until `skeleton.notification.broadcast.enabled=true` + `types` | the `BroadcastStore` · `BroadcastTasks` beans — `notification-broadcast-jdbc` provides them — plus at least one `AudienceSource` bean (`account` gives `all` · `role`, `workspace` gives `workspace`); startup fails naming what is missing | `notification-push` for push, `skeleton.notification.broadcast.admin.enabled=true` for the operator routes |
 | `notification-broadcast-jdbc` | wired only when broadcast is on | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migrations `broadcasts` · `broadcast_channel_stats`, as above) | — |
+| `notification-scheduled` | off until `skeleton.notification.scheduled.enabled=true` + `type` | the `ScheduledPushStore` bean — `notification-scheduled-jdbc` provides it, startup fails naming the module | `notification-push` (+ `push.types`) to reach devices, `notification-legal` for advertising pushes |
+| `notification-scheduled-jdbc` | wired only when scheduled push is on | a `DataSource` + one `db-*` module (+ its migration `scheduled_pushes`, as above) | — |
 | `notification-webpush` | off until `skeleton.notification.webpush.enabled=true` | a VAPID key pair (`public-key` · `private-key`) + `subject` — protected environments (`skeleton.env=stage\|prod`) refuse to start without them, with a mismatched pair, or with the sample test key; elsewhere there is just no sender | `notification-push` to feed it |
 | `notification-fcm` | off until `skeleton.notification.fcm.enabled=true` | the Firebase service account key (`credentials`, base64 of the JSON) — protected environments (`skeleton.env=stage\|prod`) refuse to start when it is empty or unreadable; elsewhere there is just no sender | `notification-push` to feed it |
 | `notification-legal` | off until `skeleton.notification.advertising.types` is set and `legal` is present | `legal` (+ `legal-jdbc`) — advertising types without it fail startup naming this module | — |

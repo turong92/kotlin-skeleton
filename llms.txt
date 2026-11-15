@@ -147,6 +147,8 @@
 - notification-push: 알림이 받는 사람의 기기로도 간다 — 기기 등록 · 종류 × 채널 푸시… [푸시 알림, 웹 푸시 기기 등록]
 - notification-push-jdbc: 푸시 기기 · 「푸시만 끄기」를 DB 에 저장하고 발송 작업을… [푸시 기기 저장, 푸시 작업 큐]
 - notification-push-legal: 광고성 푸시의 통지 · 안내 어댑터 — 동의 변경 통지 · 2년 재확인… [광고 푸시 동의, 마케팅 수신 동의]
+- notification-scheduled: 사람마다 따로 예약하는 푸시 — 앱이 한 사람에게 T 시각에 보낼… [예약 푸시, 개인 푸시 예약]
+- notification-scheduled-jdbc: 예약 푸시를 DB 에 저장하고 여러 인스턴스가 한 줄을 한 번만 집게… [예약 푸시 저장]
 - notification-slack: 알림과 @SlackException 예외 알림을 Slack 웹훅으로… [슬랙 알림, 슬랙]
 - notification-sse: 알림을 Server-Sent Events 로 브라우저에 실시간… [실시간 알림, SSE]
 - notification-webpush: 웹 푸시(VAPID) 전달 수단 — 브라우저 구독으로 푸시를 보낸다. [웹 푸시, 브라우저 푸시]
