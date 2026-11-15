@@ -28,6 +28,9 @@ import org.springframework.transaction.PlatformTransactionManager
 class CouponJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(CouponStore::class)
-    fun jdbcCouponStore(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect, json: JsonCodec): CouponStore =
-        JdbcCouponStore(NamedParameterJdbcTemplate(dataSource), transactionManager, dialect, json)
+    fun jdbcCouponStore(
+        dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect, json: JsonCodec,
+        filter: org.springframework.beans.factory.ObjectProvider<dev.sumin.skeleton.common.account.TestAccountFilter>,
+    ): CouponStore =
+        JdbcCouponStore(NamedParameterJdbcTemplate(dataSource), transactionManager, dialect, json, filter.getIfAvailable { dev.sumin.skeleton.common.account.TestAccountFilter.NONE })
 }

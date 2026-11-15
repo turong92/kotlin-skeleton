@@ -9,15 +9,15 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 
 /**
  * 시험 계정 표 `account_test_marks` — 계정당 한 줄. 이미 있으면 처음 표시한 줄을 지킨다(`insertIgnore` — 예외를 삼키면 PG 트랜잭션이 죽는다).
- * 넣었는지는 먼저 읽어 판정한다: 두 운영자가 같은 순간 표시하면 감사 줄이 둘 남을 수 있을 뿐 표는 한 줄이다.
+ * 넣었는지는 먼저 읽고(이미 있으면 false) 넣은 행 수로 판정한다. 표는 늘 한 줄이고, 두 운영자가 같은 순간 표시할 때 MySQL 에서만 감사 줄이 둘 남을 수 있다.
  */
 class JdbcTestAccountMarks(private val jdbc: NamedParameterJdbcTemplate, private val dialect: SqlDialect) : TestAccountMarks {
     private val insert = dialect.insertIgnore("account_test_marks", listOf("account_id", "marked_by", "marked_at"), listOf("account_id"))
 
     override fun mark(accountId: String, by: String, at: Instant): Boolean {
         if (find(accountId) != null) return false
-        jdbc.update(insert, mapOf("account_id" to accountId, "marked_by" to by, "marked_at" to dialect.instantParam(at)))
-        return true
+        // PostgreSQL 은 `on conflict do nothing` 이 0 을 돌려줘 동시에 표시해도 한쪽만 true. MySQL 은 `on duplicate key update` 가 이미 있는 줄에도 1 을 돌려줄 수 있어(SqlDialect.insertIgnore) 위의 먼저 읽기가 받친다
+        return jdbc.update(insert, mapOf("account_id" to accountId, "marked_by" to by, "marked_at" to dialect.instantParam(at))) == 1
     }
 
     override fun clear(accountId: String): Boolean = jdbc.update("delete from account_test_marks where account_id = :id", mapOf("id" to accountId)) == 1

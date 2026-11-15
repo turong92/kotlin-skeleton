@@ -17,10 +17,9 @@ import org.springframework.context.annotation.Bean
 import org.springframework.web.context.request.RequestContextHolder
 import org.springframework.web.context.request.ServletRequestAttributes
 
-/** 서블릿 웹 앱에서만 — 기록에 접속 IP · 기기 정보를 싣고, 켰을 때(`skeleton.audit.admin.enabled=true`) 운영자 조회 경로를 연다 */
+/** 서블릿 웹 앱에서만 — 기록에 접속 IP · 기기 정보를 싣는다. Spring Security 가 없어도 선다(조회 경로 [AuditAdminAutoConfiguration] 와 달리) */
 @AutoConfiguration(after = [AuditJdbcAutoConfiguration::class])
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-@ConditionalOnClass(name = ["org.springframework.security.core.Authentication"])
 class AuditWebAutoConfiguration {
     /** 지금 처리 중인 요청의 출처 — 요청 밖(작업 · 시작 때)이면 null. IP 는 플랫폼의 클라이언트 IP 규칙(`skeleton.web.client-ip`)을 따른다 */
     @Bean
@@ -32,7 +31,13 @@ class AuditWebAutoConfiguration {
             request?.let { RequestOrigin(ips.of(it).ip, it.getHeader("User-Agent")) }
         }
     }
+}
 
+/** 켰을 때(`skeleton.audit.admin.enabled=true`) 운영자 조회 경로를 연다 — 서블릿 웹 앱 + Spring Security 가 있을 때만 */
+@AutoConfiguration(after = [AuditJdbcAutoConfiguration::class])
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+@ConditionalOnClass(name = ["org.springframework.security.core.Authentication"])
+class AuditAdminAutoConfiguration {
     @Bean
     @ConditionalOnBean(AuditLogStore::class)
     @ConditionalOnProperty(prefix = "skeleton.audit.admin", name = ["enabled"], havingValue = "true")

@@ -12,12 +12,17 @@ import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.authz.OperatorRef
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
+import jakarta.validation.constraints.AssertTrue
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
 import java.time.Instant
+import org.springdoc.core.annotations.ParameterObject
 import org.springframework.security.authentication.AnonymousAuthenticationToken
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ModelAttribute
 import org.springframework.web.bind.annotation.RestController
 
 /**
@@ -33,21 +38,10 @@ class AuditAdminController(private val store: AuditLogStore, private val access:
         description = "Filters: from (inclusive) / to (exclusive) as ISO-8601 instants, actorId, targetType, targetId. Page with cursor = the previous page's nextCursor. 400 for from after to or a size outside 1..100.",
     )
     @GetMapping
-    fun list(
-        authentication: Authentication?,
-        @RequestParam(required = false) from: Instant?,
-        @RequestParam(required = false) to: Instant?,
-        @RequestParam(required = false) actorId: String?,
-        @RequestParam(required = false) targetType: String?,
-        @RequestParam(required = false) targetId: String?,
-        @RequestParam(required = false) cursor: Long?,
-        @RequestParam(defaultValue = "50") size: Int,
-    ): CursorResponse<AuditEntry> {
+    fun list(authentication: Authentication?, @Valid @ParameterObject @ModelAttribute params: AuditLogParams): CursorResponse<AuditEntry> {
         operator(authentication)
-        if (size !in 1..MAX_SIZE) throw ApplicationException("size must be between 1 and $MAX_SIZE", PlatformErrorCode.VALIDATION_FAILED)
-        if (from != null && to != null && from.isAfter(to)) throw ApplicationException("from must not be after to", PlatformErrorCode.VALIDATION_FAILED)
-        val lines = store.find(AuditQuery(from, to, actorId, targetType, targetId, cursor, size + 1))
-        return Response.ok(lines.take(size), lines.size > size) { it.id }
+        val lines = store.find(AuditQuery(params.from, params.to, params.actorId, params.targetType, params.targetId, params.cursor, params.size + 1))
+        return Response.ok(lines.take(params.size), lines.size > params.size) { it.id }
     }
 
     private fun operator(authentication: Authentication?) {
@@ -57,8 +51,20 @@ class AuditAdminController(private val store: AuditLogStore, private val access:
         val roles = authentication.authorities.mapNotNull { it.authority?.removePrefix("ROLE_") }.toSet()
         access.require(OperatorRef(authentication.name, roles), AuditPermissions.READ)
     }
+}
 
-    private companion object {
-        const val MAX_SIZE = 100
-    }
+/** 조회 조건 — `PageQuery` 와 같은 관례(Bean Validation, 어기면 `400 Validation failed` + `errors[]`). `size` 는 1~100, `from` 이 `to` 보다 늦으면 안 된다 */
+data class AuditLogParams(
+    val from: Instant? = null,
+    val to: Instant? = null,
+    val actorId: String? = null,
+    val targetType: String? = null,
+    val targetId: String? = null,
+    val cursor: Long? = null,
+    @field:Min(1)
+    @field:Max(100)
+    val size: Int = 50,
+) {
+    @get:AssertTrue(message = "from must not be after to")
+    val periodOrdered: Boolean get() = from == null || to == null || !from.isAfter(to)
 }

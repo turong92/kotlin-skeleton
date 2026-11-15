@@ -22,8 +22,8 @@ fun interface AuditOrigin {
 }
 
 /**
- * 운영 기록 표 `operator_audit_log` — **더하기만 한다**(수정 · 30일 안의 삭제는 트리거가 막는다). 기록은 부르는 쪽의 쓰기 트랜잭션에 합류한다:
- * 같은 연결을 쓰므로 운영 행동이 롤백되면 이 줄도 사라지고, 커밋되면 함께 남는다(행동 없이 기록만, 기록 없이 행동만 남지 않는다).
+ * 운영 기록 표 `operator_audit_log` — **더하기만 한다**(수정 · 30일 안의 삭제는 트리거가 막는다). 기록은 호출자가 연 트랜잭션이 있으면 거기에 합류한다(같은 연결):
+ * **쓰기 트랜잭션 안에서 부른 곳만** 행동과 함께 커밋 · 롤백된다. 트랜잭션 밖에서 부르는 곳(서비스 호출이 커밋된 뒤 컨트롤러가 따로 부르는 곳)은 줄이 따로 커밋되므로 기록이 실패해도 행동은 남는다 — 알려진 한계(`docs/modules/audit-jdbc.md`).
  */
 class JdbcOperatorAuditLog(
     private val jdbc: NamedParameterJdbcTemplate,

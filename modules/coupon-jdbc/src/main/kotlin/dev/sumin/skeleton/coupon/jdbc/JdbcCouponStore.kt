@@ -43,6 +43,8 @@ class JdbcCouponStore(
     transactionManager: PlatformTransactionManager,
     private val dialect: SqlDialect,
     private val json: JsonCodec,
+    /** 현황 숫자([countByStatus])에서 시험 계정을 뺀다 - 같은 화면의 할인 합계(`DiscountTotals`)와 맞추려고 */
+    private val filter: dev.sumin.skeleton.common.account.TestAccountFilter = dev.sumin.skeleton.common.account.TestAccountFilter.NONE,
 ) : CouponStore {
     private val transactions = TransactionTemplate(transactionManager)
 
@@ -108,7 +110,7 @@ class JdbcCouponStore(
         // 한 문장으로 읽는다 - 상태별 수와 「기한이 지났지만 아직 AVAILABLE 로 적힌」 수가 같은 시점이다
         jdbc.query(
             "select status, count(*) as n, sum(case when status = 'AVAILABLE' and expires_at is not null and expires_at <= :now then 1 else 0 end) as lapsed " +
-                "from coupons where definition_id = :d group by status",
+                "from coupons where definition_id = :d and ${filter.notTestSql("coupons.account_id")} group by status",
             mapOf("d" to definitionId, "now" to instant(now)),
         ) { rs ->
             val status = CouponStatus.valueOf(rs.getString("status"))

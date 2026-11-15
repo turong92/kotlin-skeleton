@@ -101,13 +101,14 @@ class OperatorAuditLogDbTest {
     fun `a line is deleted only after thirty days, and the retention sweep deletes in batches and keeps what is within the keep time`() {
         val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
         repeat(5) { insertRaw("old-$it", now.minus(Duration.ofDays(40))) }
+        insertRaw("margin", now.minus(Duration.ofDays(30)).minus(Duration.ofHours(6)))   // 30일은 지났지만 하루 여유 안 - 지우기는 시계가 어긋나도 거절되지 않게 이 줄을 아직 두고 지나간다
         insertRaw("edge", now.minus(Duration.ofDays(20)))   // 30일 안이라 데이터베이스가 지우지 못한다
         insertRaw("fresh", now.minus(Duration.ofDays(1)))
         assertFailsWith<DataAccessException> { jdbc.sql("delete from operator_audit_log where actor_id = :a and target_id = 'edge'").param("a", who).update() }
 
         val retention = AuditRetention(store, Duration.ofDays(30), TimeProvider.fixed(now), batch = 2)
         assertEquals(5, retention.purge())
-        assertEquals(listOf("fresh", "edge"), mine().map { it.targetId }, "newest first; neither is past the keep time")
+        assertEquals(listOf("fresh", "edge", "margin"), mine().map { it.targetId }, "newest first; none is past the keep time plus the one-day margin")
         assertEquals(0, retention.purge(), "a second sweep finds nothing")
     }
 

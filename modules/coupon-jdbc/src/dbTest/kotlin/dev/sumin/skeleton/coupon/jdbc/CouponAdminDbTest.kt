@@ -58,6 +58,8 @@ class CouponAdminDbTest {
     @Autowired lateinit var dataSource: DataSource
     @Autowired lateinit var dialect: SqlDialect
     @Autowired lateinit var jdbc: JdbcClient
+    @Autowired lateinit var transactionManager: org.springframework.transaction.PlatformTransactionManager
+    @Autowired lateinit var json: dev.sumin.skeleton.json.JsonCodec
 
     private lateinit var base: Instant
     private val seq = UUID.randomUUID().toString().take(8)
@@ -232,6 +234,18 @@ class CouponAdminDbTest {
         assertEquals(1L, CouponUsedMetric(template, dialect, leaveTestOut).series(range, DashboardInterval.DAY).data!!.sumOf { it.value })
         assertEquals(listOf("mixed $seq" to 1L), CouponTopUsedRanking(template, dialect, leaveTestOut).top(range, 10).data!!.map { it.label to it.values.single() })
         assertEquals(CouponStatus.USED, store.findCoupon(test.id)!!.status)
+    }
+
+    @Test
+    fun `the coupon status counts leave a test account out like the discount totals do`() {
+        val def = define(name = "counted $seq")
+        val real = give(def)
+        val test = give(def)
+        val plain = store.countByStatus(def.id, base)
+        assertEquals(2, plain.values.sum())
+        val leaveTestOut = TestAccountFilter { column -> "$column <> '${test.accountId}'" }
+        val counted = JdbcCouponStore(NamedParameterJdbcTemplate(dataSource), transactionManager, dialect, json, leaveTestOut).countByStatus(def.id, base)
+        assertEquals(1, counted.values.sum(), "only ${real.id} is counted")
     }
 
     @Test

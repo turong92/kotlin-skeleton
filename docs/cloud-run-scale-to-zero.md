@@ -133,11 +133,11 @@ skeleton:
 
 - 인스턴스가 N대이면 실제 한도는 대략 **N 배**다(요청이 어느 인스턴스로 가느냐에 따라 나뉜다).
 - **0대로 내려가거나 새 리비전으로 바뀌면 카운터가 사라진다.** 기다렸다 콜드스타트를 일으키면 한도가 처음부터 다시 시작한다.
-- 보호 환경에서 `skeleton.web.rate-limit.enabled=true` 인데 메모리 저장소이면 `RateLimitDeployGuard` 가 경고한다. **모듈 한도(위 표)만 쓰는 앱은 이 경고가 없다** — 같은 문제가 있는데도 말이다.
+- 보호 환경에서 메모리 저장소로 세면 가드가 경고한다: **계정 한도(가입 · 로그인 · 재설정 · 로그인 링크)는 `AccountDeployGuard`**, 경로 필터 `skeleton.web.rate-limit` 은 `RateLimitDeployGuard`. **그 밖의 모듈 한도(문의 · 2단계 인증 · 세션 갱신 등)는 같은 문제가 있는데도 경고가 없다**.
 
 고치는 길(위에서부터, 겹쳐도 된다):
 
-1. **`redis-rate-limit` 을 붙이고 Redis 를 잇는다**(`implementation(project(":modules:redis-rate-limit"))` + `skeleton.redis.*` — 호스트 · `ssl.enabled` · 비밀번호는 환경변수). 모듈이 `RateLimitStore` 빈을 내므로 위 표의 **모든** 한도(가입 · 로그인 · 코드 · 메일)가 `skeleton.web.rate-limit` 을 안 켜도 인스턴스 사이에 공유된다. 오류 정책 `skeleton.redis-rate-limit.failure-policy` 기본은 `FAIL_OPEN`(Redis 가 죽으면 한도 없이 통과) — 로그인 · 가입을 닫아야 하면 `FAIL_CLOSED`(Redis 장애 = 로그인 장애가 되니 알고 고른다). 키 접두사 `key-prefix` 는 환경마다 다르게.
+1. **`redis-rate-limit` 을 붙이고 Redis 를 잇는다**(`implementation(project(":modules:redis-rate-limit"))` + `skeleton.redis.*` — 호스트 · `ssl.enabled` · 비밀번호는 환경변수). 모듈이 `RateLimitStore` 빈을 내므로 위 표의 **모든** 한도(가입 · 로그인 · 코드 · 메일)가 `skeleton.web.rate-limit` 을 안 켜도 인스턴스 사이에 공유된다. 오류 정책 `skeleton.redis-rate-limit.failure-policy` 기본은 `FAIL_OPEN`(Redis 가 죽으면 한도 없이 통과) — 로그인 · 가입을 닫아야 하면 `FAIL_CLOSED`(Redis 장애 = 로그인 장애가 되니 알고 고른다). Redis 키 접두사 `skeleton.redis.key-prefix` 는 환경마다 다르게.
 2. **앞단 규칙**: 서비스 앞에 Cloudflare 같은 프록시가 있으면 `POST /api/v1/auth/login` · `/api/v1/account/sign-up` · `/api/v1/account/password/forgot` 에 IP 당 분당 몇 번 같은 규칙을 둔다 — 인스턴스 수와 콜드스타트에 흔들리지 않는다. 이때 클라이언트 IP 규칙(`skeleton.web.client-ip.mode`, [client-ip](client-ip.md))을 정해야 앱 쪽 한도의 키도 속이지 못한다.
 3. **캡차**: `captcha-turnstile` + `skeleton.account.captcha.required=true`(가입 · 재설정 · 재전송 · 매직 링크 요청에 토큰을 요구)는 카운터에 기대지 않아 인스턴스 수와 상관없다.
 4. 아무것도 못 붙이면: 한도를 **N 배가 돼도 괜찮은 값**으로 잡는다(최대 인스턴스 `--max-instances` 를 작게 유지하는 것과 같이). 메일 폭탄은 주소 하나당 한도(`per-email`)가 N 배여도 작아서 버티고, 로그인 대입은 `per-account` 가 N 배가 되므로 비밀번호 정책(`min-length` · `deny-common`)과 MFA 로 받친다.

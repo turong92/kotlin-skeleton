@@ -19,7 +19,8 @@ class AuditRetention(
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun purge(): Int {
-        val cutoff = time.now().minus(keep)
+        // 하루 여유: 앱 시계와 데이터베이스 시계가 어긋나도 keep 이 정확히 30일일 때 트리거의 30일 경계에 걸려 삭제가 거절되지 않게
+        val cutoff = time.now().minus(keep).minus(CLOCK_MARGIN)
         var total = 0
         while (true) {
             val deleted = store.purgeBefore(cutoff, batch)
@@ -28,6 +29,10 @@ class AuditRetention(
         }
         if (total > 0) log.info("audit retention: deleted {} operator audit lines older than {}", total, keep)
         return total
+    }
+
+    private companion object {
+        val CLOCK_MARGIN: Duration = Duration.ofDays(1)
     }
 
     /** `scheduler` 모듈이 있을 때 하루 한 번 돈다(없으면 표시가 무시된다 - 요청 구동 모드는 `audit-retention` 작업이 부른다) */
