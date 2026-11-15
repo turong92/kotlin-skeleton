@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### notification-broadcast - 앱 세그먼트로 보내기를 문서로 못박고, 대상을 비우면 전체 (2026-11-16)
+
+- 대상 고르기는 이미 `AudienceSource`(앱이 빈 하나로 등록 · 계정 id 오름차순 키셋 `page` · `count` · 보낼 때마다 다시 읽음)로 있다 - 앱 코드 쓰는 법 · 없는 `kind` · 제공자 예외 · 예약 때 재계산 · 광고 동의 / 야간이 대상에도 그대로임을 `docs/modules/notification-broadcast.md` 에 적고 시험으로 고정했다(`BroadcastAudienceStepTest`).
+- `BroadcastAudience.kind` 를 비우면(운영자 경로에서 `audience` 를 생략해도) `all` 로 본다. **호환 변경**: 예전엔 빈 `kind` 가 400 `UNKNOWN_AUDIENCE` 였다. `all` 을 내는 `AudienceSource`(`account`)가 없으면 같은 400 이다.
+
 ### notification · notification-legal · notification-mail · notification-jdbc - 광고 수신 동의(정보통신망법 §50) 빈칸 셋 (2026-11-16)
 
 - 후속: 법정 통지 매체 경고는 푸시가 두 종류를 `push.types` 에 안 넣었거나 메일러는 있는데 `MailSender` · `ContactAddresses` 가 없는 경우도 「매체 없음」으로 본다. 요청 구동 모드의 `advertising-reconfirm` 깨우기는 `reconfirm-scan-interval` 을 지키고(마지막 스캔 시각은 인스턴스 메모리) 프로젝트 모드에서는 타이머처럼 프로젝트마다 돈다. 푸시 앱이 `notification-push-jdbc` 를 빼면 표가 `advertising_notices` 로 바뀌어 재확인 안내가 한 번 더 갈 수 있다.

@@ -5,7 +5,12 @@ import java.time.Instant
 /** 공지 상태 — `DRAFT → SENDING|SCHEDULED → SENT`, 취소 · 실패는 중간에서 갈라진다 (스펙 §4) */
 enum class BroadcastStatus { DRAFT, SCHEDULED, SENDING, SENT, CANCELLED, FAILED }
 
-data class BroadcastAudience(val kind: String, val param: String? = null)
+/** 대상 = 앱이 등록한 `AudienceSource` 의 [kind] + 인자. 비워 두면 [ALL](전체, `account` 가 내는 기본 대상) */
+data class BroadcastAudience(val kind: String = ALL, val param: String? = null) {
+    companion object {
+        const val ALL = "all"
+    }
+}
 
 /** 운영자가 쓰는 내용 — 만들기 · 고치기의 입력 */
 data class BroadcastContent(

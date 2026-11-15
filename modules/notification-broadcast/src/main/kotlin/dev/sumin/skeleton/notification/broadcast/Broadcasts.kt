@@ -150,7 +150,7 @@ class Broadcasts internal constructor(
     }
 
     private fun checkedAudience(raw: BroadcastAudience): BroadcastAudience {
-        val kind = raw.kind.trim()
+        val kind = raw.kind.trim().ifEmpty { BroadcastAudience.ALL }
         val param = raw.param?.trim()?.takeIf { it.isNotEmpty() }
         val source = sources().firstOrNull { it.kind == kind } ?: throw BroadcastException(BroadcastErrorCode.UNKNOWN_AUDIENCE, "Unknown audience kind '$kind'")
         source.validate(param)?.let { throw BroadcastException(BroadcastErrorCode.INVALID_AUDIENCE, it, mapOf("reason" to it)) }

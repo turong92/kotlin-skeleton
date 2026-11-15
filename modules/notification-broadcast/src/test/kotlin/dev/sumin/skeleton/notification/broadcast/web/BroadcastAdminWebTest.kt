@@ -38,6 +38,7 @@ class BroadcastTestBeans {
     @Bean fun store(): BroadcastStore = FakeBroadcastStore()
     @Bean fun tasks(): BroadcastTasks = RecordingTasks()
     @Bean fun everyone(): AudienceSource = StaticAudience("everyone", listOf("acc_1", "acc_2", "acc_3"))
+    @Bean fun all(): AudienceSource = StaticAudience("all", listOf("acc_1", "acc_2", "acc_3", "acc_4"))
     @Bean fun pushDeclaration() = NotificationChannelDeclaration("push")
     @Bean fun access(): OperatorAccess = object : OperatorAccess {
         override fun permissionsOf(ref: OperatorRef): Set<String> = GRANTS[ref.accountId] ?: emptySet()
@@ -103,6 +104,13 @@ class BroadcastAdminWebTest {
     @Test
     fun `a link outside the app is refused`() {
         create(json.replace("/notices/1", "//evil.example")).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("BROADCAST.INVALID_LINK"))
+    }
+
+    @Test
+    fun `no audience means everyone, an unknown kind is still refused`() {
+        val noAudience = """{"type":"notice.service","title":"Maintenance"}"""
+        create(noAudience).andExpect(status().isOk).andExpect(jsonPath("$.value.audience.kind").value("all"))
+        create(json.replace("everyone", "ghost")).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("BROADCAST.UNKNOWN_AUDIENCE"))
     }
 
     @Test

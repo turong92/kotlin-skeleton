@@ -130,7 +130,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `migration` | 마이그레이션 공통 규칙 — DB 를 지우는 설정이 허용 프로필 밖에서 켜지면 시작을 막는 가드(도구 중립). | 스타터(apps/api)에 기본 포함 | 마이그레이션 가드, DB 초기화 방지, 스키마 보호 / migration guard, prevent db wipe, schema safety | — |
 | `migration-flyway` | Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름 규칙(V<UTC 14자리>__snake_case.sql) 검사. | 스타터(apps/api)에 기본 포함 | Flyway, 마이그레이션, DB 스키마 버전, 스키마 변경 / flyway, database migration, schema migration, schema version | — |
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 안 읽은 수 · 읽음 · 모두 읽음). 클릭 이동 링크 · 같은 열쇠 묶기 · 종류별 수신 끄기(/preferences, 끌 수 있는 종류는 설정) · 보관 정리(기본 꺼짐) · 커밋 뒤 전달. | `--modules notification` | 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기, 알림 묶기, 알림 링크, 알림 끄기, 알림 수신 설정, 알림 보관 정리 / notification, inbox, unread, mark as read, publish notification, collapse notifications, notification link, notification retention | `@skeleton/notifications` |
-| `notification-broadcast` | 공지 발송 — 서비스 운영자가 전체 · 역할 · 워크스페이스 · 앱 세그먼트에게 공지를 보낸다(알림함 + 푸시, 즉시 / 예약, 취소, 중간 실패 뒤 이어 보내기, 나에게 테스트, 광고성은 동의 없는 사람 제외, 전달 · 열람 · 푸시 클릭 통계). 받는 사람 묶음마다 기존 publish 를 부른다. 저장은 notification-broadcast-jdbc, 화면은 @skeleton/notifications/admin. | `--modules notification-broadcast,notification-broadcast-jdbc` | 공지 발송, 전체 공지, 공지 푸시, 대량 알림, 예약 발송, 공지 통계 / broadcast, announcement, bulk notification, scheduled send, push to all users, notice delivery stats | `@skeleton/notifications` |
+| `notification-broadcast` | 공지 발송 — 서비스 운영자가 전체 · 역할 · 워크스페이스 · 앱 세그먼트에게 공지를 보낸다(알림함 + 푸시, 즉시 / 예약, 취소, 중간 실패 뒤 이어 보내기, 나에게 테스트, 광고성은 동의 없는 사람 제외, 전달 · 열람 · 푸시 클릭 통계). 받는 사람 묶음마다 기존 publish 를 부른다. 저장은 notification-broadcast-jdbc, 화면은 @skeleton/notifications/admin. | `--modules notification-broadcast,notification-broadcast-jdbc` | 공지 발송, 전체 공지, 공지 푸시, 대량 알림, 예약 발송, 공지 통계, 관심 작품 알림 대상, 특정 사람들에게만 공지 / broadcast, announcement, bulk notification, scheduled send, push to all users, push to followers of an item, notice delivery stats | `@skeleton/notifications` |
 | `notification-broadcast-jdbc` | 공지 · 채널별 전달 숫자를 DB 에 저장하고 단계 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules notification-broadcast-jdbc` | 공지 저장, 공지 작업 큐 / broadcast store, broadcast job queue | `@skeleton/notifications` |
 | `notification-fcm` | 모바일 푸시(FCM HTTP v1) 전달 수단 — 안드로이드 · iOS 기기 토큰으로 푸시를 보낸다. 서비스 계정 -> 접근 토큰(JDK) · 판정 표 · 자격 기동 검사. notification-push 의 PushSender 로 끼운다. | `--modules notification-fcm` | 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push | — |
 | `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). 광고 동의 재확인 안내의 표시(advertising_notices)도 저장한다. | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
@@ -1127,11 +1127,11 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 쓰지 않는 경우:
   - notification-broadcast 는 저장소를 모른다 — notification-broadcast-jdbc 를 같이 고른다
   - 꺼짐이 기본이다 — skeleton.notification.broadcast.enabled=true 와 공지 types, 운영자 경로는 admin.enabled=true 를 앱 yml 이 정한다
-  - 대상(AudienceSource)은 account(전체 · 역할) · workspace 가 낸다 — 둘 다 없으면 앱이 빈을 만든다
+  - 대상(AudienceSource)은 account(전체 · 역할) · workspace 가 낸다 — 「이 작품을 구독한 사람」 같은 세그먼트는 앱이 AudienceSource 빈 하나로 만든다(계정 id 를 커서로 돌려준다)
   - 공개 공지 게시판(로그인 없이 보는 목록)은 board 의 몫이다
   - 이미 간 푸시는 거두지 않는다 — 취소는 더 보내지 않는 것이다
   - 서비스 운영자만 보낸다(권한 notification-broadcast.read · .send, 기본 역할 없음) — 팀 관리자의 자기 공지는 없다
-- 키워드: 공지 발송, 전체 공지, 공지 푸시, 대량 알림, 예약 발송, 공지 통계 / broadcast, announcement, bulk notification, scheduled send, push to all users, notice delivery stats
+- 키워드: 공지 발송, 전체 공지, 공지 푸시, 대량 알림, 예약 발송, 공지 통계, 관심 작품 알림 대상, 특정 사람들에게만 공지 / broadcast, announcement, bulk notification, scheduled send, push to all users, push to followers of an item, notice delivery stats
 
 ### `notification-broadcast-jdbc` — 공지 · 채널별 전달 숫자를 DB 에 저장하고 단계 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL).
 
