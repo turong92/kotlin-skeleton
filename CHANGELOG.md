@@ -15,11 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### deploy - 배포 후 자동 점검 `scripts/post-deploy-check.sh` (2026-11-16)
 
-- 배포된 주소(인자)에 `/health`(`--wait` 초 동안 재시도 — 콜드스타트) → 시험 계정 로그인(`SMOKE_EMAIL` · `SMOKE_PASSWORD`) → 받은 토큰으로 `GET /auth/me` 를 찔러 보고, 어긋나면 종료 1(사용법 오류는 2). 후보 리비전 태그 주소를 그대로 받고, 헤더로 고르는 앞단은 `-H '이름: 값'`(여러 번)이 모든 요청에 붙는다. 비밀번호 · 토큰 · 헤더 값은 출력하지도 명령줄 인자로 넘기지도 않는다(0600 임시 파일). `native-smoke.sh` 는 시험용 서버 전체 흐름이라 재활용하지 않았다. 쓰는 법: `docs/deploy.md` 「배포 후 자동 점검」, Cloud Run 후보 흐름: `docs/cloud-run-scale-to-zero.md`. 가짜 서버로 증명: `PostDeployCheckScriptTest`(`modules/platform`).
+- 배포된 주소(인자)에 `/health`(`--wait` 초 동안 재시도 — 콜드스타트) → 시험 계정 로그인(`SMOKE_EMAIL` · `SMOKE_PASSWORD`) → 받은 토큰으로 `GET /auth/me` 를 찔러 보고, 어긋나면 종료 1(사용법 오류는 2). 후보 리비전 태그 주소를 그대로 받고, 헤더로 고르는 앞단은 `-H '이름: 값'`(여러 번)이 모든 요청에 붙는다. 비밀번호 · 토큰은 출력하지도 어떤 프로세스의 인자로 넘기지도 않는다(0600 임시 파일). `-H` 값은 스크립트 인자라 `ps` 에 보이므로 비밀 헤더는 `SMOKE_HEADERS_FILE`(예: 비공개 Cloud Run 의 `X-Serverless-Authorization`)로 준다. `Authorization` 헤더는 로그인 토큰이 쓰므로 받지 않는다. `native-smoke.sh` 는 시험용 서버 전체 흐름이라 재활용하지 않았다. 쓰는 법: `docs/deploy.md` 「배포 후 자동 점검」, Cloud Run 후보 흐름: `docs/cloud-run-scale-to-zero.md`. 가짜 서버로 증명: `PostDeployCheckScriptTest`(`modules/platform`).
 
 ### migrations - 옛 버전을 깨는 새 마이그레이션을 CI 가 잡는다 (expand/contract) (2026-11-16)
 
-- 새 `scripts/migration-risk.pl`(+ `MigrationRiskTest`, CI 한 줄): 후보 리비전 · 롤링 · 롤백 동안 옛 버전이 같은 DB 를 쓰므로, `migrations.lock` 의 `baseline` 보다 새 마이그레이션이 컬럼 · 표 삭제, 이름 변경, 기본값 없는 `NOT NULL` 컬럼 추가, `SET NOT NULL`, 타입 변경, 제약(UNIQUE · CHECK · FK · PK) 추가, `TRUNCATE` 를 하면 실패한다(PostgreSQL · MySQL). 의도한 contract 단계는 파일 안 `-- allow-destructive: <이유>`(이유 필수). 같은 파일에서 만든 표 · 더한 NULL 허용 컬럼의 UNIQUE 는 통과. 찍은 프로젝트는 찍은 시점이 기준선이라 앱이 더하는 마이그레이션부터 검사한다(`test-new-project.sh` 가 확인). 절차: `docs/schema-management.md` 「Rolling deploys」. 기존 마이그레이션 · 잠금은 그대로다(검사를 통과한다).
+- 새 `scripts/migration-risk.pl`(+ `MigrationRiskTest`, CI 한 줄): 후보 리비전 · 롤링 · 롤백 동안 옛 버전이 같은 DB 를 쓰므로, `migrations.lock` 의 `baseline` 보다 새 마이그레이션이 컬럼 · 표 삭제, 이름 변경, 기본값 없는 `NOT NULL` 컬럼 추가, `SET NOT NULL`, 타입 변경, 제약(UNIQUE · CHECK · FK · PK) 추가, `TRUNCATE` 를 하면 실패한다(PostgreSQL · MySQL). `drop default` · `drop view/type/sequence/function/schema` · enum `rename value` · `set schema` 도 잡는다. 문자열 · 주석 처리: MySQL `#` · 백슬래시 이스케이프 · PostgreSQL `E'…'` · `$tag$` 달러 인용(안은 읽지 않는다). 의도한 contract 단계는 파일 안 `-- allow-destructive: <이유>`(이유 필수). 같은 파일에서 만든 표 · 더한 NULL 허용 컬럼의 UNIQUE 는 통과. 찍은 프로젝트는 찍은 시점이 기준선이라 앱이 더하는 마이그레이션부터 검사한다(`test-new-project.sh` 가 확인). 절차: `docs/schema-management.md` 「Rolling deploys」. 기존 마이그레이션 · 잠금은 그대로다(검사를 통과한다).
 
 ### notification-broadcast - 앱 세그먼트로 보내기를 문서로 못박고, 대상을 비우면 전체 (2026-11-16)
 

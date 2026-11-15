@@ -99,9 +99,12 @@ and Flyway has already run the new migration. A migration that breaks the old ve
 | `set-not-null` | `alter column … set not null` | it can still write NULL |
 | `change-column-type` | `alter column … type`, MySQL `modify` / `change a a …` | it reads and writes the old type (narrowing truncates or fails) |
 | `add-constraint` | `add constraint` / `unique` / `check` / `foreign key` / `primary key`, `create unique index` | its writes may violate it. Exempt: a `unique` over a column added in the same file (nullable, no default) — only NULLs exist |
+| `drop-default` | `alter column … drop default` | its `INSERT` leaves the column out and relies on the default |
+| `drop-object` | `drop view / type / sequence / function / schema / domain` | it still uses it |
+| `rename-enum-value` · `set-schema` · `rename-table` | `alter type … rename value`, `… set schema`, `alter view / sequence / type … rename to` | it uses the old value / schema / name |
 | `truncate` | `truncate` | all rows, irreversibly |
 
-Tables created in the same file are not checked (the old version does not know them). Comments and string literals are ignored.
+Tables created in the same file are not checked (the old version does not know them). Comments and string literals are ignored (`--` and `/* */`; MySQL `#`; backslash escapes in MySQL strings and PostgreSQL `E'…'`; PostgreSQL `$tag$ … $tag$` dollar quotes, whose content is *not* read). A `UNIQUE` over a new column is exempt only without `NULLS NOT DISTINCT`.
 
 The safe order is two releases:
 
@@ -112,7 +115,7 @@ The safe order is two releases:
    (the reason is required; a bare marker does not pass). The marker covers the whole file — keep such files to one change.
 
 The check is syntactic: it does not know your old column types (so every type change is reported — allow it with a reason when it only
-widens) and it does not parse procedural blocks (`DO $$ … $$`) or SQL built at run time. It is a guard, not a proof.
+widens) and it does not read inside dollar-quoted blocks (`DO $$ … $$`, function bodies) or SQL built at run time. It also does **not** report dropping a `UNIQUE` constraint or unique index (an upsert — `ON CONFLICT (…)` / `ON DUPLICATE KEY` — that still names it breaks in the old version): put such a drop in the contract release by hand. It is a guard, not a proof.
 
 #### Local databases
 

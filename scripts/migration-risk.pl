@@ -34,18 +34,23 @@ my %WHY = (
   'change-column-type'  => '옛 버전이 옛 타입으로 읽고 쓴다(좁히면 값이 잘리거나 실패한다). 새 컬럼을 더해 옮긴 뒤 옛 컬럼을 지운다. 넓히기만 한다면 이유를 적고 허용한다',
   'add-constraint'      => '옛 버전의 쓰기가 새 제약(UNIQUE · CHECK · FK · PK)을 어길 수 있다. 새 코드가 지킨다는 것이 보장된 뒤에 건다',
   'truncate'            => '표의 데이터를 전부 지운다 — 옛 버전과 무관하게 되돌릴 수 없다',
+  'drop-default'        => '옛 버전의 INSERT 가 이 컬럼을 빼고 기본값에 기댄다 — 기본값을 지우면 NOT NULL 이거나 의미가 바뀐다. 코드가 값을 직접 넣게 된 뒤(contract)에 지운다',
+  'drop-object'         => '옛 버전이 이 뷰 · 타입 · 시퀀스 · 함수를 아직 쓴다. 옛 버전이 모두 내려간 뒤(contract)에 지운다',
+  'rename-enum-value'   => '옛 버전이 옛 값을 쓰고 읽는다. 새 값을 더하고(expand) 옮긴 뒤 옛 값은 그대로 둔다',
+  'set-schema'          => '옛 버전이 옛 스키마 이름으로 부른다 — 이름을 바꾸는 것과 같다. expand/contract 로 옮긴다',
 );
 
 # 주석을 공백으로, 문자열 · 따옴표 식별자를 단순화한 텍스트 (줄 수는 그대로 — 줄 번호를 위해)
 sub clean {
-  my ($t) = @_;
+  my ($t, $vendor) = @_;
+  my $my = ($vendor // '') eq 'mysql';
   my $o = '';
   my $n = length $t;
   my $i = 0;
   while ($i < $n) {
     my $c = substr($t, $i, 1);
     my $two = substr($t, $i, 2);
-    if ($two eq '--') {
+    if ($two eq '--' || ($my && $c eq '#')) {
       $i++ while $i < $n && substr($t, $i, 1) ne "\n";
     } elsif ($two eq '/*') {
       my $e = index($t, '*/', $i + 2);
@@ -54,16 +59,26 @@ sub clean {
       $o .= join('', $chunk =~ /\n/g);
       $i = $e + 2;
     } elsif ($c eq "'") {
+      my $esc = $my || ($i > 0 && substr($t, $i - 1, 1) =~ /[eE]/ && ($i < 2 || substr($t, $i - 2, 1) !~ /\w/));
       my $j = $i + 1;
       while ($j < $n) {
+        if ($esc && substr($t, $j, 1) eq "\\") { $j += 2; next; }
         if (substr($t, $j, 1) eq "'") { if (substr($t, $j + 1, 1) eq "'") { $j += 2; next; } last; }
         $j++;
       }
       $o .= "''" . join('', substr($t, $i, $j + 1 - $i) =~ /\n/g);
       $i = $j + 1;
+    } elsif ($c eq '$' && ($i == 0 || substr($t, $i - 1, 1) !~ /\w/) && substr($t, $i) =~ /^(\$(?:[A-Za-z_]\w*)?\$)/) {
+      # PostgreSQL 달러 인용 $tag$ … $tag$ — 안은 읽지 않는다 (문서의 한계)
+      my $tag = $1;
+      my $e = index($t, $tag, $i + length $tag);
+      $e = $n - length $tag if $e < 0;
+      $o .= "''" . join('', substr($t, $i, $e + length($tag) - $i) =~ /\n/g);
+      $i = $e + length $tag;
     } elsif ($c eq '`' || $c eq '"') {
-      my $e = index($t, $c, $i + 1);
-      $e = $n - 1 if $e < 0;
+      my $e = $i + 1;
+      while ($e < $n && substr($t, $e, 1) ne $c) { $e += ($my && $c eq '"' && substr($t, $e, 1) eq "\\") ? 2 : 1; }
+      $e = $n - 1 if $e >= $n;
       $o .= substr($t, $i + 1, $e - $i - 1);
       $i = $e + 1;
     } else {
@@ -135,6 +150,7 @@ sub findings {
   }
   my $unique_on_new = sub {
     my ($t, $text) = @_;
+    return 0 if $text =~ /nulls not distinct/;   # NULL 끼리도 중복이다 — 옛 버전의 쓰기가 깨진다
     return 0 unless $text =~ /\(([^)]*)\)/;
     return scalar grep { my ($c) = /^\s*([a-z_][a-z0-9_]*)/; defined $c && $newcol{ bare($t) . ".$c" } } split /,/, $1;
   };
@@ -144,7 +160,11 @@ sub findings {
     if ($q =~ /^drop table\b/) { push @f, [$line, 'drop-table']; next; }
     if ($q =~ /^truncate\b/) { push @f, [$line, 'truncate']; next; }
     if ($q =~ /^rename table\b/) { push @f, [$line, 'rename-table']; next; }
-    if ($q =~ /^create unique index (?:concurrently )?(?:if not exists )?\S+ on (?:only )?(\S+)/) {
+    if ($q =~ /^drop (?:materialized view|view|type|sequence|function|schema|domain)\b/) { push @f, [$line, 'drop-object']; next; }
+    if ($q =~ /^alter type \S+ rename value\b/) { push @f, [$line, 'rename-enum-value']; next; }
+    if ($q =~ /^alter (?:table|view|materialized view|type|sequence|function) (?:if exists )?(?:only )?\S+ set schema\b/) { push @f, [$line, 'set-schema']; next; }
+    if ($q =~ /^alter (?:view|materialized view|sequence|type) (?:if exists )?\S+ rename to\b/) { push @f, [$line, 'rename-table']; next; }
+    if ($q =~ /^create unique index (?:concurrently )?(?:if not exists )?(?:\S+ )?on (?:only )?([^\s(]+)/) {
       my $t = $1;
       push @f, [$line, 'add-constraint'] unless $created{ bare($t) } || $unique_on_new->($t, $q);
       next;
@@ -160,6 +180,7 @@ sub findings {
       elsif ($a =~ /^modify\b/) { push @f, [$line, 'change-column-type']; }
       elsif ($a =~ /^alter (?:column )?\S+ (?:set data )?type\b/) { push @f, [$line, 'change-column-type']; }
       elsif ($a =~ /^alter (?:column )?\S+ set not null\b/) { push @f, [$line, 'set-not-null']; }
+      elsif ($a =~ /^alter (?:column )?\S+ drop default\b/) { push @f, [$line, 'drop-default']; }
       elsif ($a =~ /^add (?:constraint|unique|check|foreign|primary)\b/) {
         my $is_unique = $a =~ /^add (?:constraint \S+ )?unique\b/;
         push @f, [$line, 'add-constraint'] unless $is_unique && $unique_on_new->($table, $a);
@@ -186,7 +207,7 @@ sub slurp {
 sub baseline_of {
   my ($root) = @_;
   my $path = "$root/migrations.lock";
-  die "migrations.lock 이 없다 — 기준선을 알 수 없다: perl scripts/migrations-lock.pl --regenerate\n" unless -f $path;
+  die "migrations.lock 이 없다 — 기준선을 알 수 없다.\n  새 프로젝트의 첫 잠금이면: perl scripts/migrations-lock.pl --regenerate — 지금 있는 모든 마이그레이션을 잠그고 기준선을 최신으로 올리므로 이 검사는 기존 파일을 전부 건너뛴다 (이미 운영 중인 프로젝트에서 검사를 피하려고 쓰지 않는다)\n" unless -f $path;
   for my $line (split /\n/, slurp($path)) { return $1 if $line =~ /^baseline\s+(\d{14})\s*$/; }
   die "migrations.lock 에 baseline 줄이 없다\n";
 }
@@ -230,7 +251,7 @@ sub run {
     my $raw = slurp("$root/$rel");
     if ($raw =~ /--\s*allow-destructive:[ \t]*(\S[^\n]*)/) { next; }
     my $bad_marker = $raw =~ /--\s*allow-destructive:/;
-    for my $f (findings(statements(clean($raw)))) {
+    for my $f (findings(statements(clean($raw, $rel =~ m{/db/migration/(postgresql|mysql)/} ? $1 : '')))) {
       my ($line, $rule) = @$f;
       push @problems, "  - $rel:$line [$rule] $WHY{$rule}" . ($bad_marker ? "\n      allow-destructive 표시에 이유가 없다 — `-- allow-destructive: <이유>` 로 이유를 적어야 통과한다" : '');
     }

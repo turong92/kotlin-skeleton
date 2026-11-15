@@ -115,6 +115,23 @@ class PostDeployCheckScriptTest {
     }
 
     @Test
+    fun `secret headers come from SMOKE_HEADERS_FILE and reach every call without showing in the output`() {
+        val file = java.nio.file.Files.createTempFile("smoke-headers", ".txt").also { it.toFile().deleteOnExit(); java.nio.file.Files.writeString(it, "\nX-Revision-Tag: $headerValue\n") }
+        val env = mapOf("SMOKE_EMAIL" to "smoke@example.com", "SMOKE_PASSWORD" to password, "SMOKE_HEADERS_FILE" to file.toString())
+        val r = deploy(url, "--wait", "0", env = env)
+        assertEquals(0, r.code, r.out)
+        assertEquals(4, seenHeaders.size, seenHeaders.toString())
+        assertFalse(headerValue in r.out, r.out)
+    }
+
+    @Test
+    fun `an Authorization header or a missing headers file is a usage error`() {
+        assertEquals(2, deploy(url, "-H", "Authorization: Bearer x", "--wait", "0").code)
+        val env = mapOf("SMOKE_EMAIL" to "smoke@example.com", "SMOKE_PASSWORD" to password, "SMOKE_HEADERS_FILE" to "/nonexistent/headers")
+        assertEquals(2, deploy(url, "--wait", "0", env = env).code)
+    }
+
+    @Test
     fun `missing credentials or url is a usage error (2), not a deployment failure`() {
         assertEquals(2, deploy(url, env = emptyMap()).code)
         assertEquals(2, deploy("--wait", "0").code)

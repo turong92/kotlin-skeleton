@@ -456,8 +456,8 @@ SMOKE_EMAIL=smoke@example.com SMOKE_PASSWORD=… \
 | `POST /api/v1/auth/logout` | (결과를 보지 않는다 — 점검이 세션을 쌓아 두지 않게 닫을 뿐) | — |
 
 - **후보 리비전**: Cloud Run 태그 주소(`https://<태그>---<서비스>-<해시>.a.run.app`)를 그대로 준다. 헤더로 후보를 고르는 앞단이면 `-H 'X-Revision-Tag: candidate'` 처럼 줄 수 있고(여러 번 가능) 모든 요청에 붙는다. 트래픽을 옮기기 **전에** 후보로 돌려 통과하면 옮기고, 옮긴 뒤 같은 명령을 운영 주소로 한 번 더 돌린다.
-- **시험 계정**: 시드 계정은 로컬 전용이라(stage · prod 기동 실패) 쓸 수 없다. 환경마다 평범한 가입으로 점검 전용 계정을 하나 만들어 두고(권한 없음 · 다른 용도 없음) 그 이메일 · 비밀번호를 파이프라인 비밀에 둔다. 로그인은 `email` + `password` 로 보낸다.
-- **비밀**: 비밀번호 · 토큰 · 헤더 값은 출력하지 않고 명령줄 인자로도 넘기지 않는다(0600 임시 파일 → 끝나면 지운다). 실패 때 응답 본문도 찍지 않는다. 헤더 값이 비밀이면(`-H 'Authorization: …'`) 셸 기록에 남지 않게 환경변수에서 풀어 쓴다.
+- **시험 계정**: 시드 계정은 로컬 전용이라(stage · prod 기동 실패) 쓸 수 없다. 환경마다 평범한 가입으로 점검 전용 계정을 하나 만들어 두고(권한 없음 · 다른 용도 없음) 그 이메일 · 비밀번호를 파이프라인 비밀에 둔다. 로그인은 `email` + `password` 로 보낸다. 로그아웃은 응답에 `refreshToken` 이 있을 때만 한다 — 쿠키 전달 앱(`refreshDelivery`)은 CSRF 헤더가 필요해 건너뛰고, 그 세션은 만료로 사라진다.
+- **비밀**: 비밀번호는 환경변수로만 받고, 본문 · 헤더는 curl 에 0600 임시 파일로 넘긴다(끝나면 지운다) — 비밀번호 · 토큰은 어떤 프로세스의 인자에도 없고 출력되지도 않는다. 실패 때 응답 본문도 찍지 않는다. **`-H` 의 값은 이 스크립트의 인자라 `ps` 에 보인다** — 비밀인 헤더는 `SMOKE_HEADERS_FILE=<파일>`(한 줄에 `이름: 값`, 파이프라인 비밀을 파일로 푼 것)로 준다. 비공개 Cloud Run 서비스는 `X-Serverless-Authorization: Bearer <ID 토큰>` 를 거기에 둔다. `Authorization` 헤더는 로그인 토큰이 쓰므로 받지 않는다(종료 2).
 - 읽기 · 로그인만 한다: 결제 · 메일 · 작업 큐를 움직이지 않는다. 전체 흐름 시험(가짜 결제사 · 메일함이 있는 서버용)은 `scripts/native-smoke.sh`(`docs/native-image.md`) 이고, 이 스크립트는 그것을 재활용하지 않는다. `scripts/post-deploy-check.sh` 자체는 `PostDeployCheckScriptTest`(`modules/platform`)가 가짜 서버로 증명한다.
 - 이 점검이 못 보는 것: DB 마이그레이션이 옛 버전을 깨는지(그것은 CI 의 `scripts/migration-risk.pl` — `docs/schema-management.md` 「Rolling deploys」), 로그인 밖의 기능.
 

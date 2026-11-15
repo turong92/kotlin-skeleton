@@ -41,6 +41,7 @@ class MigrationRiskTest {
     /** sql 한 줄을 검사해 걸린 규칙 이름들을 돌려준다 (없으면 빈 목록) */
     private fun rules(sql: String, vendor: String = "postgresql"): List<String> {
         lockWithBaseline()
+        root.resolve("apps").toFile().deleteRecursively()   // 앞 호출이 남긴 다른 방언의 파일이 섞이지 않게
         migration(sql, vendor)
         val r = risk()
         if (r.code == 0) return emptyList()
@@ -97,6 +98,40 @@ class MigrationRiskTest {
             "create table memos (id bigint primary key);\nalter table memos add column owner varchar(64) not null;\nalter table memos add constraint uq unique (id);",
         )
         for (sql in safe) assertEquals(emptyList(), rules(sql), sql)
+    }
+
+    @Test
+    fun `DDL that older-version code relies on is caught - unnamed unique index, drop default, dropped objects, enum value, schema move`() {
+        val cases = listOf(
+            "add-constraint" to "create unique index on notes (body);",
+            "add-constraint" to "create unique index concurrently if not exists on notes (body);",
+            "drop-default" to "alter table notes alter column body drop default;",
+            "drop-object" to "drop view notes_v;",
+            "drop-object" to "drop type note_kind;",
+            "drop-object" to "drop sequence notes_seq;",
+            "drop-object" to "drop function notes_fn();",
+            "rename-enum-value" to "alter type note_kind rename value 'a' to 'b';",
+            "set-schema" to "alter table notes set schema other;",
+            "rename-table" to "alter view notes_v rename to memos_v;",
+            // NULLS NOT DISTINCT 면 NULL 끼리도 중복이라 새 컬럼이어도 옛 버전의 쓰기가 깨진다
+            "add-constraint" to "alter table notes add column code varchar(10);\nalter table notes add constraint uq unique nulls not distinct (code);",
+        )
+        for ((rule, sql) in cases) assertEquals(listOf(rule), rules(sql), sql)
+        assertEquals(listOf("drop-default"), rules("alter table notes alter column body drop default;", "mysql"))
+    }
+
+    @Test
+    fun `quotes and comments that hide later DDL do not hide it`() {
+        val drop = "alter table notes drop column body;"
+        // MySQL: # 주석 안의 ' · 백슬래시 이스케이프
+        assertEquals(listOf("drop-column"), rules("# it's a note\n$drop", "mysql"))
+        assertEquals(listOf("drop-column"), rules("select 'it\\'s';\n$drop", "mysql"))
+        // PostgreSQL: E'..' 만 백슬래시 이스케이프, 일반 문자열 끝의 \ 는 이스케이프가 아니다, $tag$ 달러 인용
+        assertEquals(listOf("drop-column"), rules("select E'it\\'s';\n$drop"))
+        assertEquals(listOf("drop-column"), rules("select 'a\\';\n$drop"))
+        assertEquals(listOf("drop-column"), rules("select \$q\$it's\$q\$;\n$drop"))
+        // 달러 인용 안의 DDL 은 읽지 않는다(문서의 한계)
+        assertEquals(emptyList(), rules("do \$\$ begin execute 'drop table notes'; end \$\$;"))
     }
 
     @Test
