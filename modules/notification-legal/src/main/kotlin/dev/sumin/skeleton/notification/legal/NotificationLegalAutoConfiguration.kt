@@ -36,6 +36,9 @@ import org.springframework.scheduling.TaskScheduler
 
 private const val ADVERTISING_TYPES_PROPERTY = "skeleton.notification.advertising.types"
 
+/** notification-push 의 설정 키 - 이 모듈의 접두사가 아니라 남의 키를 읽기만 한다 (notification-broadcast 와 같은 방식) */
+private const val PUSH_TYPES_KEY = "skeleton.notification.push.types"
+
 /** `skeleton.notification.advertising.types` 가 비어 있지 않을 때만 참 - 목록이든 쉼표 문자열이든 같은 바인더로 읽는다 */
 class AdvertisingTypesConfigured : SpringBootCondition() {
     override fun getMatchOutcome(context: ConditionContext, metadata: AnnotatedTypeMetadata): ConditionOutcome {
@@ -111,7 +114,7 @@ class NotificationLegalAutoConfiguration {
         mediums: ObjectProvider<NoticeMedium>,
         environment: Environment,
     ): SmartInitializingSingleton = SmartInitializingSingleton {
-        val pushTypes = Binder.get(environment).bind("skeleton.notification.push.types", Bindable.listOf(String::class.java)).orElse(emptyList()).orEmpty().map { it.trim() }.toSet()
+        val pushTypes = Binder.get(environment).bind(PUSH_TYPES_KEY, Bindable.listOf(String::class.java)).orElse(emptyList()).orEmpty().map { it.trim() }.toSet()
         val problem = noticeMediumProblem(channels.orderedStream().anyMatch { it.key == "push" }, pushTypes, mediums.orderedStream().anyMatch { it.ready() })
         if (problem != null) LoggerFactory.getLogger(AdvertisingConsentNotifier::class.java).warn(problem)
     }
