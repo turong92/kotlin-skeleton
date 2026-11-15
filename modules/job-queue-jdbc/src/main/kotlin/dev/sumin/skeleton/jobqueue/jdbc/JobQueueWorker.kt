@@ -39,6 +39,8 @@ class JobQueueWorker(
     private val retention: JobRetention? = null,
     /** 프로젝트 모드(`skeleton.projects`)면 서비스 중인 프로젝트를 차례로 돈다. null 이면 지금까지처럼 한 서비스 */
     private val projects: ProjectRegistry? = null,
+    /** 이 일꾼의 차선 — null 이면 기본 일꾼 */
+    private val lanes: JobLanes = JobLanes.NONE,
 ) : JobDrainer, SmartLifecycle {
     private val log = LoggerFactory.getLogger(javaClass)
     private val handlerByType = handlers.associateBy { it.type }
@@ -155,7 +157,7 @@ class JobQueueWorker(
      */
     fun runNow(type: String, payloadJson: String): Boolean {
         if (type !in handlerByType || stopping) return false
-        val job = repository.claimOne(workerId, type, payloadJson, timeProvider.now()) ?: return false
+        val job = repository.claimOne(workerId, type, payloadJson, timeProvider.now(), lanes.workerLane(), timeProvider.now().minus(properties.laneGrace).takeIf { lanes.workerLane() == null }) ?: return false
         run(job)
         return true
     }
@@ -204,7 +206,8 @@ class JobQueueWorker(
     /** 지금 프로젝트 문맥(없으면 한 서비스)의 `jobs` 한 번 폴링 */
     private fun pollProject(throttleMaintenance: Boolean): Int {
         val now = timeProvider.now()
-        if (!throttleMaintenance || maintenanceDue()) maintain(now)
+        // 차선 일꾼(후보 인스턴스)은 공유 정리 일을 하지 않는다 — 기본 일꾼의 몫
+        if (lanes.workerLane() == null && (!throttleMaintenance || maintenanceDue())) maintain(now)
         return claimAndRun(now)
     }
 
@@ -235,7 +238,8 @@ class JobQueueWorker(
 
     private fun claimAndRun(now: java.time.Instant): Int {
         // 아는 종류만 집는다 — 모르는 종류(배포 중 새 버전이 넣은 잡)는 시도도 쓰지 않고 남아, 그 종류를 아는 워커가 집는다
-        val jobs = repository.claim(workerId, properties.batchSize, now, handlerByType.keys)
+        val lane = lanes.workerLane()
+        val jobs = repository.claim(workerId, properties.batchSize, now, handlerByType.keys, lane, now.minus(properties.laneGrace).takeIf { lane == null })
         var handled = 0
         jobs.forEach { job ->
             if (stopping) { // 종료 중 - 아직 안 돈 잡은 시도를 쓰지 않고 돌려준다 (스테일 복구 10분을 기다리지 않게). 돌린 수에는 세지 않는다

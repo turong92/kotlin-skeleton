@@ -36,6 +36,10 @@ class JobQueueJdbcAutoConfiguration {
     fun jobContextPropagator(properties: JobQueueProperties): JobContextPropagator = MdcJobContextPropagator(properties.propagatedMdcKeys)
 
     @Bean
+    @ConditionalOnMissingBean
+    fun jobLanes(): JobLanes = JobLanes.NONE
+
+    @Bean
     @ConditionalOnMissingBean(JobQueue::class)
     fun jdbcJobQueue(
         repository: JdbcJobRepository,
@@ -43,9 +47,10 @@ class JobQueueJdbcAutoConfiguration {
         timeProvider: ObjectProvider<TimeProvider>,
         propagator: JobContextPropagator,
         worker: ObjectProvider<JobQueueWorker>,
+        lanes: JobLanes,
     ): JobQueue = JdbcJobQueue(
         repository, properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() }, propagator,
-        onCommitted = { worker.getIfAvailable()?.wake() }, // 일꾼은 처리기(큐를 부를 수 있는 빈)를 모으므로 늦게 찾는다 — 빈 순환을 피한다
+        onCommitted = { worker.getIfAvailable()?.wake() }, lanes = lanes, // 일꾼은 처리기(큐를 부를 수 있는 빈)를 모으므로 늦게 찾는다 — 빈 순환을 피한다
     )
 
     @Bean
@@ -66,8 +71,9 @@ class JobQueueJdbcAutoConfiguration {
         deadListeners: ObjectProvider<JobDeadListener>,
         retention: ObjectProvider<JobRetention>,
         projects: ObjectProvider<ProjectRegistry>,
+        lanes: JobLanes,
     ) = JobQueueWorker(
         repository, handlers.orderedStream().toList(), properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() },
-        propagator, deadListeners.orderedStream().toList(), retention.getIfAvailable(), projects.getIfAvailable(),
+        propagator, deadListeners.orderedStream().toList(), retention.getIfAvailable(), projects.getIfAvailable(), lanes,
     )
 }

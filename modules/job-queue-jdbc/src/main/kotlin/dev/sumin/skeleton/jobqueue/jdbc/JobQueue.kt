@@ -19,6 +19,8 @@ data class Job(
     val updatedAt: Instant,
     /** 넣을 때의 로그 문맥(traceId 등) — [JobContextPropagator] 가 만든 문자열. 옛 줄 · 문맥 없이 넣은 줄은 null */
     val logContext: String? = null,
+    /** 차선([JobLanes]) — 후보 일꾼이 자기 차선의 잡만 집는다. 차선 없이 넣은 줄 · 옛 줄은 null */
+    val lane: String? = null,
 )
 
 /** 큐에 넣는 쪽. 같은 트랜잭션 안에서 도메인 변경과 함께 enqueue 하면 "저장됐으면 반드시 실행" 이 보장된다. */

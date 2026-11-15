@@ -18,14 +18,14 @@ class JdbcJobRepository(
     private val transactions: TransactionTemplate,
     private val dialect: SqlDialect,
 ) {
-    fun insert(type: String, payloadJson: String, runAt: Instant, maxAttempts: Int, now: Instant, logContext: String? = null): Long {
+    fun insert(type: String, payloadJson: String, runAt: Instant, maxAttempts: Int, now: Instant, logContext: String? = null, lane: String? = null): Long {
         val keys = GeneratedKeyHolder()
         jdbc.sql(
             """insert into jobs
-               (job_type, payload_json, status, attempts, max_attempts, next_run_at, created_at, updated_at, log_context)
-               values (:type, :payload, 'PENDING', 0, :maxAttempts, :runAt, :now, :now, :logContext)""",
+               (job_type, payload_json, status, attempts, max_attempts, next_run_at, created_at, updated_at, log_context, lane)
+               values (:type, :payload, 'PENDING', 0, :maxAttempts, :runAt, :now, :now, :logContext, :lane)""",
         )
-            .param("type", type).param("payload", payloadJson).param("maxAttempts", maxAttempts).param("logContext", logContext)
+            .param("type", type).param("payload", payloadJson).param("maxAttempts", maxAttempts).param("logContext", logContext).param("lane", lane)
             .param("runAt", dialect.instantParam(runAt)).param("now", dialect.instantParam(now))
             .update(keys, "id") // 키 칼럼 지정: PG 는 지정 안 하면 모든 칼럼을 키로 돌려준다
         return keys.key!!.toLong()
@@ -34,17 +34,19 @@ class JdbcJobRepository(
     /**
      * 실행할 잡을 잡는다. 잡힌 잡은 RUNNING 이고 attempts 가 1 올라간 상태로 돌아온다.
      * [types] 가 있으면 **그 종류만** 집는다 — 이 워커가 처리기를 모르는 종류(배포 중 새 버전이 넣은 잡)는 건드리지 않아 시도도 쓰지 않는다. 비어 있으면 아무것도 안 집는다. null 이면 전부.
+     * 차선: [lane] 이 있으면 그 차선의 잡만, null 이면 차선 없는 잡만(+ [laneCutoff] 가 있으면 그보다 오래 기다린 차선 잡도 — 후보가 내려간 채 쌓인 잡을 기본 일꾼이 거둔다).
      */
-    fun claim(workerId: String, limit: Int, now: Instant, types: Collection<String>? = null): List<Job> {
+    fun claim(workerId: String, limit: Int, now: Instant, types: Collection<String>? = null, lane: String? = null, laneCutoff: Instant? = null): List<Job> {
         if (types != null && types.isEmpty()) return emptyList()
         return transactions.execute {
             val ids = jdbc.sql(
                 """select id from jobs
-                   where status = 'PENDING' and next_run_at <= :now ${if (types != null) "and job_type in (:types)" else ""}
+                   where status = 'PENDING' and next_run_at <= :now ${if (types != null) "and job_type in (:types)" else ""} ${laneCondition(lane, laneCutoff)}
                    order by next_run_at, id
                    limit :limit
                    for update skip locked""",
             ).param("now", dialect.instantParam(now)).param("limit", limit).also { if (types != null) it.param("types", types) }
+                .also { bindLane(it, lane, laneCutoff) }
                 .query(Long::class.java).list()
             if (ids.isEmpty()) return@execute emptyList()
             jdbc.sql(
@@ -61,15 +63,15 @@ class JdbcJobRepository(
      * 종류와 내용이 같은, 때가 된 대기 잡 **하나**를 잡는다([claim] 과 같은 `SKIP LOCKED` 임대 - 다른 워커가 집는 중이거나 이미 집었으면 null). 같은 내용이 여럿이면 가장 오래된 것.
      * 넣을 때 id 를 몰라도 "방금 넣은 그 잡"을 지금 돌리고 싶을 때(웹훅 즉시 반영) 쓴다.
      */
-    fun claimOne(workerId: String, type: String, payloadJson: String, now: Instant): Job? =
+    fun claimOne(workerId: String, type: String, payloadJson: String, now: Instant, lane: String? = null, laneCutoff: Instant? = null): Job? =
         transactions.execute {
             val id = jdbc.sql(
                 """select id from jobs
-                   where status = 'PENDING' and next_run_at <= :now and job_type = :type and payload_json = :payload
+                   where status = 'PENDING' and next_run_at <= :now and job_type = :type and payload_json = :payload ${laneCondition(lane, laneCutoff)}
                    order by next_run_at, id
                    limit 1
                    for update skip locked""",
-            ).param("now", dialect.instantParam(now)).param("type", type).param("payload", payloadJson).query(Long::class.java).optional().orElse(null)
+            ).param("now", dialect.instantParam(now)).param("type", type).param("payload", payloadJson).also { bindLane(it, lane, laneCutoff) }.query(Long::class.java).optional().orElse(null)
                 ?: return@execute null
             jdbc.sql(
                 """update jobs
@@ -78,6 +80,19 @@ class JdbcJobRepository(
             ).param("worker", workerId).param("now", dialect.instantParam(now)).param("id", id).update()
             jdbc.sql("select * from jobs where id = :id").param("id", id).query(::map).optional().orElse(null)
         }
+
+    private fun laneCondition(lane: String?, laneCutoff: Instant?): String = when {
+        lane != null -> "and lane = :lane"
+        laneCutoff != null -> "and (lane is null or next_run_at < :laneCutoff)"
+        else -> "and lane is null"
+    }
+
+    private fun bindLane(spec: JdbcClient.StatementSpec, lane: String?, laneCutoff: Instant?) {
+        when {
+            lane != null -> spec.param("lane", lane)
+            laneCutoff != null -> spec.param("laneCutoff", dialect.instantParam(laneCutoff))
+        }
+    }
 
     /**
      * [knownTypes] 가 아닌 종류의 PENDING 잡 중 실행 시각이 [dueBefore] 보다 오래된 것을 DEAD 로 만들고 돌려준다 — 이 워커는 그 종류를 집지 않으므로(claim)
@@ -217,6 +232,7 @@ class JdbcJobRepository(
         createdAt = dialect.readInstant(rs, "created_at")!!,
         updatedAt = dialect.readInstant(rs, "updated_at")!!,
         logContext = rs.getString("log_context"),
+        lane = rs.getString("lane"),
     )
 }
 

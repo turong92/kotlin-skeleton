@@ -64,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 입구 서비스가 대상일 때(`service` 를 적은 서블릿 앱): 표시가 이 서비스의 다른 인스턴스를 가리키면 요청을 통째로 넘기고(JDK `HttpClient`, 응답은 읽는 대로 흘려 SSE 도 한 줄씩) 이미 한 번 넘긴 요청이면 508 `ROUTING.LOOP`, 대상이 안 닿으면 502 `ROUTING.TARGET_UNREACHABLE`.
 - 로컬 창 관리 API `GET` · `POST` · `DELETE /api/v1/admin/routing/local-window`(**기본 꺼짐** `skeleton.routing.admin.enabled=false` → 404, 권한 `routing.window`): 1~480분(`local.max-window` 가 더 짧으면 그쪽) · 사유 필수, 저장과 감사(`routing.local-window.opened` · `closed`, 사유는 싣지 않는다)는 한 트랜잭션. 창 표는 「그 서버가 쓰는 DB 의 표」일 뿐이라 서버들이 DB 하나를 같이 쓰면 한 번 열면 전부 적용된다.
 - 새 모듈 `request-routing-jdbc`: 창 저장소의 DB 구현(표 `routing_local_windows`, PostgreSQL · MySQL 마이그레이션 `V20261116140000`, 새 표). `skeleton.routing.enabled=true` 일 때만 선다. 설명: `docs/modules/request-routing-jdbc.md`.
+- `job-queue-jdbc` 차선: 새 열 `jobs.lane varchar(40) null`(마이그레이션 `V20261116160000`, 두 방언, 열 추가만이라 옛 줄 · 옛 코드와 함께 돈다)과 포트 `JobLanes`(기본 `NONE` - 빈을 안 두면 동작 그대로). 차선 일꾼은 자기 차선의 잡만 집고 정리 일(스테일 복구 · DEAD 유예 · 보관 정리)은 하지 않으며, 기본 일꾼은 차선 없는 잡과 `skeleton.job-queue.lane-grace`(기본 `1h`)보다 오래 기다린 차선 잡을 집는다. `schema.sql` 모드는 `jobs` 복사본에 `lane` 열을 더한다. 문서: `docs/job-queue-jdbc.md`.
 
 ### notification-broadcast - 앱 세그먼트로 보내기를 문서로 못박고, 대상을 비우면 전체 (2026-11-16)
 

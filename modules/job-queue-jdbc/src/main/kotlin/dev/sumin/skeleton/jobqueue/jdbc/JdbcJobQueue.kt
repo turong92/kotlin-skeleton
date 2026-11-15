@@ -13,13 +13,14 @@ class JdbcJobQueue(
     private val propagator: JobContextPropagator = MdcJobContextPropagator(properties.propagatedMdcKeys),
     /** 넣은 잡이 **커밋된 뒤**(트랜잭션 밖이면 바로) 부른다 — 같은 프로세스의 일꾼을 깨운다. 실패는 삼킨다(폴링이 안전망) */
     private val onCommitted: () -> Unit = {},
+    private val lanes: JobLanes = JobLanes.NONE,
 ) : JobQueue {
     private val log = LoggerFactory.getLogger(javaClass)
 
     override fun enqueue(type: String, payloadJson: String, runAt: Instant?, maxAttempts: Int?): Long {
         require(type.isNotBlank()) { "Job type must not be blank." }
         val now = timeProvider.now()
-        val id = repository.insert(type, payloadJson, runAt ?: now, maxAttempts ?: properties.maxAttempts, now, propagator.capture())
+        val id = repository.insert(type, payloadJson, runAt ?: now, maxAttempts ?: properties.maxAttempts, now, propagator.capture(), lanes.enqueueLane())
         afterCommit()
         return id
     }

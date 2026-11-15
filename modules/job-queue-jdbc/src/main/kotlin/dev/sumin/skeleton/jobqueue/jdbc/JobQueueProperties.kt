@@ -18,6 +18,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  *       max: 1h
  *     stale-lock-timeout: 10m   # RUNNING 인 채로 이 시간이 지나면 워커가 죽은 것으로 보고 PENDING 으로 되돌린다 (시도를 다 썼으면 DEAD)
  *     unhandled-type-grace: 1d  # 이 워커에 처리기가 없는 종류는 집지 않고 둔다(배포 중 새 버전이 넣은 잡) — 이 기간 동안 아무도 안 집으면 DEAD
+ *     lane-grace: 1h             # 차선 잡(후보 일꾼 몫)이 이 시간 넘게 안 집히면 기본 일꾼이 거둔다 (후보가 내려간 채 쌓인 잡)
  *     propagated-mdc-keys: [traceId]   # 넣는 쪽 MDC 에서 작업 줄로 옮겨 워커 로그에 복원할 키
  *     mode: polling              # on-request 면 폴링 스레드 없이 깨우기 주소(wake)가 부를 때만 처리 — 0대로 내려가는 배포용 (docs/cloud-run-scale-to-zero.md)
  *     wake:
@@ -53,6 +54,8 @@ data class JobQueueProperties(
      * 실행 시각이 이 기간보다 더 지났는데도 아무 워커도 집지 못했으면(처리기가 어디에도 없다) 그때 DEAD + 로그 + 듣는 쪽 알림. 배포 한 번이 끝나는 시간보다 길게 둔다
      */
     val unhandledTypeGrace: Duration = Duration.ofDays(1),
+    /** 차선 잡이 실행 시각보다 이만큼 더 기다리면 기본 일꾼도 집는다 — 후보 인스턴스가 내려간 채로 잡이 영영 쌓이지 않게 */
+    val laneGrace: Duration = Duration.ofHours(1),
     /** 비우면 hostname + 랜덤 */
     val workerId: String = "",
     /** 요청 → 작업으로 건너가는 MDC 키. 비우면 문맥을 싣지 않는다 */

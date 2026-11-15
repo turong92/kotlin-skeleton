@@ -61,7 +61,7 @@ class JobQueueMultiProjectTest {
 
     @BeforeEach
     fun schemas() {
-        val migrations = listOf("V20260910010000__jobs.sql", "V20261005175044__jobs_log_context.sql")
+        val migrations = listOf("V20260910010000__jobs.sql", "V20261005175044__jobs_log_context.sql", "V20261116160000__jobs_lane.sql")
             .map { javaClass.getResource("/db/migration/postgresql/$it")!!.readText() }
         listOf(a, b).forEach { p ->
             java.sql.DriverManager.getConnection(admin.jdbcUrl, admin.username, admin.password).use { c ->

@@ -20,7 +20,7 @@ skeleton:
 ```
 
 Schema: `modules/job-queue-jdbc/src/main/resources/db/migration/<vendor>/V20260910010000__jobs.sql` and
-`V20261005175044__jobs_log_context.sql` (adds `log_context`; in the `schema.sql` mode on MySQL fold the column into your copy of the `create table` instead — MySQL 8.4 has no `add column if not exists`)
+`V20261005175044__jobs_log_context.sql` (adds `log_context`) and `V20261116160000__jobs_lane.sql` (adds `lane`; in the `schema.sql` mode on MySQL fold these columns into your copy of the `create table` instead — MySQL 8.4 has no `add column if not exists`)
 (`postgresql` and `mysql`; Flyway picks the right one through `classpath:db/migration/{vendor}`; copy it into
 `schema.sql` in the no-Flyway mode). The app must assemble exactly one dialect module (`modules:db-postgresql`
 or `modules:db-mysql`) — instants are bound through its `SqlDialect`.
@@ -102,6 +102,15 @@ listener is logged and never stops the worker.
 `jobs.log_context`; while a handler runs the worker restores them and adds `jobId` / `jobKind`, so one `grep traceId=…`
 follows a request into its background work. Set the list to `[]` to store nothing, or define a `JobContextPropagator`
 bean to carry something else.
+
+## Lanes
+
+`jobs.lane` (nullable) marks a job for one named worker. A `JobLanes` bean decides it: `enqueueLane()` is written into the row, and
+`workerLane()` is the lane of this process's worker. A worker with a lane takes **only** jobs of that lane and skips the shared upkeep
+(stale recovery, the unhandled-type DEAD, retention); the default worker (no lane) takes jobs with no lane, plus lane jobs that
+waited longer than `skeleton.job-queue.lane-grace` (default `1h`) past their run time — so jobs do not pile up when the lane's worker is down.
+Without a `JobLanes` bean every job is laneless and nothing changes. [request-routing](modules/request-routing.md) provides one so a
+candidate instance only works the jobs its own routed requests enqueued.
 
 ## Several projects in one process
 
