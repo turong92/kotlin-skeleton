@@ -3858,7 +3858,7 @@
         "prefixes": ["skeleton.routing"],
         "snippet": "docs/config/modules/request-routing.yml"
       },
-      "basePaths": ["/api/v1/admin/routing"],
+      "basePaths": ["/api/v1/admin/routing/local-window"],
       "secrets": [],
       "docs": ["docs/modules/request-routing.md"],
       "frontend": null,

@@ -58,7 +58,7 @@ class LocalWindowAdminControllerTest {
     @Test
     fun `disabled is 404 - no controller bean without the admin switch`() {
         val runner = WebApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(RequestRoutingAutoConfiguration::class.java))
+            .withConfiguration(AutoConfigurations.of(RequestRoutingAutoConfiguration::class.java, LocalWindowAdminAutoConfiguration::class.java))
             .withBean(TimeProvider::class.java, { time })
             .withBean(OperatorAccess::class.java, { access })
             .withBean(OperatorAuditLog::class.java, { OperatorAuditLog { } })

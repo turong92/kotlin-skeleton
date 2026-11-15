@@ -1,1 +1,2 @@
 dev.sumin.skeleton.routing.RequestRoutingAutoConfiguration
+dev.sumin.skeleton.routing.window.LocalWindowAdminAutoConfiguration

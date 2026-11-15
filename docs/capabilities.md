@@ -1697,7 +1697,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 켜는 법: `--modules request-routing`
 - 의존 한 줄: `implementation(project(":modules:request-routing"))`
 - 설정 접두사 `skeleton.routing` — 키와 기본값 `docs/config/modules/request-routing.yml`
-- HTTP 경로: `/api/v1/admin/routing`
+- HTTP 경로: `/api/v1/admin/routing/local-window`
 - 문서: `docs/modules/request-routing.md`
 - 쓰지 않는 경우:
   - 서비스 하나짜리 앱 — 서버가 둘 이상일 때 뜻이 있다
