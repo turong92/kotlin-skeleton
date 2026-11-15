@@ -59,7 +59,11 @@ class RouteInboundFilter(
     private fun forwardIfSelfTargeted(request: HttpServletRequest, response: HttpServletResponse, route: Route): Boolean {
         val name = route.targetOf(properties.service)?.takeIf { properties.service.isNotEmpty() && it != properties.instance } ?: return false
         val target = targets.find(properties.service, name)
-        if (proxy == null || target == null) return false
+        if (target == null) {
+            errors.write(response, RoutingErrorCode.UNKNOWN_TARGET, "The route target is not in the allowlist for service '${properties.service}'.")
+            return true
+        }
+        if (proxy == null) return false
         try {
             proxy.forward(request, response, target, route)
         } catch (e: ApplicationException) {

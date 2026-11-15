@@ -38,7 +38,7 @@ class RouteProxy(private val client: HttpClient, private val timeout: Duration) 
             response.status = upstream.statusCode()
             val dropped = hopByHop(upstream.headers().allValues("connection"))
             upstream.headers().map().forEach { (name, values) ->
-                if (!skip(name, dropped)) values.forEach { response.addHeader(name, it) }
+                if (!skip(name, dropped)) values.forEachIndexed { i, value -> if (i == 0) response.setHeader(name, value) else response.addHeader(name, value) }
             }
             response.flushBuffer()
             copy(body, response)
@@ -51,7 +51,7 @@ class RouteProxy(private val client: HttpClient, private val timeout: Duration) 
             .timeout(timeout)
             .method(request.method, body(request))
         Collections.list(request.headerNames).forEach { name ->
-            if (!skip(name, dropped) && name != RouteBaggage.HEADER && !name.equals(VIA, true)) {
+            if (!skip(name, dropped) && !name.equals(RouteBaggage.HEADER, true) && !name.equals(VIA, true)) {
                 Collections.list(request.getHeaders(name)).forEach { builder.header(name, it) }
             }
         }
@@ -62,8 +62,11 @@ class RouteProxy(private val client: HttpClient, private val timeout: Duration) 
         return builder.build()
     }
 
-    private fun uri(request: HttpServletRequest, target: RouteTarget): URI =
+    private fun uri(request: HttpServletRequest, target: RouteTarget): URI = try {
         URI.create(target.origin.toString().trimEnd('/') + request.requestURI + (request.queryString?.let { "?$it" } ?: ""))
+    } catch (e: IllegalArgumentException) {
+        throw ApplicationException("The request path or query cannot be forwarded.", RoutingErrorCode.MALFORMED, cause = e)
+    }
 
     private fun body(request: HttpServletRequest): HttpRequest.BodyPublisher {
         val length = request.contentLengthLong
@@ -90,10 +93,10 @@ class RouteProxy(private val client: HttpClient, private val timeout: Duration) 
     private fun hopByHop(connection: List<String>): Set<String> =
         connection.flatMap { it.split(',') }.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
 
-    /** 넘기지 않는 머리 — `Proxy-*` · 고정 목록 · `Connection` 에 적힌 것. `Content-Length` 는 몸통 발행자가 다시 정한다 */
+    /** 넘기지 않는 머리 — HTTP/2 가짜 머리(`:status`) · `Proxy-*` · 고정 목록 · `Connection` 에 적힌 것. `Content-Length` 는 몸통 발행자가 다시 정한다 */
     private fun skip(name: String, listed: Set<String>): Boolean {
         val lower = name.lowercase()
-        return lower in ALWAYS_DROPPED || lower.startsWith("proxy-") || lower in listed
+        return lower.startsWith(":") || lower in ALWAYS_DROPPED || lower.startsWith("proxy-") || lower in listed
     }
 
     private fun unreachable(cause: Exception) =

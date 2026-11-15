@@ -222,6 +222,28 @@ class RouteProxyTest(@Autowired @LocalServerPort private val port: Int) {
     }
 
     @Test
+    fun ownServiceMissingFromServicesIs400NotSilentlyHandledHere() {
+        val properties = RequestRoutingProperties(enabled = true, service = "api", instance = "")
+        val access = object : OperatorAccess {
+            override fun permissionsOf(ref: OperatorRef): Set<String> = setOf(RoutingPermissions.USE)
+        }
+        val filter = RouteInboundFilter(
+            properties, RouteTargets(properties), ClosedLocalRouteWindow, access, TimeProvider.systemUtc(),
+            RoutingErrorWriter(JsonMapper.builder().build()), RouteProxy(client, Duration.ofSeconds(1)),
+        )
+        SecurityContextHolder.getContext().authentication =
+            UsernamePasswordAuthenticationToken.authenticated("alice", "pw", listOf(SimpleGrantedAuthority("ROLE_ADMIN")))
+        val chain = MockFilterChain()
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(MockHttpServletRequest("GET", "/api/v1/echo").apply { addHeader("baggage", "route=api:candidate") }, response, chain)
+
+        assertEquals(400, response.status)
+        assertTrue("ROUTING.UNKNOWN_TARGET" in response.contentAsString)
+        assertTrue(chain.request == null)
+    }
+
+    @Test
     fun doesNotForwardOnTargetInstance() {
         val properties = RequestRoutingProperties(
             enabled = true,

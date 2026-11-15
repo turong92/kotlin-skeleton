@@ -68,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 비동기 잇기(`request-routing` 의 선택 통합, `job-queue-jdbc` · spring-kafka 는 `compileOnly`): `routingJobLanes`(`JobLanes`)가 믿은 표시의 이 서비스 대상을 잡의 차선으로 적고 후보 일꾼은 그 차선만 집는다. Kafka 는 `routeKafkaContainerCustomizer` 가 `RouteRecordInterceptor` 를 달아 원래 서버는 자기 서비스 몫 표시 레코드를 건너뛰고 후보는 자기 이름 표시만 받는다(소비 그룹 `<원래>-<instance>` · `auto.offset.reset=latest`, 앱이 `ContainerCustomizer` 를 따로 두면 이 빈은 서지 않으니 그 안에서 `RouteKafkaContainerCustomizer` 를 부른다). 둘 다 `skeleton.routing.enabled=true` 일 때만이다.
 - 배포 가드 `requestRoutingDeployGuard`(환경과 상관없이): `instance` 를 적은 인스턴스가 원래 서버 몫을 가로채거나 운영 DB 를 건드리는 구성(`service` 없음 · 스케줄러 `mode` ≠ `external` · 차선 없는 큐 일꾼 · 라우팅 꾸미개 없는 Kafka 리스너 · Flyway 켜짐)과 `local.max-window` 8h 초과 · 저장소 없는 `admin.enabled` 는 기동 실패, 메시지엔 속성 이름만. 로컬 대상이 있는데 창 저장소가 없거나 큐 일꾼에 `route` 키가 없으면 경고.
 - 쓰는 법 문서 `docs/request-routing.md`: 원래 서버 · 후보 · 로컬 고리(Cloudflare 고정 이름 터널 + Access 서비스 토큰, 운영 DB · 비밀을 쓰고 쓰기가 실제로 일어난다는 경고) · 창 열고 닫기(curl · 서비스 목록 도는 예) · 큐 · Kafka · 한계. 후보 배포 스크립트 · 되돌리기는 만들지 않았다.
+- 넘기기 고침(리뷰 반영): HTTP/2 대상의 가짜 머리 `:status` 를 응답으로 옮기지 않고, 대상 응답 머리가 입구가 이미 붙인 CORS · 보안 머리를 덮어쓰며(중복 방지), 들어온 `Baggage` 대문자도 한 줄로 갈아 끼운다. 이 서비스가 `services` 에 없는데 자기를 가리키는 표시는 조용히 직접 처리하지 않고 `ROUTING.UNKNOWN_TARGET` 400, 경로 · 쿼리를 URI 로 못 만들면 500 대신 `ROUTING.MALFORMED` 400. 한계(form 본문 · `X-Forwarded-*` · SSE 스레드)는 `docs/modules/request-routing.md` 에.
 
 ### notification-broadcast - 앱 세그먼트로 보내기를 문서로 못박고, 대상을 비우면 전체 (2026-11-16)
 
