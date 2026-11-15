@@ -79,7 +79,7 @@ class RequestRoutingDeployGuard(
     }
 
     private fun propagatedMdcKeys(): List<String> =
-        Binder.get(environment).bind("skeleton.job-queue.propagated-mdc-keys", Bindable.listOf(String::class.java)).orElse(listOf("traceId"))!!
+        Binder.get(environment).bind(PROPAGATED_MDC_KEYS, Bindable.listOf(String::class.java)).orElse(listOf("traceId"))!!
 
     private companion object {
         val MAX_WINDOW_LIMIT: Duration = Duration.ofHours(8)
@@ -88,6 +88,8 @@ class RequestRoutingDeployGuard(
         const val JOB_LANES = "dev.sumin.skeleton.jobqueue.jdbc.JobLanes"
         const val KAFKA_REGISTRY = "org.springframework.kafka.config.KafkaListenerEndpointRegistry"
         const val FLYWAY = "org.flywaydb.core.Flyway"
+        // job-queue 모듈의 키 - 이 모듈의 접두사가 아니라 읽기만 한다
+        const val PROPAGATED_MDC_KEYS = "skeleton.job-queue.propagated-mdc-keys"
         const val KAFKA_CUSTOMIZER_BEAN = "routeKafkaContainerCustomizer"
     }
 }
