@@ -37,7 +37,7 @@ class ClientErrorException(code: ClientErrorCode, data: Any? = null) : Applicati
 object ClientErrorSanitizer {
     private val mapper = JsonMapper.builder().build()
     // 제어 문자 + C1 + 방향 조작 문자(글을 뒤집어 보이게 하는 것)
-    private const val INVISIBLE = "\\u0080-\\u009F\\u202A-\\u202E\\u2066-\\u2069"
+    private const val INVISIBLE = "\\u0080-\\u009F\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069"
     private val CONTROL = Regex("[\\u0000-\\u001F\\u007F$INVISIBLE]")
     private val CONTROL_KEEP_NEWLINE = Regex("[\\u0000-\\u0009\\u000B-\\u001F\\u007F$INVISIBLE]")
     private val URL_QUERY = Regex("(https?://[^\\s?#\"')]+)[?#][^\\s\"')]*")

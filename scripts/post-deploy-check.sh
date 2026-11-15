@@ -10,7 +10,7 @@
 #       `-H` 의 값은 이 스크립트의 인자라 `ps` 에 보인다 — 비밀인 헤더(예: Cloud Run 비공개 서비스의 `X-Serverless-Authorization`)는 `SMOKE_HEADERS_FILE`(한 줄에 `이름: 값`인 파일, 환경변수로 경로만 준다)로 준다.
 #       `Authorization` 헤더는 받지 않는다 — 로그인 토큰이 쓴다 (종료 2).
 # native-smoke.sh 는 가짜 결제사 · 메일함이 있는 시험용 서버의 전체 흐름이라 쓰지 않는다 — 이 스크립트는 운영 주소에 읽기 · 로그인만 한다. 필요한 것: curl(7.55+) · python3.
-# 로그아웃은 응답 본문에 refreshToken 이 있을 때만 한다 (쿠키 전달 앱은 CSRF 헤더가 필요해 건너뛴다 — 그 세션은 만료로 사라진다). 로그아웃은 응답에 refreshToken 이 있을 때만 한다(쿠키 전달 앱은 CSRF 헤더가 필요해 건너뛴다 — 세션은 만료로 사라진다).
+# 로그아웃은 응답 본문에 refreshToken 이 있을 때만 한다 (쿠키 전달 앱은 CSRF 헤더가 필요해 건너뛴다 — 그 세션은 만료로 사라진다).
 set -uo pipefail
 
 for tool in curl python3; do command -v $tool >/dev/null 2>&1 || { echo "$tool 이 필요하다" >&2; exit 2; }; done
