@@ -3860,7 +3860,7 @@
       },
       "basePaths": ["/api/v1/admin/routing/local-window"],
       "secrets": [],
-      "docs": ["docs/modules/request-routing.md"],
+      "docs": ["docs/modules/request-routing.md", "docs/request-routing.md"],
       "frontend": null,
       "notFor": [
         "서비스 하나짜리 앱 — 서버가 둘 이상일 때 뜻이 있다",
@@ -3898,7 +3898,7 @@
       "config": null,
       "basePaths": [],
       "secrets": [],
-      "docs": ["docs/modules/request-routing-jdbc.md"],
+      "docs": ["docs/modules/request-routing-jdbc.md", "docs/request-routing.md"],
       "frontend": null,
       "notFor": [
         "DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다",

@@ -19,6 +19,6 @@
 | 프론트 짝 | 없음 |
 | 테스트 | `modules/request-routing-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`)) |
 
-자세히: [request-routing](request-routing.md) · [스키마 관리](../schema-management.md)
+자세히: [request-routing](request-routing.md) · [쓰는 법](../request-routing.md) · [스키마 관리](../schema-management.md)
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

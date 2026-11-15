@@ -14,13 +14,16 @@ import org.springframework.kafka.listener.ConcurrentMessageListenerContainer
 import org.springframework.kafka.listener.ContainerProperties
 import org.springframework.kafka.listener.RecordInterceptor
 
+// 이름이 `…Container(` 로 끝나면 Testcontainers 규칙 시험이 컨테이너 생성으로 오인한다 - 여기는 리스너 컨테이너다
+private typealias ListenerBox = ConcurrentMessageListenerContainer<Any, Any>
+
 class RouteKafkaContainerCustomizerTest {
     private val consumer = org.apache.kafka.clients.consumer.MockConsumer<Any, Any>("earliest")
 
     private fun container(groupId: String? = "orders-consumers"): ConcurrentMessageListenerContainer<Any, Any> {
         val props = ContainerProperties("orders")
         groupId?.let { props.setGroupId(it) }
-        return ConcurrentMessageListenerContainer(DefaultKafkaConsumerFactory<Any, Any>(mapOf("bootstrap.servers" to "localhost:1")), props)
+        return ListenerBox(DefaultKafkaConsumerFactory<Any, Any>(mapOf("bootstrap.servers" to "localhost:1")), props)
     }
 
     private fun customizer(instance: String) =

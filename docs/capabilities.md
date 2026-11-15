@@ -1699,7 +1699,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 의존 한 줄: `implementation(project(":modules:request-routing"))`
 - 설정 접두사 `skeleton.routing` — 키와 기본값 `docs/config/modules/request-routing.yml`
 - HTTP 경로: `/api/v1/admin/routing/local-window`
-- 문서: `docs/modules/request-routing.md`
+- 문서: `docs/modules/request-routing.md`, `docs/request-routing.md`
 - 쓰지 않는 경우:
   - 서비스 하나짜리 앱 — 서버가 둘 이상일 때 뜻이 있다
   - ExternalHttpClient 를 안 거치는 호출 — 표시가 따라가지 않는다
@@ -1713,7 +1713,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 켜는 법: `--modules request-routing-jdbc`
 - 의존 한 줄: `implementation(project(":modules:request-routing-jdbc"))`
 - 자동으로 따라온다: `request-routing`
-- 문서: `docs/modules/request-routing-jdbc.md`
+- 문서: `docs/modules/request-routing-jdbc.md`, `docs/request-routing.md`
 - 쓰지 않는 경우:
   - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
   - 로컬 대상이 없으면 필요 없다 — 후보 대상만 쓰는 앱은 창이 늘 닫혀 있어도 된다

@@ -30,4 +30,6 @@
 | 프론트 짝 | 없음 |
 | 테스트 | `modules/request-routing/src/test` |
 
+자세히: [쓰는 법 — 후보 · 로컬 서버로 보내기](../request-routing.md)
+
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)
