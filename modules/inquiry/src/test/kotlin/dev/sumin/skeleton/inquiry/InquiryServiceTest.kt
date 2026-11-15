@@ -39,7 +39,8 @@ class InquiryServiceTest {
             { copy(body = "도움말에서 못 찾은 ${nul}질문이 있어요") },
             { copy(replyEmail = "a${nul}@b.co") },
         ).forEach { change ->
-            assertFailsWith<InquiryInvalidException> { service().submit(request { change() }, null, "ip1", null) }
+            val e = assertFailsWith<InquiryInvalidException> { service().submit(request { change() }, null, "ip1", null) }
+            assertEquals("INVALID_CHARACTER", ((e.data as Map<*, *>)["violations"] as List<*>).filterIsInstance<InquiryViolation>().single().code)   // 길이 오류로 둘러대지 않는다
         }
         assertTrue(repository.list(null, 10).isEmpty())
     }

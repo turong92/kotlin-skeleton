@@ -65,10 +65,6 @@ class InquiryOptionalIntegrationsTest {
             assertEquals(1, emitted.map { it.second }.distinct().size)
             assertEquals(java.time.Duration.ofMinutes(10), emitted.first().first.minInterval)
         }
-        runner.withUserConfiguration(FakeAlerts::class.java).withPropertyValues("skeleton.inquiry.alert-interval=2m").run { ctx ->
-            ctx.getBean(InquiryService::class.java).submit(InquiryRequest(kind = "BUG", body = "간격 설정 시험 문의 열 글자", captchaToken = "t"), null, "ip", null)
-            assertEquals(java.time.Duration.ofMinutes(2), (ctx.getBean(OwnerAlerts::class.java) as Alerts).emitted.single().first.minInterval)
-        }
     }
 
     @Test

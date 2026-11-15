@@ -5,7 +5,6 @@ import dev.sumin.skeleton.alert.AlertSeverity
 import dev.sumin.skeleton.alert.OwnerAlerts
 import dev.sumin.skeleton.inquiry.InquiryAutoConfiguration
 import dev.sumin.skeleton.inquiry.InquiryListener
-import dev.sumin.skeleton.inquiry.InquiryProperties
 import java.time.Duration
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
@@ -13,11 +12,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 
-/** inquiry 가 스스로 내는 경보 종류 — 고정 키 하나로 [minInterval](`skeleton.inquiry.alert-interval`) 안에는 접는다(도배 한 번에 경보가 쏟아지지 않게) */
-class InquiryAlertKind(override val minInterval: Duration) : AlertKind {
-    override val name: String = "INQUIRY_RECEIVED"
-    override val severity: AlertSeverity = AlertSeverity.INFO
-    override val title: String = "A new inquiry was received"
+/**
+ * inquiry 가 스스로 내는 경보 종류 — 키는 고정 하나라 최소 간격(기본 10분) 안의 문의는 경보 한 줄로 접힌다(도배 한 번에 경보가 쏟아지지 않게).
+ * 간격을 바꾸려면 기존 `skeleton.alert.intervals.INQUIRY_RECEIVED` 로 덮어쓴다.
+ */
+enum class InquiryAlertKind(override val severity: AlertSeverity, override val title: String, override val minInterval: Duration) : AlertKind {
+    INQUIRY_RECEIVED(AlertSeverity.INFO, "A new inquiry was received", Duration.ofMinutes(10)),
 }
 
 /**
@@ -30,10 +30,7 @@ class InquiryAlertKind(override val minInterval: Duration) : AlertKind {
 class InquiryAlertAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["inquiryOwnerAlert"])
-    fun inquiryOwnerAlert(alerts: OwnerAlerts, properties: InquiryProperties): InquiryListener {
-        val kind = InquiryAlertKind(properties.alertInterval)
-        return InquiryListener { inquiry ->
-            alerts.emit(kind, "inquiry", "inquiry #${inquiry.id} (${inquiry.kind.name}) received")
-        }
+    fun inquiryOwnerAlert(alerts: OwnerAlerts): InquiryListener = InquiryListener { inquiry ->
+        alerts.emit(InquiryAlertKind.INQUIRY_RECEIVED, "inquiry", "inquiry #${inquiry.id} (${inquiry.kind.name}) received")
     }
 }

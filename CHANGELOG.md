@@ -16,8 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### inquiry - 방어 셋 (2026-11-15)
 
 - 본문 · 답장 이메일에 NUL 글자(U+0000)가 있으면 DB 에 닿기 전에 400 `INQUIRY.INVALID` (PostgreSQL `text` 가 거부해 500 이던 것).
-- 접수 경보 키를 문의 번호가 아닌 고정 키 하나로 바꾸고 최소 간격을 설정 `skeleton.inquiry.alert-interval`(기본 10분)로 뒀다 - 도배에도 경보가 한 줄로 접힌다. 공개 타입 `InquiryAlertKind` 는 enum 에서 간격을 받는 클래스가 됐다.
-- 새 설정 `skeleton.inquiry.retention`(기본 비어 있음 = 지우지 않는다): 정하면 처리 완료 뒤 그만큼 지난 문의를 매일 지운다(미처리 문의는 남김, 지운 건수만 로그, 0 이하면 기동 실패). `scheduler` 타이머 또는 요청 구동 모드의 `OnRequestTask` `inquiry-retention` 으로 돌고 멱등이다. **호환 변경**: `InquiryRepository` 에 `deleteHandledBefore(cutoff)` 가 늘었다(직접 구현한 저장소는 더한다). `inquiry` 는 `scheduler` 를 컴파일 전용으로 안다.
+- 접수 경보 키를 문의 번호가 아닌 고정 키 하나로 바꿨다(`INQUIRY_RECEIVED` 의 최소 간격 10분 - 도배에도 경보가 한 줄로 접힌다). 간격은 기존 `skeleton.alert.intervals.INQUIRY_RECEIVED` 로 덮어쓴다.
+- 입력의 NUL 오류는 길이 오류가 아니라 `INVALID_CHARACTER` 로 알린다.
+- 새 설정 `skeleton.inquiry.retention`(기본 비어 있음 = 지우지 않는다): 정하면 처리 완료 뒤 그만큼 지난 문의를 매일 지운다(미처리 문의는 남김, 지운 건수만 로그, 0 이하면 기동 실패, `scheduler` 도 요청 구동 모드도 없으면 기동 실패 — `PeriodicRunCheck`). `scheduler` 타이머 또는 요청 구동 모드의 `OnRequestTask` `inquiry-retention` 으로 돌고 멱등이다. **호환 변경**: `InquiryRepository` 에 `deleteHandledBefore(cutoff)` 가 늘었다(직접 구현한 저장소는 더한다). `inquiry` 는 `scheduler` 를 컴파일 전용으로 안다.
 
 ### storage - 멀티파트가 크기 상한을 우회하던 구멍 (2026-11-15)
 

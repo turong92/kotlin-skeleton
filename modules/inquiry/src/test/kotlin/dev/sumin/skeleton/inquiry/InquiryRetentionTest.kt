@@ -9,6 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 
@@ -55,9 +56,21 @@ class InquiryRetentionTest {
             assertEquals(0, ctx.getBeansOfType(InquiryRetention::class.java).size)
             assertEquals(0, ctx.getBeansOfType(OnRequestTask::class.java).size)
         }
-        runner.withPropertyValues("skeleton.inquiry.retention=365d").run { ctx ->
+        runner.withPropertyValues("skeleton.inquiry.retention=").run { ctx ->   // 문서의 설정 예시처럼 값을 비운 모양 = 꺼짐
+            assertEquals(null, ctx.startupFailure)
+            assertEquals(0, ctx.getBeansOfType(InquiryRetention::class.java).size)
+        }
+        runner.withPropertyValues("skeleton.inquiry.retention=365d", "skeleton.job-queue.mode=on-request").run { ctx ->
             assertEquals(1, ctx.getBeansOfType(InquiryRetention::class.java).size)
             assertEquals(listOf("inquiry-retention"), ctx.getBeansOfType(OnRequestTask::class.java).values.map { it.name })
+        }
+    }
+
+    @Test
+    fun `retention without anything to run it fails startup instead of silently never deleting`() {
+        runner.withPropertyValues("skeleton.inquiry.retention=365d").run { ctx ->
+            val message = generateSequence(ctx.startupFailure) { it.cause }.mapNotNull { it.message }.joinToString(" | ")
+            assertTrue(message.contains("scheduler") && message.contains("skeleton.inquiry.retention"))
         }
     }
 }

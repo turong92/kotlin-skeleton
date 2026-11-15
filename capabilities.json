@@ -2031,7 +2031,7 @@
       "needs": {
         "requires": [],
         "oneOf": [],
-        "optional": ["alert", "captcha-turnstile", "inquiry-jdbc"]
+        "optional": ["alert", "captcha-turnstile", "inquiry-jdbc", "scheduler"]
       },
       "config": {
         "prefixes": ["skeleton.inquiry"],

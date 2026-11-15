@@ -48,11 +48,15 @@ class InquiryService(
         val kind = InquiryKind.entries.firstOrNull { it.name == request.kind }
         if (kind == null) violations += InquiryViolation("kind", "INVALID_FORMAT", "종류를 골라 주세요")
         val body = request.body.orEmpty().trim()
-        if (body.length < BODY_MIN || body.length > BODY_MAX || body.hasNul()) {
+        if (body.hasNul()) {
+            violations += InquiryViolation("body", "INVALID_CHARACTER", "쓸 수 없는 글자가 들어 있어요")
+        } else if (body.length < BODY_MIN || body.length > BODY_MAX) {
             violations += InquiryViolation("body", "INVALID_LENGTH", "내용은 $BODY_MIN~${BODY_MAX}자로 적어 주세요")
         }
         val email = request.replyEmail?.trim()?.takeIf { it.isNotEmpty() }
-        if (email != null && (email.length > EMAIL_MAX || !EMAIL.matches(email) || email.hasNul())) {
+        if (email != null && email.hasNul()) {
+            violations += InquiryViolation("replyEmail", "INVALID_CHARACTER", "쓸 수 없는 글자가 들어 있어요")
+        } else if (email != null && (email.length > EMAIL_MAX || !EMAIL.matches(email))) {
             violations += InquiryViolation("replyEmail", "INVALID_FORMAT", "이메일 주소 모양이 아니에요")
         }
         val context = request.context?.trim()?.takeIf { it.isNotEmpty() }

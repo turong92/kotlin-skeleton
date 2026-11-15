@@ -997,7 +997,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · experimental — 위치 `modules/inquiry`
 - 켜는 법: `--modules inquiry`
 - 의존 한 줄: `implementation(project(":modules:inquiry"))`
-- 자동으로 따라온다: `scheduler`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `scheduler`
 - 설정 접두사 `skeleton.inquiry` — 키와 기본값 `docs/config/modules/inquiry.yml`
 - HTTP 경로: `/api/v1/admin/inquiries`, `/api/v1/inquiries`
 - 문서: `docs/modules/inquiry.md`
