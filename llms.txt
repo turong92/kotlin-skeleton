@@ -213,6 +213,7 @@
 - script-native-test: 앱을 네이티브로 빌드해 새 DB 와 함께 컨테이너에서 띄우고 흐름… [네이티브 시험, 릴리스 전 시험]
 - script-new-project: 새 프로젝트 한 줄 찍기 [새 프로젝트, 프로젝트 만들기]
 - script-payment-webhook: 결제 웹훅을 손으로 넣어 본다 — 토스… [웹훅 보내 보기, 결제 웹훅 시험]
+- script-post-deploy-check: 배포된 주소(인자)에 /health 와 시험 계정 로그인(+ 받은… [배포 후 점검, 배포 스모크]
 - script-rename-skeleton: 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에… [이름 바꾸기, 리네임]
 - script-sample-e2e-backend: 샘플 앱 백엔드를 e2e 테스트용으로 올리고 내리는 비대화형… [e2e 백엔드, e2e 테스트용 서버]
 - script-test-deploy-contract: 홈서버 배포 계약(docs/deploy.md)을 진짜 컨테이너로 증명한다 [배포 검증, 배포 계약 테스트]

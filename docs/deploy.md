@@ -439,6 +439,28 @@ D 단계는 시험 안에서 일회용 VAPID 쌍을 만들어 넣는다(실키 �
 하나씩 빼면(클라이언트 IP · 메일 · TEMPLATE 허락 · 첨부 키 비밀 · 계정 차단/아이디 해시 비밀) 가드가 그 이름을 말하며 실패함을 확인한다. 스타터(apps/api)는 메일 모듈이 없으므로 C2 단계가 "메일 발송 길 · client-ip 를 요구하며 실패" 를 확인한다.
 첫 로그인 확인: 가입 → (메일이 릴레이로 간다) 확인 링크 → 그 주소가 `BOOTSTRAP_ADMIN_EMAIL` 이면 ADMIN.
 
+### 배포 후 자동 점검 — `scripts/post-deploy-check.sh`
+
+배포된 주소에 `/health` 와 로그인 한 번을 찔러 본다. 하나라도 어긋나면 0 이 아닌 종료 코드라 배포 파이프라인 · 트래픽 전환 앞에 그대로 걸 수 있다.
+
+```bash
+SMOKE_EMAIL=smoke@example.com SMOKE_PASSWORD=… \
+  scripts/post-deploy-check.sh https://<앱 주소> [-H '이름: 값']… [--wait <초>]
+```
+
+| 단계 | 통과 | 어긋나면 |
+|---|---|---|
+| `GET /health` | `--wait` 초(기본 60 — 콜드스타트) 안에 200 | 종료 1, 마지막 상태 코드를 말한다 (로그인은 시도하지 않는다) |
+| `POST /api/v1/auth/login` | 200 + `value.accessToken` | 종료 1 — 시험 계정 · 비밀번호 · 마이그레이션을 본다 |
+| `GET /api/v1/auth/me` | 받은 토큰으로 200 | 종료 1 |
+| `POST /api/v1/auth/logout` | (결과를 보지 않는다 — 점검이 세션을 쌓아 두지 않게 닫을 뿐) | — |
+
+- **후보 리비전**: Cloud Run 태그 주소(`https://<태그>---<서비스>-<해시>.a.run.app`)를 그대로 준다. 헤더로 후보를 고르는 앞단이면 `-H 'X-Revision-Tag: candidate'` 처럼 줄 수 있고(여러 번 가능) 모든 요청에 붙는다. 트래픽을 옮기기 **전에** 후보로 돌려 통과하면 옮기고, 옮긴 뒤 같은 명령을 운영 주소로 한 번 더 돌린다.
+- **시험 계정**: 시드 계정은 로컬 전용이라(stage · prod 기동 실패) 쓸 수 없다. 환경마다 평범한 가입으로 점검 전용 계정을 하나 만들어 두고(권한 없음 · 다른 용도 없음) 그 이메일 · 비밀번호를 파이프라인 비밀에 둔다. 로그인은 `email` + `password` 로 보낸다.
+- **비밀**: 비밀번호 · 토큰 · 헤더 값은 출력하지 않고 명령줄 인자로도 넘기지 않는다(0600 임시 파일 → 끝나면 지운다). 실패 때 응답 본문도 찍지 않는다. 헤더 값이 비밀이면(`-H 'Authorization: …'`) 셸 기록에 남지 않게 환경변수에서 풀어 쓴다.
+- 읽기 · 로그인만 한다: 결제 · 메일 · 작업 큐를 움직이지 않는다. 전체 흐름 시험(가짜 결제사 · 메일함이 있는 서버용)은 `scripts/native-smoke.sh`(`docs/native-image.md`) 이고, 이 스크립트는 그것을 재활용하지 않는다. `scripts/post-deploy-check.sh` 자체는 `PostDeployCheckScriptTest`(`modules/platform`)가 가짜 서버로 증명한다.
+- 이 점검이 못 보는 것: DB 마이그레이션이 옛 버전을 깨는지(그것은 CI 의 `scripts/migration-risk.pl` — `docs/schema-management.md` 「Rolling deploys」), 로그인 밖의 기능.
+
 ## 11. 버전을 올릴 때 선언에서 바꿀 것
 
 이 레포를 받은 앱이 **새 커밋을 따라가며** 배포 선언(`deploy/app.yaml`의 `secrets:` · `env:`)에 더해야 하는 것이다. 새 변경이 선언을 요구하면 여기에 한 줄 더한다 (CHANGELOG 의 해당 항목이 이 표를 가리킨다). `<P>` = `env_prefix`.

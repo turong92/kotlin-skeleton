@@ -215,6 +215,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `script-native-test` | 앱을 네이티브로 빌드해 새 DB 와 함께 컨테이너에서 띄우고 흐름 시험(--smoke)을 돌린다 — 스켈레톤은 tools/native-check + native-smoke.sh, 새 프로젝트는 apps/api + 자기 시험(릴리스 전 · 의존성 파일 PR 에서 돌리는 것을 권한다). | (도구 — 켜는 조각 없음) | 네이티브 시험, 릴리스 전 시험 / native test, release check | — |
 | `script-new-project` | 새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다). | (도구 — 켜는 조각 없음) | 새 프로젝트, 프로젝트 만들기, 찍어내기, 스캐폴딩, 프로젝트 시작 / new project, scaffold, stamp, template, project generator | — |
 | `script-payment-webhook` | 결제 웹훅을 손으로 넣어 본다 — 토스 PAYMENT_STATUS_CHANGED 모양의 본문을 떠 있는 서버의 수신함 주소로 보내 주소의 비밀 조각 · 재전송 중복 · 모르는 주문 · 본문 불신(서버가 결제사에 다시 조회)을 확인한다. 대상 서버는 늘 인자로 받는다. | (도구 — 켜는 조각 없음) | 웹훅 보내 보기, 결제 웹훅 시험, 수신함 시험, 토스 웹훅 / send test webhook, payment webhook check, toss webhook | — |
+| `script-post-deploy-check` | 배포된 주소(인자)에 /health 와 시험 계정 로그인(+ 받은 토큰으로 내 정보)을 한 번 찔러 확인하고 어긋나면 0 이 아닌 종료 코드 — 후보 리비전 태그 주소 · 추가 헤더(-H) 지원, 비밀은 출력하지 않는다. | (도구 — 켜는 조각 없음) | 배포 후 점검, 배포 스모크, 후보 리비전 확인, 헬스 로그인 점검 / post deploy check, deploy smoke test, candidate revision check, health and login probe | — |
 | `script-rename-skeleton` | 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에 바꾸는 스크립트(GitHub Template 로 만든 뒤 이름만 바꿀 때) — 끝에 남은 흔적을 검사하고 이 카탈로그를 다시 만든다. | (도구 — 켜는 조각 없음) | 이름 바꾸기, 리네임, 패키지 변경, 템플릿 이름 바꾸기 / rename, change package, rename template, project name | — |
 | `script-sample-e2e-backend` | 샘플 앱 백엔드를 e2e 테스트용으로 올리고 내리는 비대화형 스크립트(react-skeleton 의 Playwright e2e 가 부른다). | (도구 — 켜는 조각 없음) | e2e 백엔드, e2e 테스트용 서버 / e2e backend, playwright backend | — |
 | `script-test-deploy-contract` | 홈서버 배포 계약(docs/deploy.md)을 진짜 컨테이너로 증명한다 — 이미지 빌드 · 헬스체크 · 0.0.0.0 · stdout 로그 · 보호 환경 가드 실패 화면. | (도구 — 켜는 조각 없음) | 배포 검증, 배포 계약 테스트, 컨테이너 검증 / deploy contract test, container check, image verification | — |
@@ -2159,6 +2160,16 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 토스가 보내는 진짜 웹훅의 모양은 확인하지 못한다 — 본문 모양은 가정이다 (docs/real-provider-setup.md 의 검증 기록)
   - 서버가 처리한 결과는 이 스크립트가 보지 못한다 — 서버 로그의 'payment webhook result=' 줄과 운영자 수신함을 본다
 - 키워드: 웹훅 보내 보기, 결제 웹훅 시험, 수신함 시험, 토스 웹훅 / send test webhook, payment webhook check, toss webhook
+
+### `script-post-deploy-check` — 배포된 주소(인자)에 /health 와 시험 계정 로그인(+ 받은 토큰으로 내 정보)을 한 번 찔러 확인하고 어긋나면 0 이 아닌 종료 코드 — 후보 리비전 태그 주소 · 추가 헤더(-H) 지원, 비밀은 출력하지 않는다.
+
+- 종류 · 상태: script · stable — 위치 `scripts/post-deploy-check.sh`
+- 켜는 법: (도구 — 켜는 조각 없음)
+- 문서: `docs/deploy.md`
+- 쓰지 않는 경우:
+  - 기능 시험이 아니다 — 읽기 · 로그인만 본다. 결제 · 메일 · 작업 큐까지 도는 전체 흐름은 native-smoke.sh(시험용 서버)
+  - 시험 계정은 미리 만들어 둔다 — 시드 계정은 로컬 전용이라 stage · prod 에서는 쓸 수 없다
+- 키워드: 배포 후 점검, 배포 스모크, 후보 리비전 확인, 헬스 로그인 점검 / post deploy check, deploy smoke test, candidate revision check, health and login probe
 
 ### `script-rename-skeleton` — 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에 바꾸는 스크립트(GitHub Template 로 만든 뒤 이름만 바꿀 때) — 끝에 남은 흔적을 검사하고 이 카탈로그를 다시 만든다.
 

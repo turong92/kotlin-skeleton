@@ -92,6 +92,8 @@ gcloud scheduler jobs create http drain-jobs \
 | 요청 제한 시간 | `time-budget` + 여유 | 깨우기 요청이 이 안에 끝나야 한다 |
 | 헬스 | 시작 프로브 `/health` | 앱이 DB 를 못 보면 503 — 시작 프로브 임계값은 기동 시간(JVM 약 7s, 네이티브 약 1s)보다 넉넉히 |
 
+새 리비전은 트래픽 0 으로 태그를 붙여 올리고(`--no-traffic --tag candidate`), 태그 주소에 `scripts/post-deploy-check.sh https://candidate---<서비스>-<해시>.a.run.app` 를 돌려 통과하면 트래픽을 옮긴다(`/health` + 시험 계정 로그인, 쓰는 법 `docs/deploy.md` 「배포 후 자동 점검」). 후보와 옛 리비전이 같은 DB 를 같이 쓰므로 마이그레이션은 expand/contract 로 쓴다(`docs/schema-management.md` 「Rolling deploys」).
+
 DB 는 인스턴스 밖(Cloud SQL 등)이다. 깨우기가 DB 를 깨우는 비용도 같이 본다. 비밀(`JWT_SECRET` · 암호 키 · 깨우기 비밀값 · 웹훅 조각)은 Secret Manager → 환경변수.
 
 ## 4. 앱이 지킬 것

@@ -162,6 +162,7 @@ check "배포 선언에 skeleton · SKELETON 흔적이 없다 (스위치 이름�
 check "배포 선언에서 고르지 않은 모듈의 비밀 설명이 지워진다 (storage-s3 · payment-toss), 쓰는 모듈(auth)은 남는다" bash -c "! grep -q '\[storage-s3\]\|\[storage\]\|\[payment-toss\]\|\[redis-core\]' '$A/deploy/app.yaml' && grep -q '\[auth\]' '$A/deploy/app.yaml'"
 check "배포 선언은 compose · Caddyfile · cloudflared · 백업을 만들지 않는다 (플랫폼 몫)" bash -c "test ! -e '$A/deploy/docker-compose.yml' && test ! -e '$A/deploy/Caddyfile' && test ! -e '$A/deploy/cloudflared' && ls '$A/deploy' | grep -qx 'app.yaml' && [ \"\$(ls '$A/deploy' | wc -l | tr -d ' ')\" = 1 ]"
 check "이미지 워크플로는 보류 — 따라오지만 수동 실행(workflow_dispatch)만 트리거한다 (태그 · 브랜치 푸시 없음 · latest 없음)" bash -c "grep -q 'workflow_dispatch:' '$A/.github/workflows/image.yml' && ! grep -q \"tags: \\['v\" '$A/.github/workflows/image.yml' && ! grep -q 'branches' '$A/.github/workflows/image.yml' && ! grep -Eq '^  push:' '$A/.github/workflows/image.yml' && ! grep -q ':latest' '$A/.github/workflows/image.yml'"
+check "배포 후 점검 스크립트가 따라온다 (문법 검사 통과)" bash -c "test -x '$A/scripts/post-deploy-check.sh' && bash -n '$A/scripts/post-deploy-check.sh'"
 check "계약 테스트 스크립트와 그 CI 가 따라온다 (문법 검사 통과)" bash -c "test -x '$A/scripts/test-deploy-contract.sh' && bash -n '$A/scripts/test-deploy-contract.sh' && test -f '$A/.github/workflows/deploy-contract.yml'"
 check "계약 스크립트의 secret_env / contract_env 는 자기를 부르지 않고 출력이 끝난다 (비밀 한 쌍, DB 세 쌍 + 비밀)" deploy_env_shape "$A/scripts/test-deploy-contract.sh"
 check "Dockerfile 은 APP 인자를 받는다 (api 가 기본)" has_line '^ARG APP=api' "$A/Dockerfile"

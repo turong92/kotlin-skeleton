@@ -5220,6 +5220,35 @@
       }
     },
     {
+      "id": "script-post-deploy-check",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/post-deploy-check.sh",
+      "status": "stable",
+      "summary": "배포된 주소(인자)에 /health 와 시험 계정 로그인(+ 받은 토큰으로 내 정보)을 한 번 찔러 확인하고 어긋나면 0 이 아닌 종료 코드 — 후보 리비전 태그 주소 · 추가 헤더(-H) 지원, 비밀은 출력하지 않는다.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/deploy.md"],
+      "frontend": null,
+      "notFor": [
+        "기능 시험이 아니다 — 읽기 · 로그인만 본다. 결제 · 메일 · 작업 큐까지 도는 전체 흐름은 native-smoke.sh(시험용 서버)",
+        "시험 계정은 미리 만들어 둔다 — 시드 계정은 로컬 전용이라 stage · prod 에서는 쓸 수 없다"
+      ],
+      "keywords": {
+        "ko": ["배포 후 점검", "배포 스모크", "후보 리비전 확인", "헬스 로그인 점검"],
+        "en": ["post deploy check", "deploy smoke test", "candidate revision check", "health and login probe"]
+      }
+    },
+    {
       "id": "script-rename-skeleton",
       "kind": "script",
       "module": null,
