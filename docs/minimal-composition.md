@@ -103,6 +103,7 @@ fails when this table and the prefixes found in module code differ.
 | `account` | `skeleton.account` |
 | `api-key` | `skeleton.api-key` |
 | `inquiry` | `skeleton.inquiry` |
+| `audit-jdbc` | `skeleton.audit` |
 | `booking` | `skeleton.booking` |
 | `waiting-room` | `skeleton.waiting-room` |
 | `video` | `skeleton.video` |
@@ -228,6 +229,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `idempotency-jdbc` | yes (replaces the in-memory store) | a `DataSource` + one `db-*` module (+ its migration `idempotency_keys`) | `scheduler` (hourly purge of expired keys; compile-only) |
 | `inquiry` | yes (in-memory store; the human check passes everything until `captcha-turnstile` or an app bean) | `inquiry-jdbc` | — |
 | `inquiry-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `inquiries`, as above) | — |
+| `audit-jdbc` | yes (replaces the do-nothing `OperatorAuditLog`; the read API `/api/v1/admin/audit-logs` is off until `skeleton.audit.admin.enabled=true`; nothing is deleted until `skeleton.audit.retention` is set) | a `DataSource` + one `db-*` module (+ its migration `operator_audit_log`; MySQL with binlog needs `log_bin_trust_function_creators=1` for its triggers) | `scheduler` (daily purge past the keep time; compile-only), `spring-security-core` (the read API) |
 | `booking` | wired only once a `BookingStore` exists (then the server API `BookingPools` · `BookingHolds`; HTTP `/api/v1/booking` for a servlet app with Spring Security; the door lets everyone in, the relay stays in this instance) | `booking-jdbc` | `scheduler` (the 1-minute expiry sweep; compile-only), `spring-security-core` (HTTP; compile-only) |
 | `booking-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `booking`, as above) | — |
 | `waiting-room` | wired only once a `WaitingRoomStore` exists (then the server API `WaitingRooms`; HTTP `/api/v1/waiting-rooms` for a servlet app with Spring Security; no room exists until one is created; in a protected env (stage · prod) the signing keys `skeleton.waiting-room.token.key` must be set) | `waiting-room-jdbc` | `spring-security-core` (HTTP; compile-only) |

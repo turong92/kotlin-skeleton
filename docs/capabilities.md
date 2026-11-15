@@ -79,6 +79,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `api-key-jdbc` | API 키를 DB 에 둔다 (PostgreSQL · MySQL) — 토큰 해시만 저장하고, 회수 · 마지막 사용(1분 해상도)은 한 문장의 조건부 갱신이라 동시에 몰려도 한 번만 쓴다. | `--modules api-key-jdbc` | API 키 저장소, API 키 DB / api key storage, api key repository | — |
 | `async` | @Async · CompletableFuture 작업이 호출 스레드의 trace id · MDC · 보안 컨텍스트를 이어받는 실행기와 작업 그룹. | `--modules async` | 비동기, 백그라운드 작업, 스레드 풀, @Async, 작업 그룹 / async, background task, thread pool, mdc propagation, completable future | — |
 | `async-notification` | 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로 흘려 보낸다. | `--modules async-notification` | 비동기 예외 알림, 백그라운드 오류 알림, 비동기 에러 / async exception alert, background error notification, uncaught async exception | — |
+| `audit-jdbc` | 운영자 행동 기록(OperatorAuditLog)을 DB 에 남긴다 (PostgreSQL · MySQL) — 누가 · 언제 · 무엇을 · 대상 · 결과 · 접속 IP/기기, 트리거로 더하기만(수정 불가 · 30일 안 삭제 불가), 행동과 같은 트랜잭션, 운영자 조회(기간 · 운영자 · 대상 필터 + 커서, 권한 audit.read), 보관 기한(기본 없음 — 정하면 매일 지움). | `--modules audit-jdbc` | 운영 기록, 감사 로그, 감사 기록, 운영자 행동 기록, 누가 바꿨나 / audit log, operator audit, admin activity log, who changed what | — |
 | `auth` | 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬 dev-login · 비상용 break-glass · SecurityFilterChain (계정 저장소는 앱이 정한다). | 스타터(apps/api)에 기본 포함 | 로그인, 로그아웃, 인증, 토큰, JWT, 권한, 관리자 로그인, 비상 접근 / login, authentication, jwt, token, dev login, break glass, security | `@skeleton/auth` |
 | `auth-magic-link` | 이메일로 받은 한 번 쓰는 링크로 로그인(비밀번호 없이) — 이미 있는 계정으로 들어오고(skeleton.auth-magic-link.sign-up 으로 가입도 허용), 미확인 계정에서는 가입 때의 미확인 비밀번호를 버린다. | `--modules auth-magic-link` | 매직링크, 링크 로그인, 비밀번호 없는 로그인, 이메일 로그인 / magic link, passwordless, email sign in, link login | `@skeleton/auth` |
 | `auth-mfa` | 2단계 인증(TOTP) — 모든 로그인 길(비밀번호 · 소셜 · 매직 링크 · 탈퇴 취소)의 두 번째 단계. 인증 앱 등록(서버가 만든 QR) · 복구 코드 10개 · 틀린 코드 한도(대기 5번 · 계정 15분 10번) + 알림 메일 · 같은 코드 재사용 방지 · 끄기(다시 인증 + 코드). 비밀은 crypto 봉투로 저장. | `--modules auth-mfa,auth-mfa-jdbc` | 2단계 인증, 이중 인증, OTP, TOTP, 인증 앱, 복구 코드, MFA / two-factor authentication, 2fa, mfa, totp, authenticator app, recovery codes, second factor | — |
@@ -380,6 +381,22 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 알림을 어디로 보낼지는 notification-* 모듈이 정한다
   - 주인에게 가는 경보는 alert
 - 키워드: 비동기 예외 알림, 백그라운드 오류 알림, 비동기 에러 / async exception alert, background error notification, uncaught async exception
+
+### `audit-jdbc` — 운영자 행동 기록(OperatorAuditLog)을 DB 에 남긴다 (PostgreSQL · MySQL) — 누가 · 언제 · 무엇을 · 대상 · 결과 · 접속 IP/기기, 트리거로 더하기만(수정 불가 · 30일 안 삭제 불가), 행동과 같은 트랜잭션, 운영자 조회(기간 · 운영자 · 대상 필터 + 커서, 권한 audit.read), 보관 기한(기본 없음 — 정하면 매일 지움).
+
+- 종류 · 상태: module · experimental — 위치 `modules/audit-jdbc`
+- 켜는 법: `--modules audit-jdbc`
+- 의존 한 줄: `implementation(project(":modules:audit-jdbc"))`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `scheduler`
+- 설정 접두사 `skeleton.audit` — 키와 기본값 `docs/config/modules/audit-jdbc.yml`
+- HTTP 경로: `/api/v1/admin/audit-logs`
+- 문서: `docs/modules/audit-jdbc.md`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다 (MySQL 은 트리거를 만드는 마이그레이션이 binlog 가 켜져 있으면 log_bin_trust_function_creators=1 이 필요하다)
+  - 조회 경로는 `skeleton.audit.admin.enabled=true` 로 켠다 — 기본은 꺼짐(404). 보관 기한 `skeleton.audit.retention` 도 기본 없음(지우지 않는다), 정하면 30일 이상
+  - 데이터베이스 관리자 권한을 가진 사람은 막지 못한다 — 트리거는 앱의 실수를 막는다(앱 계정에 DROP · TRUNCATE 를 주지 않는다)
+  - 접속 로그 · 사용자 행동 분석이 아니다 — 운영자가 한 쓰기 행동만 남긴다
+- 키워드: 운영 기록, 감사 로그, 감사 기록, 운영자 행동 기록, 누가 바꿨나 / audit log, operator audit, admin activity log, who changed what
 
 ### `auth` — 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬 dev-login · 비상용 break-glass · SecurityFilterChain (계정 저장소는 앱이 정한다).
 
@@ -2016,7 +2033,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `ads-admob`, `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-apple`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `auth-web-handoff`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `idempotency-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-scheduled`, `notification-scheduled-jdbc`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-appstore`, `payment-googleplay`, `payment-iap`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `ads-admob`, `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `audit-jdbc`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-apple`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `auth-web-handoff`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `idempotency-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-scheduled`, `notification-scheduled-jdbc`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-appstore`, `payment-googleplay`, `payment-iap`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

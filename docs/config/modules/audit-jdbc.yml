@@ -1,0 +1,6 @@
+# audit-jdbc — 운영자 행동 기록(OperatorAuditLog)을 DB 에 남긴다. 저장은 더하기만(수정 불가, 30일 안의 삭제 불가).
+skeleton:
+  audit:
+    # retention: 365d    # 적지 않으면(기본) 지우지 않는다. 예: 365d - 이보다 오래된 줄을 매일 지운다. 30일 미만이면 기동 실패. scheduler 모듈이나 요청 구동 모드(skeleton.job-queue.mode=on-request)가 없으면 기동 실패
+    admin:
+      enabled: false     # true 면 운영자 조회(GET /api/v1/admin/audit-logs). 모듈 기본은 꺼짐(404). 권한 audit.read

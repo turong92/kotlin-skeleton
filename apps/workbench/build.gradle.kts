@@ -20,6 +20,7 @@ dependencies {
     implementation(project(":modules:notification-slack"))
     implementation(project(":modules:notification-jdbc"))
     implementation(project(":modules:notification-push-jdbc"))   // + notification-push (api) — 푸시 알림 계약 · 채널 · 기기 저장. 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 · 모듈 목록 시험). 전달 수단(webpush · fcm) · 견본 조립은 apps/sample
+    implementation(project(":modules:audit-jdbc"))   // 운영자 행동 기록(OperatorAuditLog)을 DB 에 - 조회 경로 · 보관 기한은 꺼짐이 기본이라 클래스패스에 둔다(설정 스니펫 시험)
     implementation(project(":modules:notification-broadcast-jdbc"))   // + notification-broadcast (api) - 공지 발송. 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 시험). 견본 조립은 apps/sample
     implementation(project(":modules:notification-scheduled-jdbc"))   // + notification-scheduled (api) - 사람마다 예약 푸시. 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 시험)
     implementation(project(":modules:notification-webpush"))   // 웹 푸시(VAPID) 전달 수단 - 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 시험). 견본 조립은 apps/sample

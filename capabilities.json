@@ -454,6 +454,40 @@
       }
     },
     {
+      "id": "audit-jdbc",
+      "kind": "module",
+      "module": "audit-jdbc",
+      "path": "modules/audit-jdbc",
+      "status": "experimental",
+      "summary": "운영자 행동 기록(OperatorAuditLog)을 DB 에 남긴다 (PostgreSQL · MySQL) — 누가 · 언제 · 무엇을 · 대상 · 결과 · 접속 IP/기기, 트리거로 더하기만(수정 불가 · 30일 안 삭제 불가), 행동과 같은 트랜잭션, 운영자 조회(기간 · 운영자 · 대상 필터 + 커서, 권한 audit.read), 보관 기한(기본 없음 — 정하면 매일 지움).",
+      "starter": false,
+      "newProjectFlag": "--modules audit-jdbc",
+      "autoIncludes": ["scheduler"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["scheduler"]
+      },
+      "config": {
+        "prefixes": ["skeleton.audit"],
+        "snippet": "docs/config/modules/audit-jdbc.yml"
+      },
+      "basePaths": ["/api/v1/admin/audit-logs"],
+      "secrets": [],
+      "docs": ["docs/modules/audit-jdbc.md"],
+      "frontend": null,
+      "notFor": [
+        "DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다 (MySQL 은 트리거를 만드는 마이그레이션이 binlog 가 켜져 있으면 log_bin_trust_function_creators=1 이 필요하다)",
+        "조회 경로는 `skeleton.audit.admin.enabled=true` 로 켠다 — 기본은 꺼짐(404). 보관 기한 `skeleton.audit.retention` 도 기본 없음(지우지 않는다), 정하면 30일 이상",
+        "데이터베이스 관리자 권한을 가진 사람은 막지 못한다 — 트리거는 앱의 실수를 막는다(앱 계정에 DROP · TRUNCATE 를 주지 않는다)",
+        "접속 로그 · 사용자 행동 분석이 아니다 — 운영자가 한 쓰기 행동만 남긴다"
+      ],
+      "keywords": {
+        "ko": ["운영 기록", "감사 로그", "감사 기록", "운영자 행동 기록", "누가 바꿨나"],
+        "en": ["audit log", "operator audit", "admin activity log", "who changed what"]
+      }
+    },
+    {
       "id": "auth",
       "kind": "module",
       "module": "auth",
@@ -4715,6 +4749,7 @@
         "api-key-jdbc",
         "async",
         "async-notification",
+        "audit-jdbc",
         "auth-magic-link",
         "auth-mfa",
         "auth-mfa-jdbc",

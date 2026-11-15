@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### audit-jdbc · platform - 운영자 감사 기록을 DB 에 남기고 조회한다 (2026-11-16)
+
+- 새 모듈 `audit-jdbc`: `OperatorAuditLog`(`platform`, 지금까지 아무것도 안 남기는 `NoOpOperatorAuditLog` 뿐이었다)의 DB 구현. 붙이면 그 기본 대신 서고, 앱이 같은 타입의 빈을 두면 물러난다. 표 `operator_audit_log`(PostgreSQL · MySQL 마이그레이션 `V20261116130000`, 새 표): 누가(`actor_id`) · 언제 · 무엇을(`action`) · 대상(`target_type` · `target_id`) · 결과(`result`) · 접속 IP · 기기 정보(지금 처리 중인 요청에서 읽는다 — IP 는 `skeleton.web.client-ip` 규칙) · `detail`(JSON). **더하기만 한다**(`legal-jdbc` 동의 기록과 같은 트리거 방식): 고치기는 항상 막고, 지우기는 기록한 지 30일이 안 된 줄을 막고, PostgreSQL 은 `TRUNCATE` 도 막는다. 기록은 부르는 쪽의 쓰기 트랜잭션에 합류해 행동이 롤백되면 같이 사라진다. MySQL 은 트리거를 만들므로 binlog 가 켜져 있으면 `log_bin_trust_function_creators=1` 이 필요하다(`legal-jdbc` 와 같다).
+- 운영자 조회 `GET /api/v1/admin/audit-logs`(**기본 꺼짐** `skeleton.audit.admin.enabled=false` → 404, 권한 `audit.read` — 기본 역할 없이 전권만): 기간(`from` 포함 · `to` 미포함) · 운영자(`actorId`) · 대상(`targetType` · `targetId`) 필터, 새것부터 커서(`cursor`, `size` 1~100). 읽기 전용 — 고치거나 지우는 경로가 없다.
+- 보관 기한 `skeleton.audit.retention`(**기본 없음 — 지우지 않는다**): 정하면 그보다 오래된 줄을 하루 한 번 1000줄씩 지운다(`scheduler` 모듈 또는 요청 구동 모드가 없으면 기동 실패). **30일 미만이면 기동 실패**(트리거가 30일 안의 줄을 못 지우는 같은 값).
+- `platform`: `OperatorAction` 에 `result: OperatorResult`(`SUCCESS` 기본 · `DENIED` · `FAILED`)가 늘었다. **호환 변경 없음** — 마지막 인자에 기본값이 있어 기존 호출은 그대로 `SUCCESS` 다. 거절 · 실패를 남기려는 호출자는 롤백되는 트랜잭션 밖에서 부른다(`docs/modules/audit-jdbc.md`). 설명: `docs/modules/audit-jdbc.md` · 설정 `docs/config/modules/audit-jdbc.yml`. 시험: `modules/audit-jdbc` — 수정 · 삭제 거절 · 롤백 동행 · 보관 기한 · 필터 · 커서가 두 DB, 권한(익명 401 · 무권한 403)이 `AuditAdminWebTest`.
+
 ### account · platform · account-jdbc · payment-jdbc · coupon-jdbc · auth-session-jdbc - 운영 시험 계정 표시와 집계에서 빼기 (2026-11-16)
 
 - 운영자가 계정을 「시험 계정」으로 표시한다: `PUT` · `DELETE` · `GET /api/v1/admin/accounts/{id}/test-account`(`skeleton.account.admin.enabled=true` 일 때만 — 켜고 끄기는 `account.manage`, 읽기는 `account.read`, 멱등, 없는 계정 404 · 지워진 계정 표시 410). 바뀔 때마다 `OperatorAuditLog` 에 `account.test-mark.set` · `account.test-mark.cleared` 한 줄(같은 트랜잭션, 이미 그 상태면 기록 없음). 저장은 새 표 `account_test_marks`(계정당 한 줄 — 누가 · 언제, PostgreSQL · MySQL 마이그레이션 `V20261116100000`, 새 표라 옛 버전이 그대로 돈다) — `Account` 모델 · 로그인 · 권한은 그대로다.

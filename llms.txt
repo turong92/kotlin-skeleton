@@ -87,6 +87,7 @@
 - api-key-jdbc: API 키를 DB 에 둔다 (PostgreSQL · MySQL) [API 키 저장소, API 키 DB]
 - async: @Async · CompletableFuture 작업이 호출 스레드의… [비동기, 백그라운드 작업]
 - async-notification: 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로… [비동기 예외 알림, 백그라운드 오류 알림]
+- audit-jdbc: 운영자 행동 기록(OperatorAuditLog)을 DB 에 남긴다… [운영 기록, 감사 로그]
 - auth: 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬… [로그인, 로그아웃]
 - auth-magic-link: 이메일로 받은 한 번 쓰는 링크로 로그인(비밀번호 없이) [매직링크, 링크 로그인]
 - auth-mfa: 2단계 인증(TOTP) — 모든 로그인 길(비밀번호 · 소셜 · 매직… [2단계 인증, 이중 인증]

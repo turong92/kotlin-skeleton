@@ -97,6 +97,7 @@
 | `api-key-jdbc` | API 키 저장을 DB 에 두기 (해시만 저장) | [api-key-jdbc](api-key-jdbc.md) |
 | `inquiry` | 문의 · 의견 받기 (질문 · 기능 제안 · 오류 신고 — 공개 POST · 접수 경보 · 운영자 목록 · 처리 표시) | [inquiry](inquiry.md) |
 | `inquiry-jdbc` | 문의 저장을 DB 에 두기 | [inquiry-jdbc](inquiry-jdbc.md) |
+| `audit-jdbc` | 운영자 행동 기록을 DB 에 — 더하기만(수정 · 30일 안 삭제 불가) · 운영자 조회(기간 · 운영자 · 대상 필터, 커서) · 보관 기한(기본 없음) | [audit-jdbc](audit-jdbc.md) |
 | `auth-mfa` | 2단계 인증(TOTP) — 모든 로그인 길의 두 번째 단계 · 등록(QR) · 복구 코드 · 한도 · 재사용 방지 · 끄기(다시 인증 + 코드) | [auth-mfa](auth-mfa.md) |
 | `auth-mfa-jdbc` | 2단계 저장을 DB 에 두기 (비밀은 암호화 봉투, 복구 코드는 해시) | [auth-mfa-jdbc](auth-mfa-jdbc.md) |
 | `booking` | 예약(좌석 지정 · 선착순) — 자리 잡기 · 놓기 · 보류 시간 자동 반환 · 무료 확정 · 결제 확정 · 늦은 결제 자동 환불 · 배치도 스냅샷 + SSE 흐름(Redis 중계) · 이중 판매 0 | [booking](booking.md) |

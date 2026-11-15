@@ -1,0 +1,2 @@
+dev.sumin.skeleton.audit.jdbc.AuditJdbcAutoConfiguration
+dev.sumin.skeleton.audit.jdbc.web.AuditWebAutoConfiguration
