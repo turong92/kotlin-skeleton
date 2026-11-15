@@ -3,6 +3,7 @@ package dev.sumin.skeleton.routing
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.http.ExternalHttpClientCustomizer
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
+import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.routing.client.RouteOutboundCustomizer
 import dev.sumin.skeleton.routing.web.RouteInboundFilter
@@ -14,10 +15,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
+import org.springframework.beans.factory.ListableBeanFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
+import org.springframework.core.env.Environment
 import java.net.http.HttpClient
 import tools.jackson.databind.ObjectMapper
 
@@ -49,6 +52,15 @@ class RequestRoutingAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["requestRoutingPermissionDeclaration"])
     fun requestRoutingPermissionDeclaration(): PermissionDeclaration = RoutingPermissions.declaration
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["requestRoutingDeployGuard"])
+    fun requestRoutingDeployGuard(
+        properties: RequestRoutingProperties,
+        targets: RouteTargets,
+        beans: ListableBeanFactory,
+        environment: Environment,
+    ): DeployGuard = RequestRoutingDeployGuard(properties, targets, beans, environment)
 
     /** 다른 [ExternalHttpClientCustomizer] 가 있어도 선다 — 막는 것은 이 구현을 바꿔 끼운 경우뿐이다 */
     @Bean

@@ -13,6 +13,7 @@
 **창 판정**: `LocalRouteWindow` — 저장소 빈(`LocalRouteWindowStore`)이 있으면 `cache-ttl` 동안 캐시해서 읽고, 없으면 창은 늘 닫혀 있다. 시각이 지나면 캐시 안에서도 닫힌 것으로 본다.
 
 **로컬 창 관리 API**(`skeleton.routing.admin.enabled=true` + 창 저장소 빈 + Spring Security 일 때만, 꺼져 있으면 404 — `routing.window` 권한): `GET /api/v1/admin/routing/local-window`(열렸나 · 누가 · 언제까지), `POST`(`{"minutes":1~480,"reason":"1~200자"}` — `local.max-window` 보다 길면 400 `COMMON.VALIDATION_FAILED`, 열려 있던 창은 닫힌다), `DELETE`(204, 열린 게 없어도). 저장과 감사(`routing.local-window.opened` · `.closed`, 사유는 싣지 않는다)는 한 트랜잭션이고, 연 · 닫은 인스턴스는 판정 캐시를 바로 비운다 — 다른 인스턴스는 `cache-ttl` 안에 따른다. 창 표는 「그 서버가 쓰는 DB 의 표」일 뿐이라 서버들이 DB 하나를 같이 쓰면 한 번 열면 전부 적용되고, DB 를 나눴으면 서버마다 따로 연다.
+**배포 가드**(`requestRoutingDeployGuard`, 환경과 상관없이): `instance` 를 적은 인스턴스는 `service` 가 비었거나 · 스케줄러가 `skeleton.scheduler.mode` ≠ `external` 이거나 · 큐 일꾼이 차선 없이 폴링하거나(`skeleton.job-queue.mode`) · Kafka 리스너가 있는데 라우팅 꾸미개가 없거나(`spring.kafka.listener.auto-startup`) · Flyway 가 켜져 있으면(`spring.flyway.enabled`) 기동이 실패한다. 어느 쪽이든 `local.max-window` 가 8h 를 넘거나 `admin.enabled` 인데 창 저장소 빈이 없어도 실패한다. 경고: 보호 환경에 로컬 대상이 있는데 창 저장소가 없을 때, 큐 일꾼이 있는데 `skeleton.job-queue.propagated-mdc-keys` 에 `route` 가 없을 때. 메시지에는 속성 이름만 있다.
 **오류 코드**: `ROUTING.MALFORMED` 400 · `ROUTING.UNKNOWN_TARGET` 400 · `ROUTING.LOCAL_CLOSED` 403 · `ROUTING.LOOP` 508 · `ROUTING.TARGET_UNREACHABLE` 502.
 **권한**(기본 역할 없음 → 전권만): `routing.use`(표시 쓰기) · `routing.window`(창 열고 닫기).
 

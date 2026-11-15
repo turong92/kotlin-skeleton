@@ -65,6 +65,14 @@ class RequestRoutingAutoConfigurationTest {
     }
 
     @Test
+    fun `the deploy guard is a bean, and a guard problem is visible through it`() {
+        runner.withPropertyValues("skeleton.routing.enabled=true", "skeleton.routing.instance=candidate").run { context ->
+            val guard = context.getBean("requestRoutingDeployGuard", dev.sumin.skeleton.common.deploy.DeployGuard::class.java)
+            assertEquals(1, guard.problems(dev.sumin.skeleton.common.deploy.DeployContext(null, emptySet())).size)
+        }
+    }
+
+    @Test
     fun `a bad target url stops startup`() {
         runner.withPropertyValues(
             "skeleton.routing.enabled=true",

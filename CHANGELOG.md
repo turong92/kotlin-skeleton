@@ -66,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 새 모듈 `request-routing-jdbc`: 창 저장소의 DB 구현(표 `routing_local_windows`, PostgreSQL · MySQL 마이그레이션 `V20261116140000`, 새 표). `skeleton.routing.enabled=true` 일 때만 선다. 설명: `docs/modules/request-routing-jdbc.md`.
 - `job-queue-jdbc` 차선: 새 열 `jobs.lane varchar(40) null`(마이그레이션 `V20261116160000`, 두 방언, 열 추가만이라 옛 줄 · 옛 코드와 함께 돈다)과 포트 `JobLanes`(기본 `NONE` - 빈을 안 두면 동작 그대로). 차선 일꾼은 자기 차선의 잡만 집고 정리 일(스테일 복구 · DEAD 유예 · 보관 정리)은 하지 않으며, 기본 일꾼은 차선 없는 잡과 `skeleton.job-queue.lane-grace`(기본 `1h`)보다 오래 기다린 차선 잡을 집는다. `schema.sql` 모드는 `jobs` 복사본에 `lane` 열을 더한다. 문서: `docs/job-queue-jdbc.md`.
 - 비동기 잇기(`request-routing` 의 선택 통합, `job-queue-jdbc` · spring-kafka 는 `compileOnly`): `routingJobLanes`(`JobLanes`)가 믿은 표시의 이 서비스 대상을 잡의 차선으로 적고 후보 일꾼은 그 차선만 집는다. Kafka 는 `routeKafkaContainerCustomizer` 가 `RouteRecordInterceptor` 를 달아 원래 서버는 자기 서비스 몫 표시 레코드를 건너뛰고 후보는 자기 이름 표시만 받는다(소비 그룹 `<원래>-<instance>` · `auto.offset.reset=latest`, 앱이 `ContainerCustomizer` 를 따로 두면 이 빈은 서지 않으니 그 안에서 `RouteKafkaContainerCustomizer` 를 부른다). 둘 다 `skeleton.routing.enabled=true` 일 때만이다.
+- 배포 가드 `requestRoutingDeployGuard`(환경과 상관없이): `instance` 를 적은 인스턴스가 원래 서버 몫을 가로채거나 운영 DB 를 건드리는 구성(`service` 없음 · 스케줄러 `mode` ≠ `external` · 차선 없는 큐 일꾼 · 라우팅 꾸미개 없는 Kafka 리스너 · Flyway 켜짐)과 `local.max-window` 8h 초과 · 저장소 없는 `admin.enabled` 는 기동 실패, 메시지엔 속성 이름만. 로컬 대상이 있는데 창 저장소가 없거나 큐 일꾼에 `route` 키가 없으면 경고.
 
 ### notification-broadcast - 앱 세그먼트로 보내기를 문서로 못박고, 대상을 비우면 전체 (2026-11-16)
 
