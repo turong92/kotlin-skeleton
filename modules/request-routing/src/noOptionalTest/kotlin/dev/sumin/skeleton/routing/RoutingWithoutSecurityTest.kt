@@ -40,7 +40,7 @@ class RoutingWithoutSecurityTest {
             services = mapOf("orders" to RequestRoutingProperties.Service(mapOf("candidate" to RequestRoutingProperties.Target("https://candidate.a.run.app")))),
         )
         val access = object : OperatorAccess { override fun permissionsOf(ref: OperatorRef) = setOf("*") }
-        val filter = RouteInboundFilter(properties, RouteTargets(properties), ClosedLocalRouteWindow, access, TimeProvider.systemUtc(), RoutingErrorWriter(JsonMapper.builder().build()))
+        val filter = RouteInboundFilter(properties, RouteTargets(properties), ClosedLocalRouteWindow, access, TimeProvider.systemUtc(), RoutingErrorWriter(JsonMapper.builder().build()), null)
         var seen: String? = null
         val response = MockHttpServletResponse()
         filter.doFilter(MockHttpServletRequest("GET", "/x").apply { addHeader("baggage", "route=orders:candidate") }, response, FilterChain { _, _ -> seen = MDC.get("route") })

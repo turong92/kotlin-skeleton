@@ -104,7 +104,7 @@ class RouteInboundFilterTest(@Autowired private val context: WebApplicationConte
                 ),
             ),
         )
-        val filter = RouteInboundFilter(properties, RouteTargets(properties), window, access, TimeProvider { now }, RoutingErrorWriter(JsonMapper.builder().build()))
+        val filter = RouteInboundFilter(properties, RouteTargets(properties), window, access, TimeProvider { now }, RoutingErrorWriter(JsonMapper.builder().build()), null)
         return MockMvcBuilders.webAppContextSetup(context)
             .apply<DefaultMockMvcBuilder>(springSecurity())
             .addFilters<DefaultMockMvcBuilder>(filter)

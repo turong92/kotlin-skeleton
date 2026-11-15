@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.routing.web
 
+import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.routing.Route
 import dev.sumin.skeleton.common.routing.RouteBaggage
@@ -24,6 +25,7 @@ import org.springframework.web.filter.OncePerRequestFilter
  * 순서: 파싱 → 믿기 → 검사 → MDC → 체인.
  * - 믿기: `edge` 는 인증된 호출자가 `routing.use` 를 가질 때만, `internal` 은 늘(공개 주소 없는 서비스만 쓴다). 못 믿으면 **말없이 버린다**(모양이 틀려도 400 이 아니다).
  * - 검사: 모양 오류 → 400, 아는 서비스의 모르는 대상 → 400, 로컬 대상인데 창이 닫힘 → 403. 모르는 서비스는 뒤 서비스 몫이라 그대로 둔다.
+ * - 넘기기: 이 서비스(`service`)에 대한 표시가 이 인스턴스(`instance`)가 아닌 대상이면 [RouteProxy] 로 요청을 통째로 넘긴다(체인은 타지 않는다).
  */
 class RouteInboundFilter(
     private val properties: RequestRoutingProperties,
@@ -32,6 +34,7 @@ class RouteInboundFilter(
     private val access: OperatorAccess,
     private val time: TimeProvider,
     private val errors: RoutingErrorWriter,
+    private val proxy: RouteProxy?,
 ) : OncePerRequestFilter() {
     private val log = LoggerFactory.getLogger(RouteInboundFilter::class.java)
     private val securityPresent = ClassUtils.isPresent(SECURITY_CLASS, RouteInboundFilter::class.java.classLoader)
@@ -47,8 +50,22 @@ class RouteInboundFilter(
         val problem = check(route)
         if (problem != null) return errors.write(response, problem.first, problem.second)
         warnLocalUse(actor, route)
+        if (forwardIfSelfTargeted(request, response, route)) return
 
         RouteBaggage.restore(route.format()).use { chain.doFilter(request, response) }
+    }
+
+    /** 이 서비스에 대한 표시가 다른 인스턴스를 가리키면 그리로 넘기고 true. 못 넘기면 오류 응답을 쓰고 true */
+    private fun forwardIfSelfTargeted(request: HttpServletRequest, response: HttpServletResponse, route: Route): Boolean {
+        val name = route.targetOf(properties.service)?.takeIf { properties.service.isNotEmpty() && it != properties.instance } ?: return false
+        val target = targets.find(properties.service, name)
+        if (proxy == null || target == null) return false
+        try {
+            proxy.forward(request, response, target, route)
+        } catch (e: ApplicationException) {
+            errors.write(response, e.errorCode as RoutingErrorCode, e.detail)
+        }
+        return true
     }
 
     /** 표시를 믿어도 되는 호출이면 행위자 표시(로그용), 아니면 null */
