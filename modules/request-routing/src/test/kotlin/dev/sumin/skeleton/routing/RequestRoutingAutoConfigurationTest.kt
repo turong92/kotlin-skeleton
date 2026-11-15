@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.routing
 
 import dev.sumin.skeleton.common.authz.OperatorAccess
+import dev.sumin.skeleton.common.http.ExternalHttpClientCustomizer
+import dev.sumin.skeleton.routing.client.RouteOutboundCustomizer
 import dev.sumin.skeleton.common.authz.OperatorRef
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.routing.web.RouteInboundFilter
@@ -87,5 +89,16 @@ class RequestRoutingAutoConfigurationTest {
         runner.withPropertyValues("skeleton.routing.enabled=true").run { context ->
             assertEquals(0, context.getBeansOfType(FilterRegistrationBean::class.java).size)
         }
+    }
+
+    @Test
+    fun `the outbound customizer stands next to other customizers`() {
+        runner.withPropertyValues("skeleton.routing.enabled=true")
+            .withBean("otherCustomizer", ExternalHttpClientCustomizer::class.java, { ExternalHttpClientCustomizer { _, _ -> } })
+            .run { context ->
+                assertEquals(2, context.getBeansOfType(ExternalHttpClientCustomizer::class.java).size)
+                assertEquals(1, context.getBeansOfType(ExternalHttpClientCustomizer::class.java).values.count { it is RouteOutboundCustomizer })
+            }
+        runner.run { context -> assertEquals(0, context.getBeansOfType(ExternalHttpClientCustomizer::class.java).size) }
     }
 }

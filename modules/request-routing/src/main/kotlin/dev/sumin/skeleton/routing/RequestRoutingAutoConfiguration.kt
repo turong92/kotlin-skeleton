@@ -1,8 +1,10 @@
 package dev.sumin.skeleton.routing
 
 import dev.sumin.skeleton.common.authz.OperatorAccess
+import dev.sumin.skeleton.common.http.ExternalHttpClientCustomizer
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.routing.client.RouteOutboundCustomizer
 import dev.sumin.skeleton.routing.web.RouteInboundFilter
 import dev.sumin.skeleton.routing.web.RoutingErrorWriter
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -43,6 +45,12 @@ class RequestRoutingAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["requestRoutingPermissionDeclaration"])
     fun requestRoutingPermissionDeclaration(): PermissionDeclaration = RoutingPermissions.declaration
+
+    /** 다른 [ExternalHttpClientCustomizer] 가 있어도 선다 — 막는 것은 이 구현을 바꿔 끼운 경우뿐이다 */
+    @Bean
+    @ConditionalOnMissingBean(RouteOutboundCustomizer::class)
+    fun routeOutboundCustomizer(targets: RouteTargets, window: LocalRouteWindow, time: TimeProvider): ExternalHttpClientCustomizer =
+        RouteOutboundCustomizer(targets, window, time)
 
     /** 보안 필터 체인(Spring Boot 기본 순서 -100) 바로 뒤 — 인증된 호출자를 알고 난 다음에 표시를 믿는다 */
     @Bean
