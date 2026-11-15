@@ -36,9 +36,12 @@ class ClientErrorException(code: ClientErrorCode, data: Any? = null) : Applicati
 /** 본문(JSON) → [ClientErrorReport]. 틀린 형의 값은 없는 것으로 보고, 모르는 필드는 버린다. 필드마다 길이 상한, 토큰 · 이메일 · URL 쿼리 제거, 줄바꿈으로 로그 줄을 못 위조하게 한 줄로 */
 object ClientErrorSanitizer {
     private val mapper = JsonMapper.builder().build()
-    private val CONTROL = Regex("[\\u0000-\\u001F\\u007F]")
-    private val CONTROL_KEEP_NEWLINE = Regex("[\\u0000-\\u0009\\u000B-\\u001F\\u007F]")
+    // 제어 문자 + C1 + 방향 조작 문자(글을 뒤집어 보이게 하는 것)
+    private const val INVISIBLE = "\\u0080-\\u009F\\u202A-\\u202E\\u2066-\\u2069"
+    private val CONTROL = Regex("[\\u0000-\\u001F\\u007F$INVISIBLE]")
+    private val CONTROL_KEEP_NEWLINE = Regex("[\\u0000-\\u0009\\u000B-\\u001F\\u007F$INVISIBLE]")
     private val URL_QUERY = Regex("(https?://[^\\s?#\"')]+)[?#][^\\s\"')]*")
+    private val PATH_QUERY = Regex("((?:^|[\\s\"'(])/[^\\s?#\"')]*)[?#][^\\s\"')]*")
     private val EMAIL = Regex("[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\\.[A-Za-z]{2,}")
     private val TRACE_ID = Regex("^[0-9a-f]{32}$")
 
@@ -91,6 +94,7 @@ object ClientErrorSanitizer {
 
     private fun scrub(text: String): String {
         var out = URL_QUERY.replace(text) { it.groupValues[1] }
+        out = PATH_QUERY.replace(out) { it.groupValues[1] }
         out = LogMasker.current.mask(out)
         return EMAIL.replace(out, "<email>")
     }

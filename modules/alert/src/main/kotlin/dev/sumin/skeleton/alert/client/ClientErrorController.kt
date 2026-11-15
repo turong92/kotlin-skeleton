@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.alert.client
 
 import dev.sumin.skeleton.common.Response
+import dev.sumin.skeleton.common.openapi.NoContentOperation
 import dev.sumin.skeleton.common.web.ClientIps
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.ResponseEntity
@@ -20,6 +21,7 @@ class ClientErrorController(
     private val clientIps: ClientIps,
 ) {
     @PostMapping
+    @NoContentOperation
     fun receive(http: HttpServletRequest): ResponseEntity<Void> {
         intake.receive(clientIps.of(http).limitKey, http.getHeader("User-Agent"), http.contentLengthLong, http.inputStream)
         return Response.noContent()

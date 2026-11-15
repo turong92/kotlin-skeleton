@@ -84,9 +84,10 @@ class ClientErrorSurge(
             count = hits.size
             hits.clear()
         }
-        val where = listOfNotNull(latest.platform, latest.release?.let { "release $it" }, latest.route).joinToString(" ")
-        val trace = latest.clientTraceId?.let { " (last request traceId=$it)" }.orEmpty()
-        val detail = "$count client errors within ${settings.window.seconds}s. Latest: [$where] ${latest.message}$trace - search the server log for \"client error\""
+        // 공개 호출자가 쓴 글(message · route)은 경보에 싣지 않는다 — 가린 링크 같은 것이 Discord 로 그대로 나간다. 그건 로그에만 있다
+        val where = listOfNotNull(latest.platform, latest.release?.let { "release $it" }).joinToString(" ")
+        val trace = latest.clientTraceId?.let { " (latest: traceId=$it)" }.orEmpty()
+        val detail = "$count client errors within ${settings.window.seconds}s${if (where.isEmpty()) "" else " [$where]"}$trace - search the server log for \"client error\""
         handoff(Runnable { alerts.emit(BuiltInAlertKind.CLIENT_ERROR_SURGE, detail = detail, immediate = true) })
     }
 }

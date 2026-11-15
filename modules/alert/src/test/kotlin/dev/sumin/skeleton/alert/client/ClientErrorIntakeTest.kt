@@ -159,7 +159,18 @@ class ClientErrorIntakeTest {
         intake.send("""{"message":"third boom","platform":"android","release":"2.0.1","route":"/pay","traceId":"0af7651916cd43dd8448eb211c80319c"}""")
         val e = alerts.emitted.single()
         assertEquals(BuiltInAlertKind.CLIENT_ERROR_SURGE, e.kind)
-        for (part in listOf("3 client errors", "third boom", "android", "2.0.1", "/pay", "0af7651916cd43dd8448eb211c80319c")) assertTrue(e.detail.contains(part), "${e.detail} lacks $part")
+        for (part in listOf("3 client errors", "android", "2.0.1", "0af7651916cd43dd8448eb211c80319c")) assertTrue(e.detail.contains(part), "${e.detail} lacks $part")
+        // 공개 호출자의 글은 경보(Discord)에 나가지 않는다 - 로그에만
+        for (text in listOf("third boom", "/pay")) assertFalse(e.detail.contains(text), "${e.detail} carries caller text $text")
+    }
+
+    @Test
+    fun `direction overrides, C1 controls and relative-path queries are removed`() {
+        intake().send("""{"message":"a‮evil\u0085b see /cb?code=SECRET9&x=1 and (/p?token=SECRET8)"}""")
+        val m = received.single().message
+        assertFalse(m.any { it in '‪'..'‮' || it == '\u0085' }, m)
+        assertFalse(m.contains("SECRET9") || m.contains("SECRET8"), m)
+        assertTrue(m.contains("/cb"), m)
     }
 
     @Test
