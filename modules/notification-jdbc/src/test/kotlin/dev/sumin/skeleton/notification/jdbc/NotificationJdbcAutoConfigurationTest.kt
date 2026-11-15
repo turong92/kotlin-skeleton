@@ -4,6 +4,7 @@ import dev.sumin.skeleton.json.JsonAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationInboxRepository
 import dev.sumin.skeleton.notification.NotificationMuteRepository
+import dev.sumin.skeleton.notification.advertising.AdvertisingNoticeStore
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -38,6 +39,21 @@ class NotificationJdbcAutoConfigurationTest {
             assertEquals(1, repositories.size)
             assertIs<JdbcNotificationInboxRepository>(repositories.values.single())
             assertIs<JdbcNotificationMuteRepository>(context.getBean(NotificationMuteRepository::class.java))
+        }
+    }
+
+    @Test
+    fun `provides the reconfirm notice store for apps without push, and backs off for a store that is already there`() {
+        val withAds = contextRunner.withConfiguration(AutoConfigurations.of(NotificationJdbcAdvertisingAutoConfiguration::class.java))
+        withAds.run { context -> assertIs<JdbcAdvertisingNoticeStore>(context.getBean(AdvertisingNoticeStore::class.java)) }
+
+        val other = object : AdvertisingNoticeStore {
+            override fun isNoticed(accountId: String, type: String, agreedAt: java.time.Instant) = false
+            override fun markNoticed(accountId: String, type: String, agreedAt: java.time.Instant, at: java.time.Instant) {}
+        }
+        withAds.withBean(AdvertisingNoticeStore::class.java, { other }).run { context ->
+            assertEquals(1, context.getBeansOfType(AdvertisingNoticeStore::class.java).size)
+            assertEquals(other, context.getBean(AdvertisingNoticeStore::class.java))
         }
     }
 }

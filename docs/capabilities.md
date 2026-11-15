@@ -133,12 +133,12 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `notification-broadcast` | 공지 발송 — 서비스 운영자가 전체 · 역할 · 워크스페이스 · 앱 세그먼트에게 공지를 보낸다(알림함 + 푸시, 즉시 / 예약, 취소, 중간 실패 뒤 이어 보내기, 나에게 테스트, 광고성은 동의 없는 사람 제외, 전달 · 열람 · 푸시 클릭 통계). 받는 사람 묶음마다 기존 publish 를 부른다. 저장은 notification-broadcast-jdbc, 화면은 @skeleton/notifications/admin. | `--modules notification-broadcast,notification-broadcast-jdbc` | 공지 발송, 전체 공지, 공지 푸시, 대량 알림, 예약 발송, 공지 통계 / broadcast, announcement, bulk notification, scheduled send, push to all users, notice delivery stats | `@skeleton/notifications` |
 | `notification-broadcast-jdbc` | 공지 · 채널별 전달 숫자를 DB 에 저장하고 단계 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules notification-broadcast-jdbc` | 공지 저장, 공지 작업 큐 / broadcast store, broadcast job queue | `@skeleton/notifications` |
 | `notification-fcm` | 모바일 푸시(FCM HTTP v1) 전달 수단 — 안드로이드 · iOS 기기 토큰으로 푸시를 보낸다. 서비스 계정 -> 접근 토큰(JDK) · 판정 표 · 자격 기동 검사. notification-push 의 PushSender 로 끼운다. | `--modules notification-fcm` | 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push | — |
-| `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
-| `notification-legal` | 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현한다. 채널(푸시 · 메일 · 슬랙)과 무관하다. | `--modules notification-legal` | 광고 동의 정책, 마케팅 수신 동의 확인, 야간 광고 동의 / advertising consent policy, marketing consent check, night-time advertising consent | — |
-| `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
+| `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). 광고 동의 재확인 안내의 표시(advertising_notices)도 저장한다. | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
+| `notification-legal` | 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현하고, 동의 변경 통지 · 2년 재확인 안내를 알림 이벤트로 낸다. 채널(푸시 · 메일)과 무관하다 — 푸시 없이도 선다. | `--modules notification-legal` | 광고 동의 정책, 마케팅 수신 동의 확인, 야간 광고 동의 / advertising consent policy, marketing consent check, night-time advertising consent | — |
+| `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). notification 이 있고 광고 종류(skeleton.notification.advertising.types)를 정하면 광고 종류로 표시된 메일을 광고 게이트(동의 · 야간 보류 · (광고) · 수신 거부 문구)에 태운다. | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
 | `notification-push` | 알림이 받는 사람의 기기로도 간다 — 기기 등록 · 종류 × 채널 푸시 끄기 · 잠금 화면 옵션 · 세션 연동. 저장은 notification-push-jdbc, 전달은 notification-webpush · notification-fcm. | `--modules notification-push,notification-push-jdbc` | 푸시 알림, 웹 푸시 기기 등록, 푸시 끄기, 종류별 푸시, 잠금 화면 내용 / push notification, device registration, per-type push mute, lock screen content | `@skeleton/push` |
 | `notification-push-jdbc` | 푸시 기기 · 「푸시만 끄기」를 DB 에 저장하고 발송 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules notification-push-jdbc` | 푸시 기기 저장, 푸시 작업 큐 / push device store, push job queue | — |
-| `notification-push-legal` | 광고성 푸시의 통지 · 안내 어댑터 — 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 판정은 notification 의 광고 게이트, 동의 정책은 notification-legal. | `--modules notification-push-legal` | 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark | `@skeleton/push` |
+| `notification-push-legal` | 광고성 푸시의 동의 상태 읽기 어댑터(GET /api/v1/push/advertising). 판정은 notification 의 광고 게이트, 동의 정책 · 동의 변경 통지 · 2년 재확인 안내는 notification-legal(푸시 없이도 돈다). | `--modules notification-push-legal` | 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark | `@skeleton/push` |
 | `notification-scheduled` | 사람마다 따로 예약하는 푸시 — 앱이 한 사람에게 T 시각에 보낼 푸시를 예약하고(같은 키로 다시 예약하면 바꾼다) 키로 취소한다. 계기는 앱이 정하고 모듈은 모른다. 광고성은 기존 동의 게이트(동의 없으면 안 보냄 · 야간은 다음 08시 · (광고) 표기)를 그대로 타고, 하루 상한은 설정(기본 없음), 여러 인스턴스에서 한 번만 나가며 0대 배포에서도 돈다, 탈퇴하면 예약이 지워진다. 저장은 notification-scheduled-jdbc. | `--modules notification-scheduled,notification-scheduled-jdbc` | 예약 푸시, 개인 푸시 예약, 사람별 푸시, 리마인드 푸시, 푸시 예약 취소, 푸시 하루 상한 / scheduled push, per-user push scheduling, reminder push, push cancel by key, push daily cap | — |
 | `notification-scheduled-jdbc` | 예약 푸시를 DB 에 저장하고 여러 인스턴스가 한 줄을 한 번만 집게 한다 (PostgreSQL · MySQL). | `--modules notification-scheduled-jdbc` | 예약 푸시 저장 / scheduled push store | — |
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
@@ -1160,7 +1160,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 브라우저 푸시는 notification-webpush
 - 키워드: 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push
 
-### `notification-jdbc` — 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox).
+### `notification-jdbc` — 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). 광고 동의 재확인 안내의 표시(advertising_notices)도 저장한다.
 
 - 종류 · 상태: module · stable — 위치 `modules/notification-jdbc`
 - 켜는 법: `--modules notification-jdbc`
@@ -1173,7 +1173,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - DataSource · db-* 모듈과 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database
 
-### `notification-legal` — 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현한다. 채널(푸시 · 메일 · 슬랙)과 무관하다.
+### `notification-legal` — 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현하고, 동의 변경 통지 · 2년 재확인 안내를 알림 이벤트로 낸다. 채널(푸시 · 메일)과 무관하다 — 푸시 없이도 선다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/notification-legal`
 - 켜는 법: `--modules notification-legal`
@@ -1182,12 +1182,12 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 문서: `docs/modules/notification-legal.md`
 - 쓰지 않는 경우:
   - 광고성 종류(skeleton.notification.advertising.types)를 쓰지 않는 앱은 얹지 않는다
-  - 지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 AdvertisingGate 를 불러야 한다(정보통신망법 §50)
-  - 통지·재확인 안내는 지금 notification-push-legal(푸시 켜짐)에만 있다. 푸시 없는 앱은 직접 구현해야 한다(정보통신망법 §50)
+  - 광고 게이트는 푸시 채널과 notification-mail(MailMessage.notificationType)에 걸린다 — 슬랙 등 다른 채널로 광고를 보내는 앱은 보내기 전에 AdvertisingGate 를 불러야 한다(정보통신망법 §50). 받은편지함 · SSE · 웹소켓은 앱 안 기록이라 게이트 밖이다
+  - 재확인 안내는 표시 저장소(AdvertisingNoticeStore — notification-jdbc, 푸시 앱은 notification-push-jdbc)가 있어야 시작한다
   - 광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다
 - 키워드: 광고 동의 정책, 마케팅 수신 동의 확인, 야간 광고 동의 / advertising consent policy, marketing consent check, night-time advertising consent
 
-### `notification-mail` — SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에).
+### `notification-mail` — SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). notification 이 있고 광고 종류(skeleton.notification.advertising.types)를 정하면 광고 종류로 표시된 메일을 광고 게이트(동의 · 야간 보류 · (광고) · 수신 거부 문구)에 태운다.
 
 - 종류 · 상태: module · stable — 위치 `modules/notification-mail`
 - 켜는 법: 스타터(apps/api)에 기본 포함
@@ -1229,7 +1229,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - DataSource · db-* 모듈과 job-queue-jdbc 스키마, 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 푸시 기기 저장, 푸시 작업 큐 / push device store, push job queue
 
-### `notification-push-legal` — 광고성 푸시의 통지 · 안내 어댑터 — 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 판정은 notification 의 광고 게이트, 동의 정책은 notification-legal.
+### `notification-push-legal` — 광고성 푸시의 동의 상태 읽기 어댑터(GET /api/v1/push/advertising). 판정은 notification 의 광고 게이트, 동의 정책 · 동의 변경 통지 · 2년 재확인 안내는 notification-legal(푸시 없이도 돈다).
 
 - 종류 · 상태: module · experimental — 위치 `modules/notification-push-legal`
 - 켜는 법: `--modules notification-push-legal`
@@ -1240,7 +1240,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 짝 프런트(react-skeleton): 항목 `push` · 패키지 `@skeleton/push` · 조각 `--packages push`
 - 쓰지 않는 경우:
   - 광고성 종류(skeleton.notification.advertising.types)를 쓰지 않는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다
-  - 지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 AdvertisingGate 를 불러야 한다(정보통신망법 §50)
+  - 푸시 없는 앱은 이 모듈이 필요 없다 — 통지 · 재확인 안내는 notification-legal 이 낸다
   - 광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다
 - 키워드: 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark
 

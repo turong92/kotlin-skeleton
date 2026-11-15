@@ -7,6 +7,10 @@ data class MailMessage(
     val text: String,
     val html: String? = null,
     val replyTo: String? = null,
+    /** 알림 종류 - `skeleton.notification.advertising.types` 안의 종류면 이 메일은 광고성이다: 동의 · 야간 · `(광고)` · 수신 거부 문구 게이트를 거친다([AdvertisingMailSender]). null 이면 정보성 */
+    val notificationType: String? = null,
+    /** 받는 사람의 계정 id - 광고성 메일은 한 계정에 한 통이어야 하고(동의는 계정마다 본다) 이 값이 필수다 */
+    val accountId: String? = null,
 ) {
     init {
         require(to.isNotEmpty()) { "Mail recipients must not be empty." }
@@ -16,7 +20,8 @@ data class MailMessage(
     }
 }
 
-data class MailSendResult(val accepted: Boolean, val detail: String? = null)
+/** [heldUntil] 이 있으면 안 보낸 게 아니라 **미룬 것**이다(야간 광고) - 보내는 쪽이 그 시각 이후에 다시 보낸다. 메일 보내기는 큐가 없어 미루기를 대신하지 못한다 */
+data class MailSendResult(val accepted: Boolean, val detail: String? = null, val heldUntil: java.time.Instant? = null)
 
 /** 앱이 쓰는 인터페이스. 기본 구현은 SMTP([SmtpMailSender]); 테스트에서는 이걸 가짜로 바꾼다. */
 fun interface MailSender {

@@ -7,6 +7,7 @@ import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
 import dev.sumin.skeleton.notification.advertising.AdvertisingDecision
 import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingNoticeStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -20,6 +21,7 @@ class NotificationLegalAutoConfigurationTest {
         .withConfiguration(AutoConfigurations.of(NotificationAutoConfiguration::class.java, LegalAutoConfiguration::class.java, NotificationLegalAutoConfiguration::class.java))
         .withBean(ConsentStore::class.java, { MemoryConsentStore() })
         .withBean(LegalLedger::class.java, { MemoryLedger() })
+        .withBean(AdvertisingNoticeStore::class.java, { MemoryNoticeStore() })
         .withPropertyValues("skeleton.legal.acknowledge-template=true")
 
     @Test
@@ -28,7 +30,7 @@ class NotificationLegalAutoConfigurationTest {
             assertNull(context.startupFailure)
             assertEquals(0, context.getBeansOfType(AdvertisingConsentPolicy::class.java).size)
         }
-        runner.withPropertyValues("skeleton.notification.advertising.types=promo.tips", "skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=Example Co.")
+        runner.withPropertyValues("skeleton.notification.advertising.types=promo.tips", "skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=Example Co.", "skeleton.notification.advertising.body-suffix=Opt out: Settings > Notifications")
             .run { context ->
                 assertNull(context.startupFailure, context.startupFailure?.toString())
                 assertTrue(context.getBean(AdvertisingConsentPolicy::class.java) is LegalAdvertisingConsentPolicy)

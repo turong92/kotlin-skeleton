@@ -30,10 +30,10 @@
 **광고성 푸시**(`skeleton.notification.advertising.types`, 기본 빈 목록 = 꺼짐 — 아래 규칙은 아무것도 하지 않는다): 광고 종류는 정보성 경로(`types`)로 가지 않고 **동의 게이트**(`AdvertisingGate` — 채널과 무관한 부품, 모듈 [notification](notification.md))를 거친다. 푸시 채널과 처리기는 게이트를 부르기만 하고, 설정은 푸시가 아니라 `skeleton.notification.advertising.*` 다. 법률 자문이 아니다 — 문서 내용 · 전송자 정보 · 법 해석은 앱의 몫.
 - 받는 사람마다 `AdvertisingConsentPolicy.consentOf` 를 읽는다. **미동의 · 철회 · 2년 만료 · 새 판(OUTDATED) · 조회 실패는 안 보낸다**(작업이 안 생긴다 — 웹 푸시 · FCM 기기 모두). 정보성 종류는 영향이 없다.
 - 야간(받는 사람 시간대 21:00 이상 ~ 08:00 미만)이고 **야간 동의가 없으면** 버리지 않고 그 시간대의 **다음 08시**로 보류한다(`runAt`, 서머타임은 `ZonedDateTime` 이 푼다). 처리기가 보류 작업을 집을 때 **다시 같은 판정**을 한다 — 대기 중 철회 · 만료면 `PushSender.send` 를 부르지 않고, 앞당겨 집혔는데 아직 야간이면 다시 보류한다. `ttl` 은 12시간 이상이어야 한다(보류가 최대 11시간).
-- 제목 앞 `title-prefix`(기본 「(광고)」)는 채널이 `PushMessageFactory` **뒤에서** 붙인다 — 앱 factory 가 잊어도 빠지지 않고 두 번 붙지 않는다. 본문 끝에 `body-suffix`(예: 수신 거부 안내)를 붙일 수 있다. 광고 종류는 `lock-screen: HIDDEN` 이어도 내용을 보인다(기본 factory 기준).
+- 제목 앞 `title-prefix`(기본 「(광고)」)는 채널이 `PushMessageFactory` **뒤에서** 붙인다 — 앱 factory 가 잊어도 빠지지 않고 두 번 붙지 않는다. 본문 끝에 `body-suffix`(수신 거부 방법, 예: 「수신 거부: 설정 > 알림」 - 광고 종류를 정하면 필수)가 붙는다. 광고 종류는 `lock-screen: HIDDEN` 이어도 내용을 보인다(기본 factory 기준).
 - 시간대: 앱이 구현한 `AdvertisingRecipientZones`(예: 계정 프로필의 시간대) → `fallback-zone`. 시스템 기본 시간대는 쓰지 않는다.
-- 시작 검사(광고 종류가 있을 때): 정책 빈(`notification-legal`) · `fallback-zone` · `sender-name` · `night-start`/`night-end` 형식 · `title-prefix` 비어 있지 않음 · `ttl` ≥ 12시간 · 두 동의 종류가 서로 다름 · 광고 종류가 알림 종류 `advertising.consent.*` 와 겹치지 않음 — 하나라도 어긋나면 시작이 실패한다.
-- 지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 이 부품을 불러야 한다(정보통신망법 §50).
+- 시작 검사(광고 종류가 있을 때): 정책 빈(`notification-legal`) · `fallback-zone` · `sender-name` · `body-suffix`(수신 거부 방법, 비면 안 된다) · `night-start`/`night-end` 형식 · `title-prefix` 비어 있지 않음 · `ttl` ≥ 12시간 · 두 동의 종류가 서로 다름 · 광고 종류가 알림 종류 `advertising.consent.*` 와 겹치지 않음 — 하나라도 어긋나면 시작이 실패한다.
+- 광고 게이트는 푸시 채널과 `notification-mail`(광고 종류로 표시된 메일)에 걸린다 — 슬랙 등 다른 채널로 광고를 보내는 앱은 보내기 전에 이 부품을 불러야 한다(정보통신망법 §50).
 
 | 항목 | 내용 |
 |---|---|

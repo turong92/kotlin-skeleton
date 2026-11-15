@@ -1,4 +1,4 @@
-package dev.sumin.skeleton.notification.push.legal
+package dev.sumin.skeleton.notification.legal
 
 import dev.sumin.skeleton.notification.advertising.AdvertisingGate
 import dev.sumin.skeleton.notification.advertising.AdvertisingNotificationTypes

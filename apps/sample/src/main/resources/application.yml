@@ -323,6 +323,7 @@ skeleton:
       types: [promo.notes-tips]   # 이 앱의 선택: 광고성 종류 - 동의(marketing)가 있는 사람에게만, 야간(21~08시)은 별도 동의(marketing-night)가 없으면 다음 08시로 보류한다. 견본에는 이 알림을 보내는 화면이 없다 - 보내는 쪽은 제품마다 다르다(publish 하면 규칙이 적용된다). 시험: push/PushJourneyIntegrationTest
       sender-name: Notes Sample   # 필수: 전송자 명칭 (동의 변경 · 재확인 안내에 쓴다)
       fallback-zone: Asia/Seoul   # 필수: 받는 사람 시간대를 모를 때 - 시간대의 출처는 push/SamplePushConfiguration (계정 프로필의 timeZone)
+      body-suffix: "수신 거부: 설정 > 알림"   # 필수: 광고 본문 끝에 싣는 수신 거부 방법(정보통신망법 §50④) - 비면 기동 실패
     webpush:
       enabled: true   # 이 앱의 선택: 웹 푸시(VAPID). 키 쌍(아래 환경변수)이 없으면 로컬은 센더가 없고(기기 등록이 400), 보호 환경(stage · prod)은 기동 실패 - 끄려면 SKELETON_NOTIFICATION_WEBPUSH_ENABLED=false. 로컬 프로필은 시험용 고정 쌍(application-local.yml)
       public-key: ${SKELETON_NOTIFICATION_WEBPUSH_VAPID_PUBLIC_KEY:}   # 비밀 아님 (선언의 env:)

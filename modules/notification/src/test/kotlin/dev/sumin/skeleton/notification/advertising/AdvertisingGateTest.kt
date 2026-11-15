@@ -20,7 +20,7 @@ class AdvertisingGateTest {
         nightEnd: String = "08:00",
         nightConsentType: String = "marketing-night",
         titlePrefix: String = "(광고)",
-        bodySuffix: String = "",
+        bodySuffix: String = "수신 거부: 설정 > 알림",
     ) = AdvertisingProperties(
         types = adTypes, fallbackZone = fallbackZone, senderName = senderName, nightStart = nightStart, nightEnd = nightEnd,
         nightConsentType = nightConsentType, titlePrefix = titlePrefix, bodySuffix = bodySuffix,
@@ -132,6 +132,12 @@ class AdvertisingGateTest {
         assertTrue(gate(properties = props(nightConsentType = "marketing")).problems().any { "consent" in it })
         assertTrue(gate(properties = props(adTypes = listOf("advertising.consent.changed"))).problems().any { "advertising.consent" in it })
         assertTrue(gate(properties = props(titlePrefix = " ")).problems().any { "title-prefix" in it })
+    }
+
+    @Test
+    fun `advertising types without the opt-out notice are refused - the opt-out method must be on every advertisement`() {
+        assertTrue(gate(properties = props(bodySuffix = "")).problems().any { "body-suffix" in it })
+        assertTrue(gate(properties = props(bodySuffix = "  ")).problems().any { "body-suffix" in it })
     }
 
     @Test

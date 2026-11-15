@@ -31,7 +31,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
         "skeleton.notification.push.types=NOTE_UPDATED,comment.created",
         "skeleton.notification.advertising.types=promo.tips",
         "skeleton.notification.advertising.fallback-zone=Asia/Seoul",
-        "skeleton.notification.advertising.sender-name=Example Co.",
+        "skeleton.notification.advertising.sender-name=Example Co.", "skeleton.notification.advertising.body-suffix=Opt out: Settings > Notifications",
         "skeleton.notification.preferences.types=comment.created",
     ],
 )

@@ -1,6 +1,7 @@
 # notification-jdbc
 
 `NotificationInboxRepository` 를 JDBC 로 구현해 알림 인박스를 `notification_inbox` 테이블에 저장하고, `NotificationMuteRepository` 로 종류별 수신 끄기를 `notification_mutes`(끈 것만 줄이 있다)에 저장한다.
+`AdvertisingNoticeStore`(광고 동의 2년 재확인 안내를 이 동의 주기에 이미 보냈다는 표시, 표 `advertising_notices` - 푸시 없이도 쓴다. 푸시를 쓰는 앱은 `notification-push-jdbc` 의 같은 계약이 먼저 서서 이미 안내한 사람이 다시 안내받지 않는다)도 JDBC 로 구현한다.
 페이로드는 `json` 의 `JsonCodec` 으로 직렬화한다. `json` 이 새로 끌고 오는 웹 스택은 없다: webflux · validation · springdoc 은 `platform` 이 이미 가져온다.
 
 **같은 열쇠 묶기는 DB 가 원자적으로 막는다**: `unread_collapse_key`(안 읽은 묶음 줄만 값, 읽으면 null)에 `(recipient_id, unread_collapse_key)` 유니크가 있어 같은 열쇠 안 읽은 줄은 사람마다 하나뿐이다(PostgreSQL · MySQL 모두 null 은 겹쳐도 된다).
@@ -9,7 +10,7 @@
 
 **줄마다 받는 사람 한 명**: 저장할 때 줄의 `recipient_ids_json` 에는 그 줄의 받는 사람 한 명만 적는다(이벤트의 받는 사람 전체를 줄마다 복제하면 대량 공지에서 저장이 폭증하고 남의 id 가 남는다). 옛 줄은 옮기지 않는다. `eventStats(eventId)` 는 `event_id` 색인(새 마이그레이션 `V20261102100200__notification_inbox_event_index` - 줄이 많은 표는 한가한 때 배포)으로 저장 · 읽음 줄 수를 센다. 보관 정리로 지워진 줄은 빠진다.
 
-**계정 삭제**: `account` 가 계정을 지울 때(platform 의 `AccountErasureListener`) 그 계정의 받은편지함 줄과 알림 끄기 줄(`notification_mutes`)을 지우고, 같은 이벤트를 받은 다른 사람의 줄 안 수신자 목록에서 계정 id 를 톰스톤으로 바꾼다.
+**계정 삭제**: `account` 가 계정을 지울 때(platform 의 `AccountErasureListener`) 그 계정의 받은편지함 줄 · 알림 끄기 줄(`notification_mutes`) · 광고 재확인 안내 표시(`advertising_notices`)를 지우고, 같은 이벤트를 받은 다른 사람의 줄 안 수신자 목록에서 계정 id 를 톰스톤으로 바꾼다.
 
 | 항목 | 내용 |
 |---|---|
@@ -19,7 +20,7 @@
 | 설정 접두사 | 없음 |
 | 기본 동작 | 켜짐. |
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마. |
-| 교체 지점 | `NotificationInboxRepository`, `NotificationMuteRepository`, `notificationInboxErasureListener` |
+| 교체 지점 | `NotificationInboxRepository`, `NotificationMuteRepository`, `JdbcAdvertisingNoticeStore`, `notificationInboxErasureListener` |
 | 마이그레이션 | `modules/notification-jdbc/src/main/resources/db/migration/postgresql`, `modules/notification-jdbc/src/main/resources/db/migration/mysql` |
 | 프론트 짝 | `@skeleton/notifications` |
 | 테스트 | `modules/notification-jdbc/src/test`, `modules/notification-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`)) |

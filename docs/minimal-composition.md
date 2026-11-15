@@ -248,9 +248,9 @@ test proving a context with only that module (and its declared dependencies) boo
 | `notification-scheduled-jdbc` | wired only when scheduled push is on | a `DataSource` + one `db-*` module (+ its migration `scheduled_pushes`, as above) | — |
 | `notification-webpush` | off until `skeleton.notification.webpush.enabled=true` | a VAPID key pair (`public-key` · `private-key`) + `subject` — protected environments (`skeleton.env=stage\|prod`) refuse to start without them, with a mismatched pair, or with the sample test key; elsewhere there is just no sender | `notification-push` to feed it |
 | `notification-fcm` | off until `skeleton.notification.fcm.enabled=true` | the Firebase service account key (`credentials`, base64 of the JSON) — protected environments (`skeleton.env=stage\|prod`) refuse to start when it is empty or unreadable; elsewhere there is just no sender | `notification-push` to feed it |
-| `notification-legal` | off until `skeleton.notification.advertising.types` is set and `legal` is present | `legal` (+ `legal-jdbc`) — advertising types without it fail startup naming this module | — |
-| `notification-push-legal` | off until push is enabled and advertising types are set | the notice store of `notification-push-jdbc`, `legal` | `notification-legal` (comes along) |
-| `notification-mail` | off until `enabled=true` + `spring.mail.host` + `from` | nothing | an SMTP server |
+| `notification-legal` | off until `skeleton.notification.advertising.types` is set and `legal` is present | `legal` (+ `legal-jdbc`) and a reconfirm-notice store (`notification-jdbc`, or `notification-push-jdbc`) — advertising types without them fail startup naming what is missing; `body-suffix` (the opt-out method) is required too | — |
+| `notification-push-legal` | off until push is enabled and advertising types are set (the consent-state path only) | `legal` | `notification-legal` (comes along) |
+| `notification-mail` | off until `enabled=true` + `spring.mail.host` + `from` | nothing | an SMTP server; `notification` only to put advertising mails through the advertising gate (optional) |
 | `notification-slack` | wired; sends nothing until `enabled=true` + `webhook-url` | nothing | webhook URL, internet |
 | `notification-sse` | yes | nothing | — |
 | `notification-websocket` | yes (in-process simple broker; the endpoint is open until `authentication.enabled=true`) | a servlet web app | — |

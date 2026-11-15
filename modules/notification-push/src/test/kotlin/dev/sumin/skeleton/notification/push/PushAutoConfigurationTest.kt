@@ -52,7 +52,7 @@ class PushAutoConfigurationTest {
 
     @Test
     fun `advertising types without a consent policy fail to start and tell which module to add`() {
-        withPorts.withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=Example Co.")
+        withPorts.withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=Example Co.", "skeleton.notification.advertising.body-suffix=Opt out: Settings > Notifications")
             .run { context -> assertTrue("notification-legal" in failureOf(context), failureOf(context)) }
     }
 
@@ -63,7 +63,7 @@ class PushAutoConfigurationTest {
 
         base.run { context -> assertTrue("fallback-zone" in failureOf(context), failureOf(context)) }
         base.withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul").run { context -> assertTrue("sender-name" in failureOf(context), failureOf(context)) }
-        base.withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=x", "skeleton.notification.push.ttl=PT11H")
+        base.withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=x", "skeleton.notification.advertising.body-suffix=Opt out", "skeleton.notification.push.ttl=PT11H")
             .run { context -> assertTrue("ttl" in failureOf(context), failureOf(context)) }
     }
 
@@ -71,7 +71,7 @@ class PushAutoConfigurationTest {
     fun `a complete advertising configuration wires the gate into the channel and the worker`() {
         val policy = AdvertisingConsentPolicy { _, _ -> AdvertisingConsent(send = false, night = false) }
         withPorts.withBean(AdvertisingConsentPolicy::class.java, { policy })
-            .withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=Example Co.")
+            .withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=Example Co.", "skeleton.notification.advertising.body-suffix=Opt out: Settings > Notifications")
             .run { context ->
                 assertEquals(null, context.startupFailure)
                 assertTrue(context.getBean(AdvertisingGate::class.java).isAdvertising("promo.tips"))

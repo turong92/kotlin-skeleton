@@ -1,2 +1,3 @@
 dev.sumin.skeleton.notification.jdbc.NotificationJdbcAutoConfiguration
 dev.sumin.skeleton.notification.jdbc.NotificationJdbcErasureAutoConfiguration
+dev.sumin.skeleton.notification.jdbc.NotificationJdbcAdvertisingAutoConfiguration

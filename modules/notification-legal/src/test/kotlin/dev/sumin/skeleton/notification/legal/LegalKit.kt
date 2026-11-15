@@ -20,9 +20,32 @@ import dev.sumin.skeleton.legal.LegalText
 import dev.sumin.skeleton.legal.ManifestVersion
 import dev.sumin.skeleton.legal.NewConsentEvent
 import dev.sumin.skeleton.legal.Subject
+import dev.sumin.skeleton.notification.NotificationEvent
+import dev.sumin.skeleton.notification.NotificationPublishResult
+import dev.sumin.skeleton.notification.NotificationPublisher
+import dev.sumin.skeleton.notification.advertising.AdvertisingNoticeStore
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
+
+class RecordingPublisher : NotificationPublisher {
+    val events = CopyOnWriteArrayList<NotificationEvent>()
+    @Volatile var failure: RuntimeException? = null
+
+    override fun publish(event: NotificationEvent): NotificationPublishResult {
+        failure?.let { throw it }
+        events += event
+        return NotificationPublishResult(event.id, 0)
+    }
+}
+
+class MemoryNoticeStore : AdvertisingNoticeStore {
+    val marks = CopyOnWriteArrayList<Triple<String, String, Instant>>()
+    override fun isNoticed(accountId: String, type: String, agreedAt: Instant) = Triple(accountId, type, agreedAt) in marks
+    override fun markNoticed(accountId: String, type: String, agreedAt: Instant, at: Instant) {
+        if (!isNoticed(accountId, type, agreedAt)) marks += Triple(accountId, type, agreedAt)
+    }
+}
 
 class MutableClock(@Volatile var now: Instant) : TimeProvider {
     override fun now(): Instant = now

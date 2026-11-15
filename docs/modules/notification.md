@@ -31,15 +31,15 @@
 
 | 항목 | 내용 |
 |---|---|
-**광고성 정보 게이트**(`skeleton.notification.advertising.*`, 기본 꺼짐 — `types` 가 비면 아무것도 하지 않는다): 채널과 무관한 부품 `AdvertisingGate`(패키지 `notification.advertising`)가 네 가지를 판정한다 — 광고 수신 동의가 지금 유효한가 · 야간(21~08시) 별도 동의 · 2년 재확인 만료(동의 정책의 몫) · 야간 보류 시각(받는 사람 시간대의 다음 08시). `decide(accountId)` = `SendNow` / `Skip` / `Hold(runAt)` (조회가 실패하면 `Skip` — 실패 시 닫힘, 던지지 않는다), `brand(title, body, maxBodyBytes)` = 「(광고)」 표기. 동의를 읽는 포트는 `AdvertisingConsentPolicy`(구현은 notification-legal(docs/modules/notification-legal.md - 이 모듈만 고른 프로젝트에는 없을 수 있다)), 시간대는 앱의 `AdvertisingRecipientZones`. 지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 이 부품을 불러야 한다(정보통신망법 §50).
+**광고성 정보 게이트**(`skeleton.notification.advertising.*`, 기본 꺼짐 — `types` 가 비면 아무것도 하지 않는다): 채널과 무관한 부품 `AdvertisingGate`(패키지 `notification.advertising`)가 네 가지를 판정한다 — 광고 수신 동의가 지금 유효한가 · 야간(21~08시) 별도 동의 · 2년 재확인 만료(동의 정책의 몫) · 야간 보류 시각(받는 사람 시간대의 다음 08시). `decide(accountId)` = `SendNow` / `Skip` / `Hold(runAt)` (조회가 실패하면 `Skip` — 실패 시 닫힘, 던지지 않는다), `brand(title, body, maxBodyBytes)` = 「(광고)」 표기. 동의를 읽는 포트는 `AdvertisingConsentPolicy`(구현은 notification-legal(docs/modules/notification-legal.md - 이 모듈만 고른 프로젝트에는 없을 수 있다)), 시간대는 앱의 `AdvertisingRecipientZones`. 광고 게이트는 푸시 채널과 `notification-mail`(광고 종류로 표시된 메일 - `MailMessage.notificationType`, 메일 모듈이 같이 있고 광고 종류를 정하면 `MailSender` 빈을 `AdvertisingMailSender` 가 감싼다 · 메일 모듈은 컴파일 전용 선택 연동)에 걸린다 — 슬랙 등 다른 채널로 광고를 보내는 앱은 보내기 전에 이 부품을 불러야 한다(정보통신망법 §50). 광고 종류를 정하면 `fallback-zone` · `sender-name` · `body-suffix`(수신 거부 방법 - 광고 본문 끝에 실린다, §50④)가 필수다 - 비면 시작이 실패한다. 동의 변경 통지 · 2년 재확인 안내는 채널과 무관하게 `notification-legal` 이 알림 이벤트로 낸다(재확인 표시 저장소 `AdvertisingNoticeStore` - `notification-jdbc`).
 
 | 의존성 한 줄 | `implementation(project(":modules:notification"))` |
 | 함께 오는 모듈 | `platform` |
-| 컴파일 전용 | 없음 |
+| 컴파일 전용 | `notification-mail` |
 | 설정 접두사 | `skeleton.notification.inbox` · `skeleton.notification.retention` · `skeleton.notification.preferences` · `skeleton.notification.advertising` — [docs/config/modules/notification.yml](../config/modules/notification.yml) |
 | 기본 동작 | 켜짐. 기본은 인메모리 브로커다 (프로세스 안에서만 전달). 서블릿 앱이면 받은편지함 엔드포인트도 켜진다. |
 | 부팅에 필요한 것 | 없음. |
-| 교체 지점 | `NotificationDeliveryHook`, `NotificationChannelDeclaration`, `NotificationBroker`, `NotificationRecipientResolver`, `NotificationInboxRepository`, `NotificationMuteRepository`, `NotificationInboxRetention`, `NotificationInboxController` |
+| 교체 지점 | `AdvertisingMailSender`, `NotificationDeliveryHook`, `NotificationChannelDeclaration`, `NotificationBroker`, `NotificationRecipientResolver`, `NotificationInboxRepository`, `NotificationMuteRepository`, `NotificationInboxRetention`, `NotificationInboxController` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/notifications` |
 | 테스트 | `modules/notification/src/test` |

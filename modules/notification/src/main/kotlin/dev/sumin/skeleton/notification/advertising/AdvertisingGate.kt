@@ -16,7 +16,7 @@ data class AdvertisingConsent(val send: Boolean, val night: Boolean)
 /**
  * 광고 동의를 읽는 포트. 구현은 `notification-legal`(`legal` 의 동의 기록). 던지거나 모르는 사람이면 **안 보낸다**(실패 시 닫힘).
  *
- * 지금 광고 게이트([AdvertisingGate])는 푸시 채널(웹 푸시 · FCM)에만 걸린다 - 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 게이트를 불러야 한다(정보통신망법 §50).
+ * 광고 게이트([AdvertisingGate])는 푸시 채널(웹 푸시 · FCM)과 `notification-mail`([AdvertisingMailSender])에 걸린다 - 슬랙 등 다른 채널로 광고를 보내는 앱은 보내기 전에 게이트를 불러야 한다(정보통신망법 §50).
  */
 fun interface AdvertisingConsentPolicy {
     fun consentOf(accountId: String, now: Instant): AdvertisingConsent
@@ -86,6 +86,7 @@ class AdvertisingGate(
             if (nightEnd == null) add("night-end '${advertising.nightEnd}' is not a HH:mm time")
             if (nightStart != null && nightStart == nightEnd) add("night-start and night-end must differ (equal times would switch the night rule off)")
             if (advertising.titlePrefix.isBlank()) add("title-prefix must not be blank (the advertising mark is mandatory)")
+            if (advertising.bodySuffix.isBlank()) add("body-suffix must not be blank (every advertisement must say how to opt out, e.g. \"수신 거부: 설정 > 알림\")")
             if (advertising.consentType == advertising.nightConsentType) add("consent-type and night-consent-type must be different documents")
             val clash = typeSet.filter { it.startsWith(AdvertisingNotificationTypes.PREFIX) }
             if (clash.isNotEmpty()) add("types must not contain the informational consent notices (${clash.joinToString()})")

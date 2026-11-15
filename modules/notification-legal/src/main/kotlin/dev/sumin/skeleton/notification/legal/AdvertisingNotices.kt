@@ -1,4 +1,4 @@
-package dev.sumin.skeleton.notification.push.legal
+package dev.sumin.skeleton.notification.legal
 
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.legal.ConsentAction
@@ -10,8 +10,8 @@ import dev.sumin.skeleton.legal.Subject
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationPublisher
 import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingNoticeStore
 import dev.sumin.skeleton.notification.advertising.AdvertisingNotificationTypes
-import dev.sumin.skeleton.notification.push.PushAdvertisingNoticeStore
 import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import java.security.MessageDigest
 import java.time.Instant
@@ -76,7 +76,7 @@ class AdvertisingConsentNotifier(
  */
 class AdvertisingReconfirmScanner(
     private val store: ConsentStore,
-    private val notices: PushAdvertisingNoticeStore,
+    private val notices: AdvertisingNoticeStore,
     private val publisher: NotificationPublisher,
     private val gate: AdvertisingGate,
     private val advertising: AdvertisingProperties,

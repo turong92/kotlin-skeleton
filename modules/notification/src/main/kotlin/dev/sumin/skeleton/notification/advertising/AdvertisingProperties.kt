@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 
 /**
  * 광고성 정보 규칙(정보통신망법 §50 관행) - [types] 가 비어 있지 않을 때만 쓰인다. 법률 자문이 아니다: 문서 내용 · 전송자 정보 · 법 해석은 앱의 몫.
- * 채널과 무관하다: 푸시 채널이 이 규칙([AdvertisingGate])을 부르고, 광고성 메일 · 슬랙 등을 보내는 앱도 보내기 전에 같은 규칙을 부른다.
+ * 채널과 무관하다: 푸시 채널과 메일(`AdvertisingMailSender`)이 이 규칙([AdvertisingGate])을 부르고, 슬랙 등을 보내는 앱도 보내기 전에 같은 규칙을 부른다.
  * 야간 21~08시 · 2년은 법정 값이라 모듈 기본으로 둔다. [fallbackZone] · [senderName] 은 광고를 켜면 필수다(시스템 기본 시간대는 쓰지 않는다).
  * ```yaml
  * skeleton:
@@ -14,6 +14,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  *       types: [promo.tips]
  *       fallback-zone: Asia/Seoul
  *       sender-name: Example Co.
+ *       body-suffix: "수신 거부: 설정 > 알림"
  * ```
  */
 @ConfigurationProperties("skeleton.notification.advertising")
@@ -36,6 +37,7 @@ data class AdvertisingProperties(
     /** 재확인 안내를 누르면 가는 앱 안 경로 */
     val reconfirmLink: String = "/settings/notifications",
     val titlePrefix: String = "(광고)",
+    /** 광고 본문 끝의 수신 거부 방법(정보통신망법 §50④) - 광고 종류를 정하면 필수다(기본값 없음, 비면 시작 실패) */
     val bodySuffix: String = "",
 ) {
     /** 앞뒤 공백을 떼고 빈 글자 · 중복을 뺀, 설정 순서 그대로의 목록 */

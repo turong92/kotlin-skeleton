@@ -20,10 +20,6 @@ import dev.sumin.skeleton.legal.LegalText
 import dev.sumin.skeleton.legal.ManifestVersion
 import dev.sumin.skeleton.legal.NewConsentEvent
 import dev.sumin.skeleton.legal.Subject
-import dev.sumin.skeleton.notification.NotificationEvent
-import dev.sumin.skeleton.notification.NotificationPublishResult
-import dev.sumin.skeleton.notification.NotificationPublisher
-import dev.sumin.skeleton.notification.push.PushAdvertisingNoticeStore
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
@@ -71,25 +67,6 @@ class MemoryLedger : LegalLedger {
     override fun find(type: String, version: String, locale: String) = entries.firstOrNull { it.type == type && it.version == version && it.locale == locale }
     override fun all(): List<LedgerEntry> = entries.toList()
     override fun append(entry: LedgerEntry): Boolean = entries.add(entry)
-}
-
-class RecordingPublisher : NotificationPublisher {
-    val events = CopyOnWriteArrayList<NotificationEvent>()
-    @Volatile var failure: RuntimeException? = null
-
-    override fun publish(event: NotificationEvent): NotificationPublishResult {
-        failure?.let { throw it }
-        events += event
-        return NotificationPublishResult(event.id, 0)
-    }
-}
-
-class MemoryNoticeStore : PushAdvertisingNoticeStore {
-    val marks = CopyOnWriteArrayList<Triple<String, String, Instant>>()
-    override fun isNoticed(accountId: String, type: String, agreedAt: Instant) = Triple(accountId, type, agreedAt) in marks
-    override fun markNoticed(accountId: String, type: String, agreedAt: Instant, at: Instant) {
-        if (!isNoticed(accountId, type, agreedAt)) marks += Triple(accountId, type, agreedAt)
-    }
 }
 
 /** marketing v1 (2026-01-01) → v2 (2035-01-01), marketing-night v1. 시계는 2026-10-07 에서 시작한다. 유예 없음 */

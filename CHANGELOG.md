@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### notification · notification-legal · notification-mail · notification-jdbc - 광고 수신 동의(정보통신망법 §50) 빈칸 셋 (2026-11-16)
+
+- **수신 거부 방법 필수**: 광고 종류(`skeleton.notification.advertising.types`)를 정했는데 `body-suffix` 가 비면(공백뿐 포함) 기동이 실패한다(`AdvertisingGate.problems()`, `title-prefix` 와 같은 방식). 기본값은 그대로 `""` 이고 문구는 앱의 선택이다(예: `수신 거부: 설정 > 알림`). **호환 변경**: 광고 종류를 쓰던 앱은 `body-suffix` 를 정해야 기동한다.
+- **푸시 없이도 통지 · 재확인**: 동의 변경 통지(`AdvertisingConsentNotifier`)와 2년 재확인 안내(`AdvertisingReconfirmScanner` + 스캔 일정)를 `notification-push-legal` 에서 `notification-legal` 로 옮겼다 - 알림 이벤트로 내보내므로 받은편지함 · SSE 는 늘 가고 푸시 · 메일 등은 앱이 켠 채널이 집는다. 푸시 동작은 그대로다. 「이미 안내했다」 표시 계약을 채널과 무관한 `AdvertisingNoticeStore`(`notification`)로 올렸고(`PushAdvertisingNoticeStore` 는 이를 확장해 이름을 지킨다), `notification-jdbc` 가 표 `advertising_notices`(`V20261116010000`, PostgreSQL · MySQL, 계정 삭제 시 같이 지움)로 구현한다 - 푸시 앱은 `notification-push-jdbc` 의 기존 표가 먼저 서서 이미 안내한 사람이 다시 안내받지 않는다. **호환 변경**: 두 클래스의 패키지가 `notification.push.legal` → `notification.legal`(빈 이름 그대로). 광고 종류를 정한 앱은 표시 저장소(`notification-jdbc` 또는 `notification-push-jdbc`)가 없으면 기동이 실패한다(재확인 안내가 조용히 안 나가는 일이 없게). `notification-push-legal` 은 `GET /api/v1/push/advertising` 만 남는다.
+- **메일도 같은 게이트**: `notification` 과 `notification-mail` 이 같이 있고 광고 종류가 정해지면 모든 `MailSender` 빈이 `AdvertisingMailSender` 로 감싸진다. `MailMessage.notificationType`(광고 종류)이 달린 메일은 동의 없음 → 안 보냄, 야간 동의 없음 → `MailSendResult.heldUntil` 로 미룸을 알림, 보내는 것은 제목 `(광고)` · 본문(text · html) 끝에 수신 거부 문구. 광고 메일은 `accountId` 필수 · 받는 사람 한 명(아니면 거절). `notification-mail` 은 `notification` 의 `compileOnly`(없으면 닿지 않음, `noMailTest`) - 연동은 `notification` 쪽(`AdvertisingMailSender`)에 있다. `MailMessage` · `MailSendResult` 에 기본값 있는 필드만 늘었다.
+
 ### point · point-jdbc - 잡아 두기 reserve → capture | release (2026-11-16)
 
 - `PointWallet` 에 `reserve(accountId, amount, sourceType, sourceRef)` · `capture(sourceType, sourceRef, amount?)` · `release(sourceType, sourceRef)` · `expireReservations(now)` · `reservationOf` 를 더했다. 「만들고 나서 차감」하면 차감이 실패해도 결과가 이미 나가므로, 카드 승인 → 매입처럼 먼저 잡아 쓸 수 없게 하고 만든 뒤 확정하거나 실패하면 푼다. 쓸 수 있는 잔액 = 잔액 − 잡힌 합(동시 `reserve` 가 잔액을 넘게 잡지 못한다 - 같은 잔액 줄 잠금), `(sourceType, sourceRef)` 로 멱등(다른 요청은 `POINT.SOURCE_CONFLICT`), `capture` 는 같은 키의 `SPEND` 줄을 만들고(부분 확정이면 나머지는 원래 묶음으로 풀림, 확정된 차감은 `cancelSpend` 로 환불), `release` 는 멱등이며 확정된 건은 못 푼다(`POINT.RESERVATION_NOT_HELD`). 새 오류 코드 `POINT.RESERVATION_NOT_FOUND` · `_NOT_HELD` · `_EXCEEDED`.
