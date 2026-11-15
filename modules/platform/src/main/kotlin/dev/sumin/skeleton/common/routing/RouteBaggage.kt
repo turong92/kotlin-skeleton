@@ -59,12 +59,17 @@ object RouteBaggage {
         return Route(entries)
     }
 
-    fun withRoute(existing: String?, route: Route): String {
-        val others = existing.orEmpty().split(',')
+    fun withRoute(existing: String?, route: Route): String =
+        (otherMembers(existing) + "$MEMBER=${route.format()}").joinToString(",")
+
+    /** 믿은 표시가 없을 때 — 앱이 옮겨 실은 `route` 멤버를 지운다. 남는 멤버가 없으면 null(머리를 빼라) */
+    fun withoutRoute(existing: String?): String? =
+        otherMembers(existing).takeIf { it.isNotEmpty() }?.joinToString(",")
+
+    private fun otherMembers(existing: String?): List<String> =
+        existing.orEmpty().split(',')
             .map { it.trim() }
             .filter { it.isNotEmpty() && it.substringBefore('=').trim() != MEMBER }
-        return (others + "$MEMBER=${route.format()}").joinToString(",")
-    }
 
     fun current(): Route? = MDC.get(MDC_KEY)?.let { parseValue(it) }
 

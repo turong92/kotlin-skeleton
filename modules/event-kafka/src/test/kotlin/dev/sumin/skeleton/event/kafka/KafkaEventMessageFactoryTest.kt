@@ -93,6 +93,15 @@ class KafkaEventMessageFactoryTest {
     }
 
     @Test
+    fun `a route member the app copied onto the event is removed when no route is in the mdc`() {
+        val kept = factory().toMessage(event(mapOf("baggage" to "a=1,route=orders:candidate")))
+        val alone = factory().toMessage(event(mapOf("baggage" to "route=orders:candidate")))
+
+        assertThat(kept.headers["baggage"]).isEqualTo("a=1")
+        assertThat(alone.headers).doesNotContainKey("baggage")
+    }
+
+    @Test
     fun `event header baggage keeps other members`() {
         MDC.put("route", "orders:alice")
 

@@ -175,6 +175,25 @@ class RouteOutboundCustomizerTest {
     }
 
     @Test
+    fun routeMemberCopiedByTheAppIsRemovedWhenNoRouteIsTrusted() {
+        client().getBlocking("orders", "/items", String::class.java) { header("baggage", "a=1,route=orders:candidate") }
+
+        assertEquals(1, baseline.seen.size)
+        assertEquals("a=1", baseline.seen.single().baggage)
+        assertEquals(0, candidate.seen.size)
+    }
+
+    @Test
+    fun unknownTargetOfKnownServiceFailsInsteadOfGoingToBaseline() {
+        MDC.put("route", "orders:nobody")
+
+        val failure = assertFailsWith<ApplicationException> { call() }
+
+        assertEquals(RoutingErrorCode.UNKNOWN_TARGET, failure.errorCode)
+        assertEquals(0, baseline.seen.size + local.seen.size + candidate.seen.size)
+    }
+
+    @Test
     fun restoredRouteReachesTarget() {
         RouteBaggage.restore("orders:candidate").use { call() }
 

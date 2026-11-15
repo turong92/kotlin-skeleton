@@ -36,13 +36,26 @@ class RouteOutboundCustomizer(
     }
 
     private fun route(service: String, request: ClientRequest): Mono<ClientRequest> {
-        val route = RouteBaggage.current() ?: return Mono.just(request)
-        val target = route.targetOf(service)?.let { targets.find(service, it) }
+        val route = RouteBaggage.current() ?: return Mono.just(withoutUntrustedRoute(request))
+        val targetName = route.targetOf(service)
+        val target = targetName?.let { targets.find(service, it) }
+        // 아는 서비스의 모르는 대상 — 큐 · Kafka 처럼 들어올 때 검사가 없는 경로에서도 원래 서버로 몰래 가지 않는다
+        if (targetName != null && target == null) return Mono.error(unknownTarget(service))
         if (target?.local == true) {
             if (!window.isOpen(time.now())) return Mono.error(localClosed(service))
             log.warn("routing: local target used service={} target={}", service, target.name)
         }
         return Mono.just(rewrite(request, route, target))
+    }
+
+    /** MDC 에 믿은 표시가 없으면 앱이 옮겨 실은 baggage 의 `route` 멤버는 나가지 않는다 */
+    private fun withoutUntrustedRoute(request: ClientRequest): ClientRequest {
+        val existing = request.headers()[RouteBaggage.HEADER]?.joinToString(",") ?: return request
+        if (!existing.contains(RouteBaggage.MEMBER)) return request
+        val kept = RouteBaggage.withoutRoute(existing)
+        return ClientRequest.from(request).headers { headers ->
+            if (kept == null) headers.remove(RouteBaggage.HEADER) else headers.set(RouteBaggage.HEADER, kept)
+        }.build()
     }
 
     private fun rewrite(request: ClientRequest, route: Route, target: RouteTarget?): ClientRequest {
@@ -62,6 +75,9 @@ class RouteOutboundCustomizer(
         }
         return builder.build()
     }
+
+    private fun unknownTarget(service: String) =
+        ApplicationException("The route target is not in the allowlist for service '$service'.", RoutingErrorCode.UNKNOWN_TARGET)
 
     private fun localClosed(service: String) =
         ApplicationException("The local route window for service '$service' is closed.", RoutingErrorCode.LOCAL_CLOSED)

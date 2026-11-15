@@ -80,6 +80,14 @@ class RouteBaggageTest {
     }
 
     @Test
+    fun withoutRouteDropsOnlyRouteMember() {
+        assertThat(RouteBaggage.withoutRoute("a=1,route=orders:candidate")).isEqualTo("a=1")
+        assertThat(RouteBaggage.withoutRoute("route=orders:candidate")).isNull()
+        assertThat(RouteBaggage.withoutRoute("a=1")).isEqualTo("a=1")
+        assertThat(RouteBaggage.withoutRoute(null)).isNull()
+    }
+
+    @Test
     fun restoreSetsAndRestoresMdc() {
         MDC.put("route", "a:b")
 

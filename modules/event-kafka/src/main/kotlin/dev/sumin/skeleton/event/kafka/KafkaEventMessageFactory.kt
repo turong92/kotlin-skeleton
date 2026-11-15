@@ -32,8 +32,14 @@ class KafkaEventMessageFactory(
         MDC.get(TraceIdFilter.MDC_SPAN_ID_KEY)?.takeIf { it.isNotBlank() }?.let { spanId ->
             headers[KafkaEventHeaders.SPAN_ID] = spanId
         }
-        RouteBaggage.current()?.let { route ->
+        val route = RouteBaggage.current()
+        if (route != null) {
             headers[KafkaEventHeaders.BAGGAGE] = RouteBaggage.withRoute(headers[KafkaEventHeaders.BAGGAGE], route)
+        } else {
+            // 믿은 표시가 없는데 앱이 옮겨 실은 route 멤버는 내보내지 않는다
+            headers[KafkaEventHeaders.BAGGAGE]?.let { existing ->
+                RouteBaggage.withoutRoute(existing)?.let { headers[KafkaEventHeaders.BAGGAGE] = it } ?: headers.remove(KafkaEventHeaders.BAGGAGE)
+            }
         }
         return headers
     }
