@@ -41,9 +41,9 @@ class FakeWallet : PointWallet {
 
     override fun reserve(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointReservation = error("not used")
 
-    override fun capture(sourceType: String, sourceRef: String, amount: Long?): PointEntry = error("not used")
+    override fun capture(accountId: String, sourceType: String, sourceRef: String, amount: Long?): PointEntry = error("not used")
 
-    override fun release(sourceType: String, sourceRef: String): PointReservation = error("not used")
+    override fun release(accountId: String, sourceType: String, sourceRef: String): PointReservation = error("not used")
 
     override fun expireReservations(now: Instant) = 0
 

@@ -28,7 +28,7 @@ interface PointWallet {
 
     /**
      * 잡아 두기(reserve) - [amount] 를 먼저 잡아 쓸 수 없게 하고 일을 한 뒤 [capture] 로 확정하거나 [release] 로 푼다(카드 승인 → 매입과 같다). 만들고 나서 차감하면 차감이 실패해도 결과가 이미 나간다.
-     * 쓸 수 있는 잔액 = 잔액 − 잡힌 합이고 모자라면 [PointInsufficientException]. `(sourceType, sourceRef)` 로 멱등이다(같은 요청이면 같은 건, 다르면 [PointSourceConflictException]).
+     * 쓸 수 있는 잔액 = 잔액 − 잡힌 합이고 모자라면 [PointInsufficientException]. `(sourceType, sourceRef)` 로 멱등이다(`HELD` 인 같은 요청이면 같은 건, 다르면 · 다른 계정의 키면 [PointSourceConflictException]). 이미 끝난 건(확정 · 풀림 · 만료)의 키로 다시 부르면 [PointReservationNotHeldException] - 새 키로 다시 잡는다.
      * 잡은 채 버려진 건은 `skeleton.point.reservations.hold-timeout` 뒤에 저절로 풀린다 - 일이 그보다 오래 걸리면 안 된다(늦게 확정하면 [PointReservationNotHeldException]).
      * `skeleton.point.reservations.enabled` 가 꺼져 있으면 [IllegalStateException].
      */
@@ -36,12 +36,12 @@ interface PointWallet {
 
     /**
      * 확정 - 같은 키의 `SPEND` 줄을 만든다. [amount](1 이상, 잡은 양 이하)를 주면 그만큼만 빼고 나머지는 풀린다. 멱등이다: 이미 확정됐으면 같은 줄을 돌려준다.
-     * 없으면 [PointReservationNotFoundException], 풀렸으면(만료 포함) [PointReservationNotHeldException] - 이때는 결과를 내보내지 않는다. 잡은 양을 넘으면 [PointReservationExceededException].
+     * 없거나 다른 계정의 건이면 [PointReservationNotFoundException], 풀렸으면(만료 포함) [PointReservationNotHeldException] - 이때는 결과를 내보내지 않는다. 잡은 양을 넘으면 [PointReservationExceededException].
      */
-    fun capture(sourceType: String, sourceRef: String, amount: Long? = null): PointEntry
+    fun capture(accountId: String, sourceType: String, sourceRef: String, amount: Long? = null): PointEntry
 
     /** 풀기 - 잡은 포인트가 돌아온다. 멱등이다(이미 풀렸거나 만료됐으면 그대로). 이미 확정된 건은 풀 수 없다 - [PointReservationNotHeldException] */
-    fun release(sourceType: String, sourceRef: String): PointReservation
+    fun release(accountId: String, sourceType: String, sourceRef: String): PointReservation
 
     /** 기한이 지난 잡힌 건을 푼다. 푼 건 수 */
     fun expireReservations(now: Instant): Int
@@ -95,12 +95,12 @@ class StorePointWallet(
         return store.reserve(accountId, amount, sourceType, sourceRef, now.plus(hold), now)
     }
 
-    override fun capture(sourceType: String, sourceRef: String, amount: Long?): PointEntry {
+    override fun capture(accountId: String, sourceType: String, sourceRef: String, amount: Long?): PointEntry {
         if (amount != null) requireAmount(amount)
-        return store.capture(sourceType, sourceRef, amount, time.now())
+        return store.capture(accountId, sourceType, sourceRef, amount, time.now())
     }
 
-    override fun release(sourceType: String, sourceRef: String): PointReservation = store.release(sourceType, sourceRef, time.now())
+    override fun release(accountId: String, sourceType: String, sourceRef: String): PointReservation = store.release(accountId, sourceType, sourceRef, time.now())
 
     override fun expireReservations(now: Instant): Int = store.expireReservations(now)
 

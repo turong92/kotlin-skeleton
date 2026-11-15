@@ -38,9 +38,9 @@ class JdbcPointStore(
     override fun reserve(accountId: String, amount: Long, sourceType: String, sourceRef: String, holdUntil: Instant, now: Instant) =
         reservations.reserve(accountId, amount, sourceType, sourceRef, holdUntil, now)
 
-    override fun capture(sourceType: String, sourceRef: String, amount: Long?, now: Instant) = reservations.capture(sourceType, sourceRef, amount, now)
+    override fun capture(accountId: String, sourceType: String, sourceRef: String, amount: Long?, now: Instant) = reservations.capture(accountId, sourceType, sourceRef, amount, now)
 
-    override fun release(sourceType: String, sourceRef: String, now: Instant) = reservations.release(sourceType, sourceRef, now)
+    override fun release(accountId: String, sourceType: String, sourceRef: String, now: Instant) = reservations.release(accountId, sourceType, sourceRef, now)
 
     override fun expireReservations(now: Instant) = reservations.expire(now, BATCH)
 

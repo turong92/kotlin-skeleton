@@ -13,6 +13,8 @@ import dev.sumin.skeleton.point.PointReservationStatus
 import dev.sumin.skeleton.point.PointSourceConflictException
 import java.sql.ResultSet
 import java.time.Instant
+import org.slf4j.LoggerFactory
+import org.springframework.dao.DuplicateKeyException
 import org.springframework.jdbc.core.RowMapper
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.transaction.support.TransactionTemplate
@@ -31,11 +33,26 @@ internal class JdbcPointReservations(
     private val ids: SortableIds,
 ) {
     fun reserve(accountId: String, amount: Long, sourceType: String, sourceRef: String, holdUntil: Instant, now: Instant): PointReservation {
-        val outcome = tx.execute {
+        val outcome = try {
+            reserveInTransaction(accountId, amount, sourceType, sourceRef, holdUntil, now)
+        } catch (_: DuplicateKeyException) {
+            Conflict   // 다른 계정이 같은 키를 동시에 잡았다 - 먼저 커밋한 쪽이 이겼다
+        }
+        return when (outcome) {
+            is Done -> outcome.reservation
+            is Short -> throw PointInsufficientException(amount, outcome.available)
+            is NotHeld -> throw PointReservationNotHeldException(outcome.status)
+            else -> throw PointSourceConflictException()
+        }
+    }
+
+    private fun reserveInTransaction(accountId: String, amount: Long, sourceType: String, sourceRef: String, holdUntil: Instant, now: Instant): Outcome? =
+        tx.execute {
             val balance = store.lockBalance(accountId, now)
             find(sourceType, sourceRef)?.let { found ->
-                check(found.accountId == accountId) { "point source $sourceType/$sourceRef belongs to another account" }
-                return@execute if (found.amount == amount) Done(found) else Conflict
+                if (found.accountId != accountId || found.amount != amount) return@execute Conflict
+                // 끝난 건의 키로 다시 잡으면 앱이 일을 또 돌리고 capture 에서야 거절된다 - 여기서 막는다(새 키로 다시 잡는다)
+                return@execute if (found.status == PointReservationStatus.HELD) Done(found) else NotHeld(found.status)
             }
             if (store.findBySource(sourceType, sourceRef) != null) return@execute Conflict   // 원장 줄이 이미 쓴 키
             val available = balance - store.dueRemaining(accountId, now)
@@ -54,18 +71,13 @@ internal class JdbcPointReservations(
             store.changeBalance(accountId, -amount, now)
             Done(PointReservation(id, accountId, amount, null, PointReservationStatus.HELD, sourceType, sourceRef, holdUntil, now, null))
         }
-        return when (outcome) {
-            is Done -> outcome.reservation
-            is Short -> throw PointInsufficientException(amount, outcome.available)
-            else -> throw PointSourceConflictException()
-        }
-    }
 
-    fun capture(sourceType: String, sourceRef: String, amount: Long?, now: Instant): PointEntry {
-        val seen = find(sourceType, sourceRef) ?: throw PointReservationNotFoundException()
+    fun capture(accountId: String, sourceType: String, sourceRef: String, amount: Long?, now: Instant): PointEntry {
+        // 남의 건은 없는 건과 같다 - 소유를 알리지 않는다
+        val seen = find(sourceType, sourceRef)?.takeIf { it.accountId == accountId } ?: throw PointReservationNotFoundException()
         val outcome = tx.execute {
-            store.lockBalance(seen.accountId, now)
-            val held = find(sourceType, sourceRef) ?: return@execute Gone
+            if (!lockExisting(seen.accountId)) return@execute Gone
+            val held = find(sourceType, sourceRef)?.takeIf { it.accountId == accountId } ?: return@execute Gone
             when (held.status) {
                 PointReservationStatus.CAPTURED ->
                     if (amount == null || amount == held.capturedAmount) Captured(checkNotNull(store.findBySource(sourceType, sourceRef)) { "captured reservation has no ledger line" }) else Conflict
@@ -92,11 +104,11 @@ internal class JdbcPointReservations(
         }
     }
 
-    fun release(sourceType: String, sourceRef: String, now: Instant): PointReservation {
-        val seen = find(sourceType, sourceRef) ?: throw PointReservationNotFoundException()
+    fun release(accountId: String, sourceType: String, sourceRef: String, now: Instant): PointReservation {
+        val seen = find(sourceType, sourceRef)?.takeIf { it.accountId == accountId } ?: throw PointReservationNotFoundException()
         val outcome = tx.execute {
-            store.lockBalance(seen.accountId, now)
-            val held = find(sourceType, sourceRef) ?: return@execute Gone
+            if (!lockExisting(seen.accountId)) return@execute Gone
+            val held = find(sourceType, sourceRef)?.takeIf { it.accountId == accountId } ?: return@execute Gone
             when (held.status) {
                 PointReservationStatus.HELD -> Done(close(held, PointReservationStatus.RELEASED, now))
                 PointReservationStatus.RELEASED, PointReservationStatus.EXPIRED -> Done(held)
@@ -110,24 +122,36 @@ internal class JdbcPointReservations(
         }
     }
 
+    /** 건마다 따로 잡는다 - 한 건이 실패해도(로그만 남긴다) 나머지는 풀린다. 한 바퀴에 하나도 못 처리하면 멈춘다(다음 훑기가 다시 한다) */
     fun expire(now: Instant, batch: Int): Int {
         var expired = 0
         while (true) {
             val due = jdbc.query(
-                "select id, account_id, source_type, source_ref from point_reservations where status = 'HELD' and hold_until <= :now order by hold_until, id limit $batch",
+                "select account_id, source_type, source_ref from point_reservations where status = 'HELD' and hold_until <= :now order by hold_until, id limit $batch",
                 mapOf("now" to dialect.instantParam(now)),
-            ) { rs, _ -> listOf(rs.getString(2), rs.getString(3), rs.getString(4)) }
-            if (due.isEmpty()) return expired
+            ) { rs, _ -> listOf(rs.getString(1), rs.getString(2), rs.getString(3)) }
+            var handled = 0
             due.forEach { (account, type, ref) ->
-                expired += tx.execute {
-                    store.lockBalance(account, now)
-                    // 잠근 뒤 다시 읽는다 - 그 사이 확정 · 풀기가 이겼으면 건드리지 않는다
-                    val held = find(type, ref)
-                    if (held != null && held.status == PointReservationStatus.HELD && !held.holdUntil.isAfter(now)) { close(held, PointReservationStatus.EXPIRED, now); 1 } else 0
-                } ?: 0
+                try {
+                    val closed = tx.execute {
+                        // 탈퇴로 잔액 줄이 지워졌으면 만들지 않는다 - 잠글 줄이 있을 때만
+                        if (!lockExisting(account)) return@execute null
+                        // 잠근 뒤 다시 읽는다 - 그 사이 확정 · 풀기가 이겼으면 건드리지 않는다
+                        val held = find(type, ref)
+                        if (held != null && held.status == PointReservationStatus.HELD && !held.holdUntil.isAfter(now)) { close(held, PointReservationStatus.EXPIRED, now); 1 } else 0
+                    }
+                    if (closed != null) { handled++; expired += closed }
+                } catch (e: Exception) {
+                    log.warn("point reservation expiry failed for one hold, going on with the rest: {}", e.toString())
+                }
             }
+            if (handled == 0) return expired
         }
     }
+
+    /** 잔액 줄이 있으면 잠그고 true. 없으면(탈퇴로 지워졌다) 만들지 않고 false */
+    private fun lockExisting(accountId: String): Boolean =
+        jdbc.query("select balance from point_balances where account_id = :a for update", mapOf("a" to accountId)) { rs, _ -> rs.getLong(1) }.isNotEmpty()
 
     fun find(sourceType: String, sourceRef: String): PointReservation? =
         jdbc.query("$SELECT where source_type = :t and source_ref = :r", mapOf("t" to sourceType, "r" to sourceRef), rows).firstOrNull()
@@ -207,6 +231,8 @@ internal class JdbcPointReservations(
             settledAt = dialect.readInstant(rs, "settled_at"),
         )
     }
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     private sealed interface Outcome
     private class Done(val reservation: PointReservation) : Outcome

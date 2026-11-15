@@ -78,11 +78,61 @@ class PointReservationDbTest {
         wallet.reserve("a1", 40, "GEN", "r1")
         wallet.spend("a1", 10, "GEN", "r1")   // 앱이 잘못 같은 키를 원장에 썼다
 
-        assertFailsWith<PointSourceConflictException> { wallet.capture("GEN", "r1") }
+        assertFailsWith<PointSourceConflictException> { wallet.capture("a1", "GEN", "r1") }
         assertEquals(40, wallet.balance("a1").held)
 
-        wallet.release("GEN", "r1")
+        wallet.release("a1", "GEN", "r1")
         assertEquals(90, wallet.balance("a1").balance)   // 바로 쓴 10 만 빠졌다 - 두 번 빠지지 않는다
+    }
+
+    @Test
+    fun `reserving a key whose hold already ended is refused - a fresh key is needed`() {
+        wallet.earn("a1", 100, null, "GRANT", "g1")
+        wallet.reserve("a1", 10, "GEN", "released")
+        wallet.release("a1", "GEN", "released")
+        wallet.reserve("a1", 10, "GEN", "captured")
+        wallet.capture("a1", "GEN", "captured")
+        wallet.reserve("a1", 10, "GEN", "expired")
+        PointDb.now = now.plus(HOLD).plusSeconds(1)
+        wallet.expireReservations(now)
+
+        listOf("released", "captured", "expired").forEach { key ->
+            assertFailsWith<PointReservationNotHeldException> { wallet.reserve("a1", 10, "GEN", key) }
+        }
+        assertEquals(90, wallet.balance("a1").balance)
+        assertEquals(0, wallet.balance("a1").held)
+    }
+
+    @Test
+    fun `another account can neither capture, release nor reserve over a hold`() {
+        wallet.earn("a1", 100, null, "GRANT", "g1")
+        wallet.earn("a2", 100, null, "GRANT", "g2")
+        wallet.reserve("a1", 40, "GEN", "r1")
+
+        assertFailsWith<PointReservationNotFoundException> { wallet.capture("a2", "GEN", "r1") }
+        assertFailsWith<PointReservationNotFoundException> { wallet.release("a2", "GEN", "r1") }
+        assertFailsWith<PointSourceConflictException> { wallet.reserve("a2", 40, "GEN", "r1") }
+
+        assertEquals(PointReservationStatus.HELD, wallet.reservationOf("GEN", "r1")!!.status)
+        assertEquals(40, wallet.balance("a1").held)
+        assertEquals(100, wallet.balance("a2").balance)
+    }
+
+    @Test
+    fun `the sweep does not bring back the balance row of an erased account`() {
+        wallet.earn("a1", 100, null, "GRANT", "g1")
+        wallet.reserve("a1", 40, "GEN", "r1")
+        val seen = PointDb.store.findReservation("GEN", "r1")!!
+        PointDb.store.eraseAccount("a1")
+        // 탈퇴 직전에 읽은 건이 남은 척 - 훑기가 잔액 줄을 새로 만들면 안 된다
+        jdbc.update(
+            "insert into point_reservations (id, account_id, amount, status, source_type, source_ref, hold_until, created_at) values (:id, 'a1', 40, 'HELD', 'GEN', 'ghost', :h, :h)",
+            mapOf("id" to seen.id, "h" to DbTestDatabase.dialect.instantParam(now.minusSeconds(1))),
+        )
+
+        wallet.expireReservations(now)
+
+        assertEquals(0L, jdbc.queryForObject("select count(*) from point_balances where account_id = 'a1'", emptyMap<String, Any>(), Long::class.java))
     }
 
     @Test
@@ -112,8 +162,8 @@ class PointReservationDbTest {
         val bundle = wallet.earn("a1", 100, null, "GRANT", "g1")!!
         wallet.reserve("a1", 40, "GEN", "r1")
 
-        val spent = wallet.capture("GEN", "r1")
-        val again = wallet.capture("GEN", "r1")
+        val spent = wallet.capture("a1", "GEN", "r1")
+        val again = wallet.capture("a1", "GEN", "r1")
 
         assertEquals(spent.id, again.id)
         assertEquals(PointEntryKind.SPEND, spent.kind)
@@ -134,7 +184,7 @@ class PointReservationDbTest {
         val late = wallet.earn("a1", 70, now.plus(Duration.ofDays(50)), "GRANT", "g-late")!!
         wallet.reserve("a1", 60, "GEN", "r1")   // 소멸이 가까운 묶음부터: soon 30 + late 30
 
-        val spent = wallet.capture("GEN", "r1", 25)
+        val spent = wallet.capture("a1", "GEN", "r1", 25)
 
         assertEquals(-25, spent.delta)
         assertEquals(PointEntryKind.SPEND, spent.kind)
@@ -152,13 +202,13 @@ class PointReservationDbTest {
         wallet.earn("a1", 100, null, "GRANT", "g1")
         wallet.reserve("a1", 40, "GEN", "r1")
 
-        assertFailsWith<PointReservationExceededException> { wallet.capture("GEN", "r1", 41) }
-        assertFailsWith<IllegalArgumentException> { wallet.capture("GEN", "r1", 0) }
+        assertFailsWith<PointReservationExceededException> { wallet.capture("a1", "GEN", "r1", 41) }
+        assertFailsWith<IllegalArgumentException> { wallet.capture("a1", "GEN", "r1", 0) }
         assertEquals(40, wallet.balance("a1").held)   // 실패는 아무것도 바꾸지 않는다
-        wallet.capture("GEN", "r1", 10)
+        wallet.capture("a1", "GEN", "r1", 10)
 
-        assertFailsWith<PointSourceConflictException> { wallet.capture("GEN", "r1", 11) }
-        assertEquals(10, wallet.capture("GEN", "r1", 10).let { -it.delta })
+        assertFailsWith<PointSourceConflictException> { wallet.capture("a1", "GEN", "r1", 11) }
+        assertEquals(10, wallet.capture("a1", "GEN", "r1", 10).let { -it.delta })
         assertEquals(90, wallet.balance("a1").balance)
     }
 
@@ -167,23 +217,23 @@ class PointReservationDbTest {
         val bundle = wallet.earn("a1", 100, null, "GRANT", "g1")!!
         wallet.reserve("a1", 40, "GEN", "r1")
 
-        val released = wallet.release("GEN", "r1")
-        val again = wallet.release("GEN", "r1")
+        val released = wallet.release("a1", "GEN", "r1")
+        val again = wallet.release("a1", "GEN", "r1")
 
         assertEquals(PointReservationStatus.RELEASED, released.status)
         assertEquals(released.id, again.id)
         assertEquals(100, wallet.balance("a1").balance)
         assertEquals(100, remaining(bundle.id))
         assertEquals(1, entryCount("a1"))
-        assertFailsWith<PointReservationNotHeldException> { wallet.capture("GEN", "r1") }
+        assertFailsWith<PointReservationNotHeldException> { wallet.capture("a1", "GEN", "r1") }
         assertEquals(100, wallet.balance("a1").balance)   // 풀린 건을 확정하려다 실패해도 공짜로 쓰이지 않는다
 
         wallet.reserve("a1", 10, "GEN", "r2")
-        wallet.capture("GEN", "r2")
-        assertFailsWith<PointReservationNotHeldException> { wallet.release("GEN", "r2") }
+        wallet.capture("a1", "GEN", "r2")
+        assertFailsWith<PointReservationNotHeldException> { wallet.release("a1", "GEN", "r2") }
         assertEquals(90, wallet.balance("a1").balance)
-        assertFailsWith<PointReservationNotFoundException> { wallet.release("GEN", "nope") }
-        assertFailsWith<PointReservationNotFoundException> { wallet.capture("GEN", "nope") }
+        assertFailsWith<PointReservationNotFoundException> { wallet.release("a1", "GEN", "nope") }
+        assertFailsWith<PointReservationNotFoundException> { wallet.capture("a1", "GEN", "nope") }
     }
 
     @Test
@@ -201,8 +251,8 @@ class PointReservationDbTest {
         assertEquals(PointReservationStatus.EXPIRED, wallet.reservationOf("GEN", "r1")!!.status)
         assertEquals(100, wallet.balance("a1").balance)
         assertEquals(0, wallet.balance("a1").held)
-        assertFailsWith<PointReservationNotHeldException> { wallet.capture("GEN", "r1") }
-        assertEquals(PointReservationStatus.EXPIRED, wallet.release("GEN", "r1").status)   // 이미 풀린 건 - 다시 풀어도 같은 결과
+        assertFailsWith<PointReservationNotHeldException> { wallet.capture("a1", "GEN", "r1") }
+        assertEquals(PointReservationStatus.EXPIRED, wallet.release("a1", "GEN", "r1").status)   // 이미 풀린 건 - 다시 풀어도 같은 결과
     }
 
     @Test
@@ -214,7 +264,7 @@ class PointReservationDbTest {
             PointDb.now = PointDb.now.plus(HOLD).plusSeconds(1)   // 기한 지남 - 아직 훑지 않았다
 
             val outcomes = race(2) { i ->
-                if (i == 0) runCatching { wallet.capture("GEN", "r-$round") } else runCatching { wallet.expireReservations(PointDb.now) }
+                if (i == 0) runCatching { wallet.capture(account, "GEN", "r-$round") } else runCatching { wallet.expireReservations(PointDb.now) }
             }
 
             val captured = outcomes[0].isSuccess
@@ -241,10 +291,10 @@ class PointReservationDbTest {
 
         PointDb.now = now.plus(Duration.ofDays(2))   // 묶음의 유효기간이 지났다 (잡기 기한은 따로 - 아직 안 풀었다)
         wallet.expireDue(now)
-        assertEquals(-100, wallet.capture("GEN", "keep").delta)   // 잡혀 있던 몫은 소멸이 건드리지 않았다
+        assertEquals(-100, wallet.capture("a1", "GEN", "keep").delta)   // 잡혀 있던 몫은 소멸이 건드리지 않았다
         assertEquals(0, remaining(bundle.id))
 
-        val released = wallet.release("GEN", "lapse")
+        val released = wallet.release("a1", "GEN", "lapse")
 
         assertEquals(PointReservationStatus.RELEASED, released.status)
         assertEquals(0, wallet.balance("a1").balance)   // 유효기간이 지난 몫은 풀어도 되살아나지 않는다
@@ -258,7 +308,7 @@ class PointReservationDbTest {
         wallet.earn("a1", 100, null, "GRANT", "g1")
         wallet.reserve("a1", 40, "GEN", "r1")
         wallet.reserve("a1", 10, "GEN", "r2")
-        wallet.capture("GEN", "r2")
+        wallet.capture("a1", "GEN", "r2")
 
         PointDb.store.eraseAccount("a1")
 

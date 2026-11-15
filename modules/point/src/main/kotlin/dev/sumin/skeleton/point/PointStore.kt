@@ -57,7 +57,7 @@ interface PointStore {
 
     /**
      * [amount] 를 잡아 둔다 - `spend` 와 같은 순서로 묶음에서 덜어 내 잔액에서 빼고(쓸 수 없다, 소멸도 건드리지 않는다), 원장 줄은 만들지 않는다. [holdUntil] 이 기한이다.
-     * 잔액이 모자라면 [PointInsufficientException]. 같은 `(sourceType, sourceRef)` 의 건이 이미 있으면 그 건을 돌려준다(두 번 잡지 않는다 - 상태가 무엇이든) - 단 같은 계정 · 같은 양일 때만;
+     * 잔액이 모자라면 [PointInsufficientException]. 같은 `(sourceType, sourceRef)` 의 `HELD` 건이 이미 있으면 그 건을 돌려준다(두 번 잡지 않는다) - 단 같은 계정 · 같은 양일 때만; 이미 끝난 건이면 [PointReservationNotHeldException];
      * 다르거나 원장 줄이 쓴 키면 [PointSourceConflictException]. 두 예외 모두 트랜잭션 밖에서 던진다.
      */
     fun reserve(accountId: String, amount: Long, sourceType: String, sourceRef: String, holdUntil: Instant, now: Instant): PointReservation
@@ -65,12 +65,12 @@ interface PointStore {
     /**
      * 잡아 둔 건을 확정한다 - 같은 키의 `SPEND` 줄을 만들고(줄 id 는 건 id 와 같다), [amount](null 이면 잡은 전부)를 뺀 나머지는 원래 묶음으로 풀린다(이미 유효기간이 지난 묶음 몫은 `EXPIRE` 줄로 닫는다).
      * 기한이 지났어도 아직 훑기가 풀지 않았으면 확정된다 - 확정과 풀기(만료 포함)는 **상태가 `HELD` 일 때만** 조건부로 한 번 이긴다. 이미 확정된 건은 같은 줄을 돌려주고(양이 다르면 [PointSourceConflictException]),
-     * 건이 없으면 [PointReservationNotFoundException], 풀렸으면 [PointReservationNotHeldException], 잡은 양보다 크면 [PointReservationExceededException]. 모두 트랜잭션 밖에서 던지고 아무것도 바뀌지 않는다.
+     * 건이 없거나 [accountId] 의 것이 아니면 [PointReservationNotFoundException], 풀렸으면 [PointReservationNotHeldException], 잡은 양보다 크면 [PointReservationExceededException]. 모두 트랜잭션 밖에서 던지고 아무것도 바뀌지 않는다.
      */
-    fun capture(sourceType: String, sourceRef: String, amount: Long?, now: Instant): PointEntry
+    fun capture(accountId: String, sourceType: String, sourceRef: String, amount: Long?, now: Instant): PointEntry
 
-    /** 잡아 둔 건을 푼다 - 포인트는 원래 묶음으로 돌아간다(이미 지난 묶음 몫은 `EXPIRE` 줄로 닫는다). 이미 풀린 건(만료 포함)은 그대로 돌려주고, 확정된 건은 [PointReservationNotHeldException], 없으면 [PointReservationNotFoundException] */
-    fun release(sourceType: String, sourceRef: String, now: Instant): PointReservation
+    /** 잡아 둔 건을 푼다 - 포인트는 원래 묶음으로 돌아간다(이미 지난 묶음 몫은 `EXPIRE` 줄로 닫는다). 이미 풀린 건(만료 포함)은 그대로 돌려주고, 확정된 건은 [PointReservationNotHeldException], 없거나 [accountId] 의 것이 아니면 [PointReservationNotFoundException] */
+    fun release(accountId: String, sourceType: String, sourceRef: String, now: Instant): PointReservation
 
     /** 기한([PointReservation.holdUntil])이 [now] 를 지난 `HELD` 건을 푼다(`EXPIRED`). 푼 건 수. 두 번 돌려도 한 번만 푼다 */
     fun expireReservations(now: Instant): Int
