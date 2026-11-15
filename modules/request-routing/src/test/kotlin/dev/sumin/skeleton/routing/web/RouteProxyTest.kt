@@ -53,7 +53,8 @@ import tools.jackson.databind.json.JsonMapper
 )
 class RouteProxyTest(@Autowired @LocalServerPort private val port: Int) {
     @Configuration
-    @EnableAutoConfiguration
+    // job-queue-jdbc 가 시험 클래스패스에 있어도(선택 통합 시험용) 이 시험엔 DB 가 없다
+    @EnableAutoConfiguration(excludeName = ["org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration"])
     @EnableWebSecurity
     class App {
         @Bean

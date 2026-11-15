@@ -3852,7 +3852,7 @@
       "needs": {
         "requires": [],
         "oneOf": [],
-        "optional": ["request-routing-jdbc"]
+        "optional": ["request-routing-jdbc", "job-queue-jdbc"]
       },
       "config": {
         "prefixes": ["skeleton.routing"],

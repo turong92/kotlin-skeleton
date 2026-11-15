@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 로컬 창 관리 API `GET` · `POST` · `DELETE /api/v1/admin/routing/local-window`(**기본 꺼짐** `skeleton.routing.admin.enabled=false` → 404, 권한 `routing.window`): 1~480분(`local.max-window` 가 더 짧으면 그쪽) · 사유 필수, 저장과 감사(`routing.local-window.opened` · `closed`, 사유는 싣지 않는다)는 한 트랜잭션. 창 표는 「그 서버가 쓰는 DB 의 표」일 뿐이라 서버들이 DB 하나를 같이 쓰면 한 번 열면 전부 적용된다.
 - 새 모듈 `request-routing-jdbc`: 창 저장소의 DB 구현(표 `routing_local_windows`, PostgreSQL · MySQL 마이그레이션 `V20261116140000`, 새 표). `skeleton.routing.enabled=true` 일 때만 선다. 설명: `docs/modules/request-routing-jdbc.md`.
 - `job-queue-jdbc` 차선: 새 열 `jobs.lane varchar(40) null`(마이그레이션 `V20261116160000`, 두 방언, 열 추가만이라 옛 줄 · 옛 코드와 함께 돈다)과 포트 `JobLanes`(기본 `NONE` - 빈을 안 두면 동작 그대로). 차선 일꾼은 자기 차선의 잡만 집고 정리 일(스테일 복구 · DEAD 유예 · 보관 정리)은 하지 않으며, 기본 일꾼은 차선 없는 잡과 `skeleton.job-queue.lane-grace`(기본 `1h`)보다 오래 기다린 차선 잡을 집는다. `schema.sql` 모드는 `jobs` 복사본에 `lane` 열을 더한다. 문서: `docs/job-queue-jdbc.md`.
+- 비동기 잇기(`request-routing` 의 선택 통합, `job-queue-jdbc` · spring-kafka 는 `compileOnly`): `routingJobLanes`(`JobLanes`)가 믿은 표시의 이 서비스 대상을 잡의 차선으로 적고 후보 일꾼은 그 차선만 집는다. Kafka 는 `routeKafkaContainerCustomizer` 가 `RouteRecordInterceptor` 를 달아 원래 서버는 자기 서비스 몫 표시 레코드를 건너뛰고 후보는 자기 이름 표시만 받는다(소비 그룹 `<원래>-<instance>` · `auto.offset.reset=latest`, 앱이 `ContainerCustomizer` 를 따로 두면 이 빈은 서지 않으니 그 안에서 `RouteKafkaContainerCustomizer` 를 부른다). 둘 다 `skeleton.routing.enabled=true` 일 때만이다.
 
 ### notification-broadcast - 앱 세그먼트로 보내기를 문서로 못박고, 대상을 비우면 전체 (2026-11-16)
 

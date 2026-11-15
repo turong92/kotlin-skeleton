@@ -1,2 +1,4 @@
 dev.sumin.skeleton.routing.RequestRoutingAutoConfiguration
 dev.sumin.skeleton.routing.window.LocalWindowAdminAutoConfiguration
+dev.sumin.skeleton.routing.async.RequestRoutingJobQueueAutoConfiguration
+dev.sumin.skeleton.routing.async.RequestRoutingKafkaAutoConfiguration

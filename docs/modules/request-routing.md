@@ -8,6 +8,7 @@
 **허용 목록 검사**: 기동 때 `RouteTargets` 가 이름 모양과 대상 `url`(http · https 원점만, 경로 없음)을 검사하고 어기면 기동이 실패한다 — 메시지엔 속성 이름만 있고 값은 없다.
 **들어올 때**(서블릿 앱, 보안 필터 체인 바로 뒤의 `routeInboundFilterRegistration`): 요청의 `route` 를 믿고 · 검사하고 · MDC `route` 에 둔다. `inbound: edge`(기본)는 인증된 호출자가 `routing.use` 를 가질 때만 표시를 받고 **아니면 말없이 버린다**(손님의 표시는 응답 · 나가는 호출 어디에도 흔적이 없다). `inbound: internal` 은 앞 서비스가 보낸 표시를 믿는다 — 공개 주소가 없는 서비스만 쓴다. 받은 표시는 허용 목록으로 검사한다: 모양 오류 400 `ROUTING.MALFORMED`, 아는 서비스의 모르는 대상 400 `ROUTING.UNKNOWN_TARGET`, 로컬 대상인데 창이 닫힘 403 `ROUTING.LOCAL_CLOSED`, 모르는 서비스 이름은 뒤 서비스 몫이라 그대로 둔다. 로컬 대상을 받아들일 때마다 WARN 한 줄(행위자 id · 대상). Spring Security 가 없으면 아무도 직원이 아니다.
 **나갈 때**(`routeOutboundCustomizer` → `ExternalHttpClientCustomizer`): `skeleton.routing.services` 에 적은 이름과 같은 `ExternalHttpClient` 클라이언트에만 필터를 단다 — 결제사 같은 외부 클라이언트에는 표시가 나가지 않는다. MDC `route` 가 있으면 `baggage` 로 싣고(이미 있는 baggage 는 `route` 멤버만 갈아 끼운다), 표시에 이 서비스 이름이 있으면 요청 주소의 **스킴 · 호스트 · 포트만** 대상 주소로 바꾸고(경로 · 쿼리 그대로) 대상의 `headers` 를 더한다. 로컬 대상은 **호출마다 창을 다시 본다** — 요청 도중 닫혔으면 원래 서버로 몰래 가지 않고 `ROUTING.LOCAL_CLOSED` 로 실패한다. 큐 일꾼 · Kafka 처리 경로에서도 `RouteBaggage.restore` 로 MDC 를 복원하면 같은 필터가 대상으로 보낸다. `.block()` 밖의 다른 스레드에서 구독하면 MDC 가 없어 표시가 빠진다(traceId 와 같은 한계).
+**비동기**(선택 통합 — `job-queue-jdbc` · spring-kafka 가 클래스패스에 있을 때만): 큐 — `routingJobLanes`(`JobLanes`)가 믿은 표시의 이 서비스 대상을 잡의 차선으로 적고(손님 요청은 표시가 없어 기본 차선), 후보 인스턴스(`instance`)의 일꾼은 자기 차선의 잡만 집는다. 원래 서버는 차선 없는 잡과 `skeleton.job-queue.lane-grace`(기본 1h)가 지난 차선 잡을 집는다. 표시를 일꾼 로그 문맥으로 되살리려면 `skeleton.job-queue.propagated-mdc-keys: [traceId, route]`. Kafka — `routeKafkaContainerCustomizer`(`ContainerCustomizer`)가 리스너 컨테이너에 `RouteRecordInterceptor` 를 달아 원래 서버는 자기 서비스 몫으로 표시된 레코드를 건너뛰고, 후보는 자기 이름이 표시된 레코드만 받는다(소비 그룹 `<원래 그룹>-<instance>`, `auto.offset.reset=latest`). Boot 는 `ContainerCustomizer` 빈이 하나일 때만 컨테이너 팩토리에 달므로, 앱이 자기 `ContainerCustomizer` 를 두면 이 빈은 서지 않는다 — 그 꾸미개 안에서 `RouteKafkaContainerCustomizer(properties).configure(container)` 를 불러야 한다. 건너뛴 레코드는 그대로 커밋된다.
 **입구 서비스가 대상일 때**(`service` 를 적은 서블릿 앱, `routeProxy`): 표시에 이 서비스 이름이 있고 그 대상이 `instance` 와 다르면 요청을 통째로 대상에 넘기고 응답을 읽는 대로 흘려 돌려준다(SSE 도 한 줄씩). `Authorization` 은 넘긴다(대상이 직원을 다시 확인한다). hop-by-hop · `Proxy-*` · `Host` · `Content-Length` 는 버리고 `baggage` 는 믿은 표시로 갈아 끼우고 `Via: 1.1 request-routing` 을 붙인다 — 이 표지가 이미 있는데 또 넘겨야 하면 508 `ROUTING.LOOP`, 대상이 안 닿으면 502 `ROUTING.TARGET_UNREACHABLE`. `proxy.timeout` 은 응답 머리까지만 센다. 로컬 대상은 창이 닫혀 있으면 넘기기 전에 403. WebSocket 은 넘기지 않는다.
 **창 판정**: `LocalRouteWindow` — 저장소 빈(`LocalRouteWindowStore`)이 있으면 `cache-ttl` 동안 캐시해서 읽고, 없으면 창은 늘 닫혀 있다. 시각이 지나면 캐시 안에서도 닫힌 것으로 본다.
 
@@ -19,7 +20,7 @@
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:request-routing"))` |
 | 함께 오는 모듈 | `platform` |
-| 컴파일 전용 | 없음 |
+| 컴파일 전용 | `job-queue-jdbc` (그리고 외부 라이브러리 spring-kafka) |
 | 설정 접두사 | `skeleton.routing` — [docs/config/modules/request-routing.yml](../config/modules/request-routing.yml) |
 | 기본 동작 | 꺼짐. `skeleton.routing.enabled=true` 일 때만 허용 목록 · 창 판정 · 권한 선언 · 들어오는 요청 필터가 선다. |
 | 부팅에 필요한 것 | `TimeProvider` · `OperatorAccess` 빈(platform). 창 API 는 `OperatorAuditLog` · `TransactionOperations` 도. 창을 열려면 `LocalRouteWindowStore` 구현(`request-routing-jdbc`). 대상 `url` 이 원점이 아니면 기동 실패. |
