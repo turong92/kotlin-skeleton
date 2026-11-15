@@ -5,6 +5,9 @@ skeleton:
       enabled: false   # true 면 /api/v1/admin/points 를 연다 (꺼짐 → 404). 쓰려면 권한 point.manage 가 있어야 한다
     http:
       enabled: true    # false 면 사용자 경로 /api/v1/points 를 닫는다 (포인트를 쓰는 길은 서버 API PointWallet 뿐이라 읽기만 있다)
+    reservations:      # 잡아 두기(PointWallet.reserve → capture | release) - 만들고 나서 차감하면 차감이 실패해도 결과가 이미 나간다. 먼저 잡고, 만든 뒤 확정하고, 실패하면 푼다
+      enabled: false     # true 면 reserve 를 연다. 잡은 채 버려진 건을 풀 주기 작업이 돌 길(scheduler 모듈이거나 skeleton.job-queue.mode=on-request)이 없으면 기동 실패
+      hold-timeout: 30m  # 잡은 뒤 확정 · 풀기가 없으면 이만큼 뒤에 저절로 풀린다(1분마다 훑는다). 일이 걸리는 가장 긴 시간보다 길게 - 풀린 뒤의 확정은 거절된다. 양수여야 한다
     operations:        # 작업 기록(PointOperations) - 불명 건 조회. job-queue-jdbc 가 있을 때만 일한다 (이름은 payment 의 reconcile 과 같다)
       reconcile:
         first-delay: 60s   # 영수증을 받은 뒤 첫 조회까지. 진행 중이던 원장 쓰기가 이보다 늦게 끝나면 조회가 한 번 더 돈다. 양수여야 한다

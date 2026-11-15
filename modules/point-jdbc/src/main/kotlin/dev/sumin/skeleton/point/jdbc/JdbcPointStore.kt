@@ -33,6 +33,18 @@ class JdbcPointStore(
     private val ids: SortableIds = SortableIds.system,
 ) : PointStore {
     private val insertBalance = dialect.insertIgnore("point_balances", listOf("account_id", "balance", "updated_at"), listOf("account_id"))
+    private val reservations = JdbcPointReservations(this, jdbc, tx, dialect, ids)
+
+    override fun reserve(accountId: String, amount: Long, sourceType: String, sourceRef: String, holdUntil: Instant, now: Instant) =
+        reservations.reserve(accountId, amount, sourceType, sourceRef, holdUntil, now)
+
+    override fun capture(sourceType: String, sourceRef: String, amount: Long?, now: Instant) = reservations.capture(sourceType, sourceRef, amount, now)
+
+    override fun release(sourceType: String, sourceRef: String, now: Instant) = reservations.release(sourceType, sourceRef, now)
+
+    override fun expireReservations(now: Instant) = reservations.expire(now, BATCH)
+
+    override fun findReservation(sourceType: String, sourceRef: String) = reservations.find(sourceType, sourceRef)
 
     override fun earn(
         accountId: String,
@@ -175,7 +187,7 @@ class JdbcPointStore(
             mapOf("a" to accountId, "now" to dialect.instantParam(now), "before" to dialect.instantParam(soonBefore)),
             Long::class.java,
         ) ?: 0L
-        return PointBalance(usable, if (soon > 0) PointExpiring(soon, soonBefore) else null)
+        return PointBalance(usable, if (soon > 0) PointExpiring(soon, soonBefore) else null, reservations.heldSum(accountId))
     }
 
     override fun history(accountId: String, after: PointCursor?, limit: Int): List<PointEntry> {
@@ -207,6 +219,7 @@ class JdbcPointStore(
 
     override fun eraseAccount(accountId: String) {
         tx.executeWithoutResult {
+            reservations.erase(accountId)   // 잡힌 것도 같이 - 할당이 건 id 로 걸려 있다
             // 할당 · 환원 연결은 원장 줄이 지워지기 전에 (줄 id 로 찾는다)
             jdbc.update("delete from point_spend_allocations where spend_entry_id in (select id from point_entries where account_id = :a)", mapOf("a" to accountId))
             jdbc.update("delete from point_restore_links where restore_entry_id in (select id from point_entries where account_id = :a)", mapOf("a" to accountId))
@@ -219,12 +232,12 @@ class JdbcPointStore(
     }
 
     /** 잔액 줄을 (없으면 만들고) 잠그고 잠근 뒤의 잔액을 돌려준다 - MySQL 도 잠금 읽기는 최신 값을 본다 */
-    private fun lockBalance(accountId: String, now: Instant): Long {
+    internal fun lockBalance(accountId: String, now: Instant): Long {
         jdbc.update(insertBalance, mapOf("account_id" to accountId, "balance" to 0L, "updated_at" to dialect.instantParam(now)))
         return jdbc.queryForObject("select balance from point_balances where account_id = :a for update", mapOf("a" to accountId), Long::class.java)!!
     }
 
-    private fun changeBalance(accountId: String, delta: Long, now: Instant) {
+    internal fun changeBalance(accountId: String, delta: Long, now: Instant) {
         val changed = jdbc.update(
             "update point_balances set balance = balance + :delta, updated_at = :now where account_id = :a and balance + :delta >= 0",
             mapOf("a" to accountId, "delta" to delta, "now" to dialect.instantParam(now)),
@@ -239,7 +252,7 @@ class JdbcPointStore(
         return found
     }
 
-    private fun dueRemaining(accountId: String, now: Instant): Long =
+    internal fun dueRemaining(accountId: String, now: Instant): Long =
         jdbc.queryForObject(
             "select coalesce(sum(remaining), 0) from point_entries where account_id = :a and remaining > 0 and expires_at is not null and expires_at <= :now",
             mapOf("a" to accountId, "now" to dialect.instantParam(now)),
@@ -247,7 +260,7 @@ class JdbcPointStore(
         ) ?: 0L
 
     /** 유효기간이 지난 이 계정의 묶음을 닫는다 - 잔액 줄을 잠근 안에서 부른다. 만든 `EXPIRE` 줄 수 */
-    private fun expireAccount(accountId: String, now: Instant): Int {
+    internal fun expireAccount(accountId: String, now: Instant): Int {
         val due = jdbc.query(
             "select id, remaining from point_entries where account_id = :a and remaining > 0 and expires_at is not null and expires_at <= :now order by expires_at, id",
             mapOf("a" to accountId, "now" to dialect.instantParam(now)),
@@ -261,7 +274,7 @@ class JdbcPointStore(
     }
 
     /** 소멸이 가까운 묶음부터(유효기간 없는 것은 맨 뒤) [amount] 만큼 덜어 낸다 */
-    private fun consume(accountId: String, amount: Long): List<Pair<String, Long>> {
+    internal fun consume(accountId: String, amount: Long): List<Pair<String, Long>> {
         val bundles = jdbc.query(
             "select id, remaining from point_entries where account_id = :a and remaining > 0 " +
                 "order by case when expires_at is null then 1 else 0 end, expires_at, created_at, id",
@@ -289,7 +302,7 @@ class JdbcPointStore(
         check(changed == 1) { "point bundle changed under the account lock; retry" }
     }
 
-    private fun insert(e: PointEntry) {
+    internal fun insert(e: PointEntry) {
         jdbc.update(
             "insert into point_entries (id, account_id, delta, kind, remaining, expires_at, source_type, source_ref, reason, created_at) " +
                 "values (:id, :account_id, :delta, :kind, :remaining, :expires_at, :source_type, :source_ref, :reason, :created_at)",

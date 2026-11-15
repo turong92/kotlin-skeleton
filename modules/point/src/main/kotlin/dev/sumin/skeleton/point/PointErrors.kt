@@ -14,6 +14,9 @@ enum class PointErrorCode(
     SPEND_NOT_FOUND("POINT.SPEND_NOT_FOUND", HttpStatus.NOT_FOUND, "No such deduction to cancel"),
     CANCEL_EXCEEDED("POINT.CANCEL_EXCEEDED", HttpStatus.CONFLICT, "Cancellation exceeds the deduction"),
     SOURCE_CONFLICT("POINT.SOURCE_CONFLICT", HttpStatus.CONFLICT, "Source key already used for a different request"),
+    RESERVATION_NOT_FOUND("POINT.RESERVATION_NOT_FOUND", HttpStatus.NOT_FOUND, "No such reservation"),
+    RESERVATION_NOT_HELD("POINT.RESERVATION_NOT_HELD", HttpStatus.CONFLICT, "Reservation is not held any more"),
+    RESERVATION_EXCEEDED("POINT.RESERVATION_EXCEEDED", HttpStatus.CONFLICT, "Capture exceeds the held amount"),
 }
 
 /** 잔액보다 큰 차감(운영자 조정 포함) — 아무것도 바뀌지 않는다 */
@@ -35,3 +38,14 @@ class PointSpendNotFoundException : ApplicationException("No such deduction to c
 /** 취소 합계가 원 차감을 넘는다(또는 이미 전부 되돌렸다) - 아무것도 바뀌지 않는다 */
 class PointCancelExceededException(requested: Long, cancellable: Long) :
     ApplicationException("Cancellation exceeds the deduction: requested $requested, cancellable $cancellable", PointErrorCode.CANCEL_EXCEEDED)
+
+/** 그 키로 잡은 건이 없다 - 아무것도 바뀌지 않는다 */
+class PointReservationNotFoundException : ApplicationException("No such reservation", PointErrorCode.RESERVATION_NOT_FOUND)
+
+/** 확정할 수 없다(이미 풀렸거나 기한이 지나 풀렸다) 또는 풀 수 없다(이미 확정됐다) - 아무것도 바뀌지 않는다. 풀린 건을 확정하지 못한 쪽은 결과를 내보내면 안 된다 */
+class PointReservationNotHeldException(status: PointReservationStatus) :
+    ApplicationException("Reservation is not held any more: $status", PointErrorCode.RESERVATION_NOT_HELD)
+
+/** 확정하려는 양이 잡아 둔 양을 넘는다 - 아무것도 바뀌지 않는다 */
+class PointReservationExceededException(requested: Long, held: Long) :
+    ApplicationException("Capture exceeds the held amount: requested $requested, held $held", PointErrorCode.RESERVATION_EXCEEDED)

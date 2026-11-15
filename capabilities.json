@@ -3508,7 +3508,7 @@
       "module": "point",
       "path": "modules/point",
       "status": "experimental",
-      "summary": "포인트 원장 — 적립(유효기간 선택) · 소멸이 가까운 묶음부터 차감 · 하루 한 번 소멸 · 운영자 조정. 보상 지급기(RewardIssuer, 종류 point)를 내 이벤트가 「포인트 n점」을 줄 수 있고, 같은 지급 건 · 같은 주문을 두 번 처리해도 한 번만 반영되며 잔액보다 큰 차감은 거절된다. 포인트를 쓰는 길은 서버 API(PointWallet.spend)뿐이고, 내 잔액 · 내역 읽기(/api/v1/points)와 운영 조정(/api/v1/admin/points, 권한 point.manage, 기본 꺼짐 skeleton.point.admin.enabled)이 있다. 저장소는 point-jdbc.",
+      "summary": "포인트 원장 — 적립(유효기간 선택) · 소멸이 가까운 묶음부터 차감 · 하루 한 번 소멸 · 운영자 조정. 보상 지급기(RewardIssuer, 종류 point)를 내 이벤트가 「포인트 n점」을 줄 수 있고, 같은 지급 건 · 같은 주문을 두 번 처리해도 한 번만 반영되며 잔액보다 큰 차감은 거절된다. 포인트를 쓰는 길은 서버 API(PointWallet.spend)뿐이고 — 만들고 나서 차감하면 실패해도 결과가 나가므로 먼저 잡고(reserve) 만든 뒤 확정(capture)·실패하면 푸는(release) 선택 길도 있다(기본 꺼짐 skeleton.point.reservations.enabled, 버려진 건은 기한 뒤 저절로 풀림) — 내 잔액 · 내역 읽기(/api/v1/points)와 운영 조정(/api/v1/admin/points, 권한 point.manage, 기본 꺼짐 skeleton.point.admin.enabled)이 있다. 저장소는 point-jdbc.",
       "starter": false,
       "newProjectFlag": "--modules point",
       "autoIncludes": ["scheduler"],
@@ -3536,8 +3536,16 @@
         "이벤트(출석 · 친구초대)는 campaign 이 한다 — 이 모듈은 줄 수 있는 보상 한 종류일 뿐"
       ],
       "keywords": {
-        "ko": ["포인트", "적립금", "포인트 적립", "포인트 소멸", "포인트 차감", "포인트 조정"],
-        "en": ["points", "loyalty points", "point ledger", "reward points", "point expiry"]
+        "ko": ["포인트", "적립금", "포인트 적립", "포인트 소멸", "포인트 차감", "포인트 조정", "포인트 선점", "포인트 잡아두기"],
+        "en": [
+          "points",
+          "loyalty points",
+          "point ledger",
+          "reward points",
+          "point expiry",
+          "point reservation",
+          "authorize then capture"
+        ]
       }
     },
     {

@@ -7,6 +7,7 @@ import dev.sumin.skeleton.point.PointCursor
 import dev.sumin.skeleton.point.PointEntry
 import dev.sumin.skeleton.point.PointEntryKind
 import dev.sumin.skeleton.point.PointInsufficientException
+import dev.sumin.skeleton.point.PointReservation
 import dev.sumin.skeleton.point.PointWallet
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
@@ -37,6 +38,16 @@ class FakeWallet : PointWallet {
     override fun spend(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointEntry = error("not used")
 
     override fun cancelSpend(accountId: String, spendSourceType: String, spendSourceRef: String, amount: Long?, sourceType: String, sourceRef: String): PointEntry = error("not used")
+
+    override fun reserve(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointReservation = error("not used")
+
+    override fun capture(sourceType: String, sourceRef: String, amount: Long?): PointEntry = error("not used")
+
+    override fun release(sourceType: String, sourceRef: String): PointReservation = error("not used")
+
+    override fun expireReservations(now: Instant) = 0
+
+    override fun reservationOf(sourceType: String, sourceRef: String): PointReservation? = null
 
     override fun adjust(accountId: String, delta: Long, reason: String, expiresAt: Instant?, operatorId: String): PointEntry {
         if (delta < 0 && balance(accountId).balance < -delta) throw PointInsufficientException(-delta, balance(accountId).balance)

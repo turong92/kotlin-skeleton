@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### point · point-jdbc - 잡아 두기 reserve → capture | release (2026-11-16)
+
+- `PointWallet` 에 `reserve(accountId, amount, sourceType, sourceRef)` · `capture(sourceType, sourceRef, amount?)` · `release(sourceType, sourceRef)` · `expireReservations(now)` · `reservationOf` 를 더했다. 「만들고 나서 차감」하면 차감이 실패해도 결과가 이미 나가므로, 카드 승인 → 매입처럼 먼저 잡아 쓸 수 없게 하고 만든 뒤 확정하거나 실패하면 푼다. 쓸 수 있는 잔액 = 잔액 − 잡힌 합(동시 `reserve` 가 잔액을 넘게 잡지 못한다 - 같은 잔액 줄 잠금), `(sourceType, sourceRef)` 로 멱등(다른 요청은 `POINT.SOURCE_CONFLICT`), `capture` 는 같은 키의 `SPEND` 줄을 만들고(부분 확정이면 나머지는 원래 묶음으로 풀림, 확정된 차감은 `cancelSpend` 로 환불), `release` 는 멱등이며 확정된 건은 못 푼다(`POINT.RESERVATION_NOT_HELD`). 새 오류 코드 `POINT.RESERVATION_NOT_FOUND` · `_NOT_HELD` · `_EXCEEDED`.
+- 새 설정 `skeleton.point.reservations`(**기본 꺼짐** `enabled=false`): 켜면 잡은 채 버려진 건이 `hold-timeout`(기본 30분 - 작업 큐 `stale-lock-timeout` 10분보다 길게) 뒤에 저절로 풀린다. 1분마다 `scheduler` 타이머(`point.reservation-sweep`) 또는 요청 구동 모드의 `OnRequestTask` `point-reservation-sweep` 이 훑고, 돌릴 길이 없으면 시작이 실패한다(`PeriodicRunCheck`). 확정 · 풀기 · 만료는 `HELD` 일 때만 조건부 갱신으로 한 번 이기므로 겹쳐도 두 번 빠지거나 공짜가 되지 않는다. 잡힌 몫은 묶음에서 이미 덜려 있어 소멸이 건드리지 못하고, 풀 때 이미 유효기간이 지난 묶음 몫은 되살리지 않고 `EXPIRE` 줄로 닫는다. 탈퇴 시 잡힌 건도 같이 지운다.
+- 마이그레이션 `V20261116000000__point_reservations.sql`(PostgreSQL · MySQL, 표 `point_reservations`; 잠금 갱신). **호환 변경**: `PointWallet` · `PointStore` 에 메서드가 늘었다(직접 구현한 저장소 · 지갑은 더한다), `PointBalance` 에 `held`(기본 0)가 늘었다. HTTP 계약은 그대로다(`GET /api/v1/points` 의 `balance` 가 쓸 수 있는 값) - 프론트 짝 변경 없음.
+
 ### notification-scheduled · notification-scheduled-jdbc - 사람마다 따로 예약하는 푸시 (2026-11-15)
 
 - 새 모듈 `notification-scheduled`(+ 저장소 `notification-scheduled-jdbc`, PostgreSQL · MySQL, 표 `scheduled_pushes`, 마이그레이션 `V20261115230000__scheduled_pushes.sql`). **기본 꺼짐** - `skeleton.notification.scheduled.enabled=true` + `type`. 앱이 계기마다 `ScheduledPushes.schedule(ScheduledPush(key, recipientId, runAt, title, body, link, advertising))` 로 한 사람에게 T 시각 푸시를 예약하고 `cancel(key)` 로 취소한다 - 계기는 앱이 정하고 모듈은 모른다. 같은 키로 다시 예약하면 아직 안 나간 예약을 바꾸고, 이미 나간 키는 그대로 둔다(같은 계기가 여러 번 일어나도 한 통).

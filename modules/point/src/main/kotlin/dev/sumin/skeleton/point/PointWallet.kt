@@ -26,6 +26,28 @@ interface PointWallet {
      */
     fun cancelSpend(accountId: String, spendSourceType: String, spendSourceRef: String, amount: Long?, sourceType: String, sourceRef: String): PointEntry
 
+    /**
+     * 잡아 두기(reserve) - [amount] 를 먼저 잡아 쓸 수 없게 하고 일을 한 뒤 [capture] 로 확정하거나 [release] 로 푼다(카드 승인 → 매입과 같다). 만들고 나서 차감하면 차감이 실패해도 결과가 이미 나간다.
+     * 쓸 수 있는 잔액 = 잔액 − 잡힌 합이고 모자라면 [PointInsufficientException]. `(sourceType, sourceRef)` 로 멱등이다(같은 요청이면 같은 건, 다르면 [PointSourceConflictException]).
+     * 잡은 채 버려진 건은 `skeleton.point.reservations.hold-timeout` 뒤에 저절로 풀린다 - 일이 그보다 오래 걸리면 안 된다(늦게 확정하면 [PointReservationNotHeldException]).
+     * `skeleton.point.reservations.enabled` 가 꺼져 있으면 [IllegalStateException].
+     */
+    fun reserve(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointReservation
+
+    /**
+     * 확정 - 같은 키의 `SPEND` 줄을 만든다. [amount](1 이상, 잡은 양 이하)를 주면 그만큼만 빼고 나머지는 풀린다. 멱등이다: 이미 확정됐으면 같은 줄을 돌려준다.
+     * 없으면 [PointReservationNotFoundException], 풀렸으면(만료 포함) [PointReservationNotHeldException] - 이때는 결과를 내보내지 않는다. 잡은 양을 넘으면 [PointReservationExceededException].
+     */
+    fun capture(sourceType: String, sourceRef: String, amount: Long? = null): PointEntry
+
+    /** 풀기 - 잡은 포인트가 돌아온다. 멱등이다(이미 풀렸거나 만료됐으면 그대로). 이미 확정된 건은 풀 수 없다 - [PointReservationNotHeldException] */
+    fun release(sourceType: String, sourceRef: String): PointReservation
+
+    /** 기한이 지난 잡힌 건을 푼다. 푼 건 수 */
+    fun expireReservations(now: Instant): Int
+
+    fun reservationOf(sourceType: String, sourceRef: String): PointReservation?
+
     /** 운영자 조정 — 양수는 적립(유효기간 선택), 음수는 차감(잔액보다 크면 [PointInsufficientException]). [reason] 은 필수 */
     fun adjust(accountId: String, delta: Long, reason: String, expiresAt: Instant?, operatorId: String): PointEntry
 
@@ -41,6 +63,8 @@ class StorePointWallet(
     private val store: PointStore,
     private val time: TimeProvider,
     private val ids: SortableIds = SortableIds.system,
+    /** 잡아 두기를 켰을 때만 - 비어 있으면 [reserve] 는 거절한다. 설정 `skeleton.point.reservations` */
+    private val holdTimeout: Duration? = null,
 ) : PointWallet {
     override fun balance(accountId: String): PointBalance {
         val now = time.now()
@@ -63,6 +87,24 @@ class StorePointWallet(
         if (amount != null) requireAmount(amount)
         return store.cancelSpend(accountId, spendSourceType, spendSourceRef, amount, sourceType, sourceRef, time.now())
     }
+
+    override fun reserve(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointReservation {
+        val hold = checkNotNull(holdTimeout) { "point reservations are off: set skeleton.point.reservations.enabled=true" }
+        requireAmount(amount)
+        val now = time.now()
+        return store.reserve(accountId, amount, sourceType, sourceRef, now.plus(hold), now)
+    }
+
+    override fun capture(sourceType: String, sourceRef: String, amount: Long?): PointEntry {
+        if (amount != null) requireAmount(amount)
+        return store.capture(sourceType, sourceRef, amount, time.now())
+    }
+
+    override fun release(sourceType: String, sourceRef: String): PointReservation = store.release(sourceType, sourceRef, time.now())
+
+    override fun expireReservations(now: Instant): Int = store.expireReservations(now)
+
+    override fun reservationOf(sourceType: String, sourceRef: String): PointReservation? = store.findReservation(sourceType, sourceRef)
 
     override fun adjust(accountId: String, delta: Long, reason: String, expiresAt: Instant?, operatorId: String): PointEntry {
         require(delta != 0L) { "delta must not be zero" }

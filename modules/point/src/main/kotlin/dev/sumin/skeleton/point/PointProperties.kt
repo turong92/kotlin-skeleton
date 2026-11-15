@@ -8,7 +8,19 @@ data class PointProperties(
     val admin: Admin = Admin(),
     val http: Http = Http(),
     val operations: Operations = Operations(),
+    val reservations: Reservations = Reservations(),
 ) {
+    /** 잡아 두기(`PointWallet.reserve`) - 기본 꺼짐. 켜면 잡은 채 버려진 건을 풀 주기 작업이 돌 길(`scheduler` 모듈이거나 요청 구동 모드)이 있어야 한다 */
+    data class Reservations(
+        val enabled: Boolean = false,
+        /** 잡은 뒤 이 시간이 지나도 확정 · 풀기가 없으면 저절로 풀린다. 일(생성 작업)이 걸리는 가장 긴 시간보다 길어야 한다 - 풀린 뒤의 확정은 거절된다 */
+        val holdTimeout: java.time.Duration = java.time.Duration.ofMinutes(30),
+    ) {
+        init {
+            require(!holdTimeout.isNegative && !holdTimeout.isZero) { "skeleton.point.reservations.hold-timeout must be positive" }
+        }
+    }
+
     /** 작업 기록(`PointOperations`)의 불명 건 조회 - 설정 이름은 payment 의 `reconcile` 과 같다. `job-queue-jdbc` 가 있을 때만 일한다 */
     data class Operations(val reconcile: Reconcile = Reconcile()) {
         data class Reconcile(
