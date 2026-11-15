@@ -20,8 +20,7 @@ data class MailMessage(
     }
 }
 
-/** [heldUntil] 이 있으면 안 보낸 게 아니라 **미룬 것**이다(야간 광고) - 보내는 쪽이 그 시각 이후에 다시 보낸다. 메일 보내기는 큐가 없어 미루기를 대신하지 못한다 */
-data class MailSendResult(val accepted: Boolean, val detail: String? = null, val heldUntil: java.time.Instant? = null)
+data class MailSendResult(val accepted: Boolean, val detail: String? = null)
 
 /** 앱이 쓰는 인터페이스. 기본 구현은 SMTP([SmtpMailSender]); 테스트에서는 이걸 가짜로 바꾼다. */
 fun interface MailSender {

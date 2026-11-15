@@ -1,11 +1,15 @@
 package dev.sumin.skeleton.notification.legal
 
 import dev.sumin.skeleton.common.project.ProjectRegistry
+import dev.sumin.skeleton.common.wake.OnRequestTask
+import dev.sumin.skeleton.common.wake.PeriodicRunCheck
+import dev.sumin.skeleton.common.wake.SimpleOnRequestTask
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.legal.ConsentService
 import dev.sumin.skeleton.legal.ConsentStore
 import dev.sumin.skeleton.legal.LegalAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
+import dev.sumin.skeleton.notification.NotificationChannelDeclaration
 import dev.sumin.skeleton.notification.NotificationPublisher
 import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
 import dev.sumin.skeleton.notification.advertising.AdvertisingGate
@@ -13,6 +17,7 @@ import dev.sumin.skeleton.notification.advertising.AdvertisingNoticeStore
 import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import java.time.Instant
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ListableBeanFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.beans.factory.annotation.Qualifier
@@ -26,6 +31,7 @@ import org.springframework.boot.context.properties.bind.Binder
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.ConditionContext
 import org.springframework.context.annotation.Conditional
+import org.springframework.core.env.Environment
 import org.springframework.core.type.AnnotatedTypeMetadata
 import org.springframework.scheduling.TaskScheduler
 
@@ -73,12 +79,36 @@ class NotificationLegalAutoConfiguration {
         gate: AdvertisingGate,
         properties: AdvertisingProperties,
         time: ObjectProvider<TimeProvider>,
-    ): AdvertisingReconfirmScanner =
-        AdvertisingReconfirmScanner(
+        environment: Environment,
+    ): AdvertisingReconfirmScanner {
+        // 스캔을 돌릴 길이 없으면(scheduler 도 요청 구동 모드도 없다) 2년 재확인 안내가 한 통도 안 나가는데 아무 소리도 없다
+        PeriodicRunCheck.require("skeleton.notification.advertising.types (the reconfirm notices)", environment)
+        return AdvertisingReconfirmScanner(
             store,
             notices.getIfAvailable { error("skeleton.notification.advertising.types needs an AdvertisingNoticeStore bean (the reconfirm notices are sent once per consent cycle) - add notification-jdbc, or define the bean") },
             publisher, gate, properties, time.getIfAvailable { TimeProvider.systemUtc() },
         )
+    }
+
+    /** 요청 구동 모드(인스턴스 0대 배포)의 깨우기가 부른다 - 안내 표시가 멱등이라 타이머와 겹쳐 돌아도 한 번만 나간다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["advertisingReconfirmTask"])
+    fun advertisingReconfirmTask(scanner: AdvertisingReconfirmScanner): OnRequestTask = SimpleOnRequestTask("advertising-reconfirm") { scanner.run() }
+
+    /**
+     * 법정 통지는 전송매체가 있어야 닿는다 - 받은편지함 · SSE 는 앱 안 기록이다. 푸시 채널도 메일 통지(`notification-mail` + `ContactAddresses`)도 없으면 경고한다
+     * (앱이 SMS 같은 자기 채널로 `advertising.consent.*` 를 집어 갈 수도 있어 막지는 않는다).
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = ["advertisingNoticeMediumCheck"])
+    fun advertisingNoticeMediumCheck(context: ListableBeanFactory, channels: ObjectProvider<NotificationChannelDeclaration>): SmartInitializingSingleton = SmartInitializingSingleton {
+        val push = channels.orderedStream().anyMatch { it.key == "push" }
+        if (!push && !context.containsBean("advertisingNoticeMailer")) {
+            LoggerFactory.getLogger(AdvertisingConsentNotifier::class.java).warn(
+                "advertising consent notices (advertising.consent.*) have no delivery medium: push is off and the mail notice is not wired (needs notification-mail + a ContactAddresses bean from account). They only reach the inbox, which is not a transmission - deliver them by your own channel",
+            )
+        }
+    }
 
     /**
      * `reconfirm-scan-interval` 마다 재확인 안내를 스캔한다. `scheduler` 모듈의 `skeletonTaskScheduler` 가 없으면 경고만 남기고 돌지 않는다(앱이 [AdvertisingReconfirmScanner.run] 을 직접 부를 수 있다).

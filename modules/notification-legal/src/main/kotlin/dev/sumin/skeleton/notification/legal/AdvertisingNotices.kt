@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory
 
 private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 private val DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-private const val TOPIC = "advertising"
+internal const val ADVERTISING_NOTICE_TOPIC = "advertising"
 
 private fun scopeLabel(night: Boolean, advertising: AdvertisingProperties) =
     if (night) "야간(${advertising.nightStart}~${advertising.nightEnd}) 광고성 정보 수신" else "광고성 정보 수신"
@@ -55,7 +55,7 @@ class AdvertisingConsentNotifier(
         val at = STAMP.format(event.at.atZone(zoneOf(gate, account)))
         publisher.publish(
             NotificationEvent(
-                topic = TOPIC, type = AdvertisingNotificationTypes.CONSENT_CHANGED, recipientIds = setOf(account),
+                topic = ADVERTISING_NOTICE_TOPIC, type = AdvertisingNotificationTypes.CONSENT_CHANGED, recipientIds = setOf(account),
                 title = "광고성 정보 수신 동의 처리 결과",
                 message = "[${advertising.senderName}] ${scopeLabel(night, advertising)} $action 이(가) $at 에 처리되었습니다. 철회는 설정 > 알림에서 언제든 할 수 있습니다.",
                 payload = mapOf(
@@ -112,7 +112,7 @@ class AdvertisingReconfirmScanner(
             val verb = if (expires.isAfter(now)) "만료됩니다" else "만료되었습니다"
             publisher.publish(
                 NotificationEvent(
-                    topic = TOPIC, type = AdvertisingNotificationTypes.CONSENT_RECONFIRM, id = reminderId(account, event.type, event.at), recipientIds = setOf(account),
+                    topic = ADVERTISING_NOTICE_TOPIC, type = AdvertisingNotificationTypes.CONSENT_RECONFIRM, id = reminderId(account, event.type, event.at), recipientIds = setOf(account),
                     title = "광고성 정보 수신 동의 확인 안내",
                     message = "[${advertising.senderName}] ${scopeLabel(night, advertising)} 동의(${DAY.format(event.at.atZone(zone))} 동의)가 ${DAY.format(expires.atZone(zone))} 에 $verb. " +
                         "계속 받으시려면 설정에서 확인해 주세요. 철회는 설정 > 알림에서 언제든 할 수 있습니다.",

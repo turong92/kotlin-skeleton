@@ -7,6 +7,7 @@ import dev.sumin.skeleton.json.JsonAutoConfiguration
 import dev.sumin.skeleton.json.JsonCodec
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationDeliveryHooks
+import dev.sumin.skeleton.notification.advertising.AdvertisingNoticeStore
 import dev.sumin.skeleton.notification.push.PushAdvertisingNoticeStore
 import dev.sumin.skeleton.notification.push.PushOpenStore
 import dev.sumin.skeleton.notification.push.PushDeliveryWorker
@@ -52,7 +53,7 @@ class PushJdbcAutoConfiguration {
         JdbcPushTypeMuteStore(NamedParameterJdbcTemplate(dataSource), dialect)
 
     @Bean
-    @ConditionalOnMissingBean(PushAdvertisingNoticeStore::class)
+    @ConditionalOnMissingBean(AdvertisingNoticeStore::class)
     fun jdbcPushAdvertisingNoticeStore(dataSource: DataSource, dialect: SqlDialect): PushAdvertisingNoticeStore =
         JdbcPushAdvertisingNoticeStore(NamedParameterJdbcTemplate(dataSource), dialect)
 

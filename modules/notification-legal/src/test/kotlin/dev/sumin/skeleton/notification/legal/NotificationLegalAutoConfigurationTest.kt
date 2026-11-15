@@ -22,7 +22,7 @@ class NotificationLegalAutoConfigurationTest {
         .withBean(ConsentStore::class.java, { MemoryConsentStore() })
         .withBean(LegalLedger::class.java, { MemoryLedger() })
         .withBean(AdvertisingNoticeStore::class.java, { MemoryNoticeStore() })
-        .withPropertyValues("skeleton.legal.acknowledge-template=true")
+        .withPropertyValues("skeleton.legal.acknowledge-template=true", "skeleton.job-queue.mode=on-request")
 
     @Test
     fun `without advertising types there is no policy bean, with them the gate decides from the legal consent records`() {

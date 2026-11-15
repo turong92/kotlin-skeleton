@@ -134,8 +134,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `notification-broadcast-jdbc` | 공지 · 채널별 전달 숫자를 DB 에 저장하고 단계 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules notification-broadcast-jdbc` | 공지 저장, 공지 작업 큐 / broadcast store, broadcast job queue | `@skeleton/notifications` |
 | `notification-fcm` | 모바일 푸시(FCM HTTP v1) 전달 수단 — 안드로이드 · iOS 기기 토큰으로 푸시를 보낸다. 서비스 계정 -> 접근 토큰(JDK) · 판정 표 · 자격 기동 검사. notification-push 의 PushSender 로 끼운다. | `--modules notification-fcm` | 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push | — |
 | `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). 광고 동의 재확인 안내의 표시(advertising_notices)도 저장한다. | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
-| `notification-legal` | 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현하고, 동의 변경 통지 · 2년 재확인 안내를 알림 이벤트로 낸다. 채널(푸시 · 메일)과 무관하다 — 푸시 없이도 선다. | `--modules notification-legal` | 광고 동의 정책, 마케팅 수신 동의 확인, 야간 광고 동의 / advertising consent policy, marketing consent check, night-time advertising consent | — |
-| `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). notification 이 있고 광고 종류(skeleton.notification.advertising.types)를 정하면 광고 종류로 표시된 메일을 광고 게이트(동의 · 야간 보류 · (광고) · 수신 거부 문구)에 태운다. | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
+| `notification-legal` | 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현하고, 동의 변경 통지 · 2년 재확인 안내를 알림 이벤트로 내고 메일로도 보낸다. 채널(푸시 · 메일)과 무관하다 — 푸시 없이도 선다. | `--modules notification-legal` | 광고 동의 정책, 마케팅 수신 동의 확인, 야간 광고 동의 / advertising consent policy, marketing consent check, night-time advertising consent | — |
+| `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). notification 이 있고 광고 종류(skeleton.notification.advertising.types)를 정하면 광고 종류로 표시된 메일을 광고 게이트(동의 · (광고) · 전송자 · 수신 거부 문구 - 전자우편은 야간 규칙 밖)에 태운다. | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
 | `notification-push` | 알림이 받는 사람의 기기로도 간다 — 기기 등록 · 종류 × 채널 푸시 끄기 · 잠금 화면 옵션 · 세션 연동. 저장은 notification-push-jdbc, 전달은 notification-webpush · notification-fcm. | `--modules notification-push,notification-push-jdbc` | 푸시 알림, 웹 푸시 기기 등록, 푸시 끄기, 종류별 푸시, 잠금 화면 내용 / push notification, device registration, per-type push mute, lock screen content | `@skeleton/push` |
 | `notification-push-jdbc` | 푸시 기기 · 「푸시만 끄기」를 DB 에 저장하고 발송 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules notification-push-jdbc` | 푸시 기기 저장, 푸시 작업 큐 / push device store, push job queue | — |
 | `notification-push-legal` | 광고성 푸시의 동의 상태 읽기 어댑터(GET /api/v1/push/advertising). 판정은 notification 의 광고 게이트, 동의 정책 · 동의 변경 통지 · 2년 재확인 안내는 notification-legal(푸시 없이도 돈다). | `--modules notification-push-legal` | 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark | `@skeleton/push` |
@@ -1173,7 +1173,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - DataSource · db-* 모듈과 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database
 
-### `notification-legal` — 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현하고, 동의 변경 통지 · 2년 재확인 안내를 알림 이벤트로 낸다. 채널(푸시 · 메일)과 무관하다 — 푸시 없이도 선다.
+### `notification-legal` — 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현하고, 동의 변경 통지 · 2년 재확인 안내를 알림 이벤트로 내고 메일로도 보낸다. 채널(푸시 · 메일)과 무관하다 — 푸시 없이도 선다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/notification-legal`
 - 켜는 법: `--modules notification-legal`
@@ -1187,7 +1187,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다
 - 키워드: 광고 동의 정책, 마케팅 수신 동의 확인, 야간 광고 동의 / advertising consent policy, marketing consent check, night-time advertising consent
 
-### `notification-mail` — SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). notification 이 있고 광고 종류(skeleton.notification.advertising.types)를 정하면 광고 종류로 표시된 메일을 광고 게이트(동의 · 야간 보류 · (광고) · 수신 거부 문구)에 태운다.
+### `notification-mail` — SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). notification 이 있고 광고 종류(skeleton.notification.advertising.types)를 정하면 광고 종류로 표시된 메일을 광고 게이트(동의 · (광고) · 전송자 · 수신 거부 문구 - 전자우편은 야간 규칙 밖)에 태운다.
 
 - 종류 · 상태: module · stable — 위치 `modules/notification-mail`
 - 켜는 법: 스타터(apps/api)에 기본 포함

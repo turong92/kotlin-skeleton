@@ -20,11 +20,11 @@ class AdvertisingMailAutoConfiguration {
     companion object {
         @JvmStatic
         @Bean
-        fun advertisingMailSenderPostProcessor(environment: Environment, gate: ObjectProvider<AdvertisingGate>): BeanPostProcessor {
+        fun advertisingMailSenderPostProcessor(environment: Environment, gate: ObjectProvider<AdvertisingGate>, properties: ObjectProvider<AdvertisingProperties>): BeanPostProcessor {
             val configured = Binder.get(environment).bind("skeleton.notification.advertising.types", Bindable.listOf(String::class.java)).orElse(emptyList()).orEmpty().any { it.isNotBlank() }
             return object : BeanPostProcessor {
                 override fun postProcessAfterInitialization(bean: Any, beanName: String): Any =
-                    if (configured && bean is MailSender && bean !is AdvertisingMailSender) AdvertisingMailSender(bean) { gate.getObject() } else bean
+                    if (configured && bean is MailSender && bean !is AdvertisingMailSender) AdvertisingMailSender(bean, { gate.getObject() }, { properties.getObject() }) else bean
             }
         }
     }

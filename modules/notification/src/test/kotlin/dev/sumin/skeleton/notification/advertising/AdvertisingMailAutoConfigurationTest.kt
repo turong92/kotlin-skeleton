@@ -21,6 +21,7 @@ class AdvertisingMailAutoConfigurationTest {
         .withConfiguration(AutoConfigurations.of(AdvertisingMailAutoConfiguration::class.java))
         .withBean(MailSender::class.java, { MailSender { delivered += it; MailSendResult(accepted = true) } })
         .withBean(AdvertisingGate::class.java, { gate })
+        .withBean(AdvertisingProperties::class.java, { properties })
 
     private val message = MailMessage(to = listOf("a@example.com"), subject = "s", text = "t", notificationType = "promo.tips", accountId = "acc_a")
 

@@ -2,6 +2,8 @@ package dev.sumin.skeleton.notification.legal
 
 import dev.sumin.skeleton.common.consent.ConsentClaim
 import dev.sumin.skeleton.common.consent.ConsentContext
+import dev.sumin.skeleton.common.contact.ContactAddresses
+import dev.sumin.skeleton.common.wake.OnRequestTask
 import dev.sumin.skeleton.legal.ConsentService
 import dev.sumin.skeleton.legal.ConsentStore
 import dev.sumin.skeleton.legal.LegalAutoConfiguration
@@ -15,6 +17,9 @@ import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
 import dev.sumin.skeleton.notification.advertising.AdvertisingNoticeStore
 import dev.sumin.skeleton.notification.advertising.AdvertisingNotificationTypes
+import dev.sumin.skeleton.notification.mail.MailMessage
+import dev.sumin.skeleton.notification.mail.MailSendResult
+import dev.sumin.skeleton.notification.mail.MailSender
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
@@ -32,7 +37,7 @@ class NotificationLegalNoticesAutoConfigurationTest {
         .withBean(ConsentStore::class.java, { MemoryConsentStore() })
         .withBean(LegalLedger::class.java, { MemoryLedger() })
         .withBean(AdvertisingNoticeStore::class.java, { MemoryNoticeStore() })
-        .withPropertyValues("skeleton.legal.acknowledge-template=true")
+        .withPropertyValues("skeleton.legal.acknowledge-template=true", "skeleton.job-queue.mode=on-request")
 
     private val ads = arrayOf(
         "skeleton.notification.advertising.types=promo.tips",
@@ -59,6 +64,7 @@ class NotificationLegalNoticesAutoConfigurationTest {
         base.withPropertyValues(*ads).run { context ->
             assertNull(context.startupFailure, failureOf(context))
             assertTrue(context.getBean(AdvertisingConsentPolicy::class.java) is LegalAdvertisingConsentPolicy)
+            assertEquals(1, context.getBeansOfType(OnRequestTask::class.java).values.count { it.name == "advertising-reconfirm" })
             assertEquals(1, context.getBeansOfType(AdvertisingReconfirmScanner::class.java).size)
             assertEquals(1, context.getBeansOfType(AdvertisingConsentNotifier::class.java).size)
         }
@@ -92,7 +98,33 @@ class NotificationLegalNoticesAutoConfigurationTest {
             .withConfiguration(AutoConfigurations.of(NotificationAutoConfiguration::class.java, LegalAutoConfiguration::class.java, NotificationLegalAutoConfiguration::class.java))
             .withBean(ConsentStore::class.java, { MemoryConsentStore() })
             .withBean(LegalLedger::class.java, { MemoryLedger() })
-            .withPropertyValues("skeleton.legal.acknowledge-template=true", *ads)
+            .withPropertyValues("skeleton.legal.acknowledge-template=true", "skeleton.job-queue.mode=on-request", *ads)
             .run { context -> assertTrue("AdvertisingNoticeStore" in failureOf(context), failureOf(context)) }
+    }
+
+    @Test
+    fun `without a scheduler or the request-driven mode the reconfirm scan has no way to run and startup fails`() {
+        base.withPropertyValues(*ads, "skeleton.job-queue.mode=local").run { context -> assertTrue("scheduler" in failureOf(context), failureOf(context)) }
+    }
+
+    @Test
+    fun `without push the consent notice is mailed to the contact address of the person`() {
+        val mails = CopyOnWriteArrayList<MailMessage>()
+        base.withPropertyValues(*ads)
+            .withBean(MailSender::class.java, { MailSender { mails += it; MailSendResult(accepted = true) } })
+            .withBean(ContactAddresses::class.java, { ContactAddresses { id -> if (id == "acc_a") "a@example.com" else null } })
+            .withConfiguration(AutoConfigurations.of(NotificationLegalMailAutoConfiguration::class.java))
+            .run { context ->
+                assertNull(context.startupFailure, failureOf(context))
+                val version = context.getBean(LegalCatalog::class.java).current("marketing", Instant.now())!!.version
+                val service = context.getBean(ConsentService::class.java)
+
+                service.record(Subject.account("acc_a"), listOf(ConsentClaim("marketing", version, "ko")), ConsentContext("203.0.113.9", "ua"), "settings")
+                service.record(Subject.account("acc_nomail"), listOf(ConsentClaim("marketing", version, "ko")), ConsentContext("203.0.113.9", "ua"), "settings")
+
+                assertEquals(listOf("a@example.com"), mails.flatMap { it.to })
+                assertEquals("광고성 정보 수신 동의 처리 결과", mails.single().subject)
+                assertTrue("Example Co." in mails.single().text)
+            }
     }
 }

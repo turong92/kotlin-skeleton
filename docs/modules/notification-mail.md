@@ -3,7 +3,7 @@
 SMTP 로 메일을 보내는 `MailSender` 를 준다 (`spring.mail.*` 위에).
 `enabled=true` · `spring.mail.host` · 발신자(`from`)를 정하기 전에는 꺼져 있다.
 
-**광고 종류의 메일**(선택 연동 — `notification` 모듈이 같이 있을 때, 연동 코드는 notification 모듈 쪽 `AdvertisingMailSender` 에 있다): `skeleton.notification.advertising.types` 를 정하면 앱에 있는 모든 `MailSender` 빈(바꿔 낀 것도)이 감싸져, `MailMessage.notificationType` 이 광고 종류인 메일은 푸시와 같은 게이트를 지난다 — 동의가 없으면 보내지 않고(`accepted=false`), 야간이고 야간 동의가 없으면 보내지 않고 `heldUntil`(다음 08시)을 돌려준다(메일 보내기에는 큐가 없다 — 그 시각 이후 다시 보내는 것은 부르는 쪽 몫). 보내는 것은 제목에 `(광고)` · 본문(text · html) 끝에 `body-suffix`(수신 거부 방법)가 붙는다. 동의는 계정마다 보므로 광고 메일은 `accountId` 가 필수이고 받는 사람은 한 명이어야 한다(아니면 거절). `notificationType` 이 없는 메일은 정보성이라 그대로 나간다 — 광고인지 표시하는 것은 보내는 코드의 몫이다. 광고 종류가 없으면 아무것도 바뀌지 않는다. 규칙은 notification-legal 모듈 문서에 있다.
+**광고 종류의 메일**(선택 연동 — `notification` 모듈이 같이 있을 때, 연동 코드는 notification 모듈 쪽 `AdvertisingMailSender` 에 있다): `skeleton.notification.advertising.types` 를 정하면 앱에 있는 모든 `MailSender` 빈(바꿔 낀 것도)이 감싸져, `MailMessage.notificationType` 이 광고 종류인 메일은 푸시와 같은 게이트를 지난다 — 동의가 없으면 보내지 않고(`accepted=false`), 야간에도 광고 동의만 있으면 보낸다(전자우편은 야간 규칙 밖 - 정보통신망법 시행령 제61조 제2항). 보내는 것은 제목에 `(광고)` · 본문(text · html) 끝에 전송자 명칭(`sender-name`) · `body-suffix`(수신 거부 방법)가 붙는다(전송자 연락처는 앱이 본문에 싣는다). 동의는 계정마다 보므로 광고 메일은 `accountId` 가 필수이고 받는 사람은 한 명이어야 한다(아니면 거절). `notificationType` 이 없는 메일은 정보성이라 그대로 나간다 — 광고인지 표시하는 것은 보내는 코드의 몫이다. 광고 메일은 `notificationType` · `accountId` 가 필수이고, `JavaMailSender` 를 직접 쓰면 이 게이트를 지나지 않는다 - `MailSender` 로 보낸다. 감싼 빈은 `MailSender` 로만 주입된다(`SmtpMailSender` 같은 구체 타입으로는 못 받는다). 광고 종류가 없으면 아무것도 바뀌지 않는다. 규칙은 notification-legal 모듈 문서에 있다.
 
 | 항목 | 내용 |
 |---|---|
