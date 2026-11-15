@@ -4,13 +4,13 @@ import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.deploy.DeployEnv
 import dev.sumin.skeleton.jobqueue.jdbc.JobLanes
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueWorker
-import dev.sumin.skeleton.scheduler.SkeletonScheduledTaskRegistrar
+import dev.sumin.skeleton.routing.fake.FakeFlyway
+import dev.sumin.skeleton.routing.fake.FakeScheduler
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.flywaydb.core.Flyway
 import org.springframework.beans.factory.support.DefaultListableBeanFactory
 import org.springframework.beans.factory.support.RootBeanDefinition
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry
@@ -47,7 +47,7 @@ class RequestRoutingDeployGuardTest {
             )
         }
 
-        fun guard() = RequestRoutingDeployGuard(properties, RouteTargets(properties), beans, env)
+        fun guard() = RequestRoutingDeployGuard(properties, RouteTargets(properties), beans, env, FakeScheduler::class.java.name, FakeFlyway::class.java.name)
         fun problems(context: DeployContext = DeployContext(null, emptySet())) = guard().problems(context)
         fun warnings(context: DeployContext = DeployContext(null, emptySet())) = guard().warnings(context)
     }
@@ -71,7 +71,7 @@ class RequestRoutingDeployGuardTest {
 
     @Test
     fun `candidateWithLocalSchedulerFails`() {
-        val f = candidate().also { it.bean(SkeletonScheduledTaskRegistrar::class.java) }
+        val f = candidate().also { it.bean(FakeScheduler::class.java) }
         f.assertOneProblemMentioning("skeleton.scheduler.mode")
         f.env.setProperty("skeleton.scheduler.mode", "external")
         assertEquals(emptyList(), f.problems())
@@ -112,16 +112,16 @@ class RequestRoutingDeployGuardTest {
 
     @Test
     fun `candidateWithFlywayFails`() {
-        candidate().also { it.bean(Flyway::class.java) }.assertOneProblemMentioning("spring.flyway.enabled")
+        candidate().also { it.bean(FakeFlyway::class.java) }.assertOneProblemMentioning("spring.flyway.enabled")
     }
 
     @Test
     fun `baselineIgnoresInstanceRules`() {
         val f = candidate(service = "", instance = "").also {
-            it.bean(SkeletonScheduledTaskRegistrar::class.java)
+            it.bean(FakeScheduler::class.java)
             it.bean(JobQueueWorker::class.java)
             it.bean(KafkaListenerEndpointRegistry::class.java)
-            it.bean(Flyway::class.java)
+            it.bean(FakeFlyway::class.java)
         }
         assertEquals(emptyList(), f.problems())
     }
@@ -175,7 +175,7 @@ class RequestRoutingDeployGuardTest {
                 local = RequestRoutingProperties.Local(maxWindow = Duration.ofMinutes(777)),
                 services = mapOf("orders" to RequestRoutingProperties.Service(mapOf("alice" to RequestRoutingProperties.Target(secretUrl, local = true)))),
             ),
-        ).also { it.bean(JobQueueWorker::class.java); it.bean(Flyway::class.java) }
+        ).also { it.bean(JobQueueWorker::class.java); it.bean(FakeFlyway::class.java) }
         val all = f.problems(DeployContext(DeployEnv.PROD, emptySet())) + f.warnings(DeployContext(DeployEnv.PROD, emptySet()))
         assertTrue(all.isNotEmpty())
         all.forEach { message ->

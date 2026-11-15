@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.routing.async
 
 import dev.sumin.skeleton.routing.RequestRoutingProperties
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -8,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.kafka.config.ContainerCustomizer
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry
 import org.springframework.kafka.listener.ConcurrentMessageListenerContainer
 
 /**
@@ -24,4 +26,9 @@ class RequestRoutingKafkaAutoConfiguration {
     fun routeKafkaContainerCustomizer(
         properties: RequestRoutingProperties,
     ): ContainerCustomizer<Any, Any, ConcurrentMessageListenerContainer<Any, Any>> = RouteKafkaContainerCustomizer(properties)
+
+    /** 컨테이너에 정말 달렸는지는 시작 직전에 본다 — 앱 팩토리를 두면 위 꾸미개 빈이 있어도 달리지 않는다 */
+    @Bean
+    fun routeKafkaListenerCheck(properties: RequestRoutingProperties, registry: ObjectProvider<KafkaListenerEndpointRegistry>): RouteKafkaListenerCheck =
+        RouteKafkaListenerCheck(properties) { registry.getIfAvailable()?.listenerContainers ?: emptyList() }
 }

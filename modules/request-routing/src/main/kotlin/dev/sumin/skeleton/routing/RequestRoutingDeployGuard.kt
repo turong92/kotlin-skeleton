@@ -18,6 +18,9 @@ class RequestRoutingDeployGuard(
     private val targets: RouteTargets,
     private val beans: ListableBeanFactory,
     private val environment: Environment,
+    // 다른 모듈의 클래스 이름 — 시험은 자기 패키지의 자리표시 클래스를 넘겨, 진짜 클래스를 가리는 가짜를 시험 클래스패스에 두지 않는다
+    private val schedulerClass: String = SCHEDULER,
+    private val flywayClass: String = FLYWAY,
 ) : DeployGuard {
     override val name: String = "request-routing"
 
@@ -44,7 +47,7 @@ class RequestRoutingDeployGuard(
         if (properties.service.isBlank()) {
             add("skeleton.routing.instance is set, but skeleton.routing.service is empty: job lanes, message filtering and the proxy are all decided by the service name.")
         }
-        if (has(SCHEDULER) && !environment.getProperty("skeleton.scheduler.mode").equals("external", ignoreCase = true)) {
+        if (has(schedulerClass) && !environment.getProperty("skeleton.scheduler.mode").equals("external", ignoreCase = true)) {
             add("skeleton.routing.instance is set, but skeleton.scheduler.mode is not 'external': an external scheduler only calls the original address, so nothing would run here.")
         }
         if (has(JOB_QUEUE_WORKER) && !onRequestQueue() && !workerLaneIsSet()) {
@@ -55,7 +58,7 @@ class RequestRoutingDeployGuard(
         ) {
             add("skeleton.routing.instance is set, but the routing Kafka customizer is not installed, so Kafka listeners would share the original consumer group: install it or set spring.kafka.listener.auto-startup=false.")
         }
-        if (has(FLYWAY)) {
+        if (has(flywayClass)) {
             add("skeleton.routing.instance is set, but Flyway would run this branch's migrations against the shared database: set spring.flyway.enabled=false.")
         }
     }

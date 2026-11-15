@@ -98,6 +98,15 @@ class RouteProxyHeadersTest {
     }
 
     @Test
+    fun setCookieIsAppendedNeverReplaced() {
+        val response = MockHttpServletResponse().apply { addHeader("Set-Cookie", "entrance=1") }
+
+        forward(FakeClient(mapOf("set-cookie" to listOf("a=1", "b=2"))), MockHttpServletRequest("GET", "/a"), response)
+
+        assertEquals(listOf("entrance=1", "a=1", "b=2"), response.getHeaders("Set-Cookie"))
+    }
+
+    @Test
     fun targetHeaderReplacesOneTheEntranceAlreadySet() {
         val response = MockHttpServletResponse().apply { setHeader("Access-Control-Allow-Origin", "https://entrance.example") }
 

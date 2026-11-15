@@ -38,7 +38,7 @@ class RouteProxy(private val client: HttpClient, private val timeout: Duration) 
             response.status = upstream.statusCode()
             val dropped = hopByHop(upstream.headers().allValues("connection"))
             upstream.headers().map().forEach { (name, values) ->
-                if (!skip(name, dropped)) values.forEachIndexed { i, value -> if (i == 0) response.setHeader(name, value) else response.addHeader(name, value) }
+                if (!skip(name, dropped)) values.forEachIndexed { i, value -> if (i == 0 && !name.equals("Set-Cookie", true)) response.setHeader(name, value) else response.addHeader(name, value) }
             }
             response.flushBuffer()
             copy(body, response)
