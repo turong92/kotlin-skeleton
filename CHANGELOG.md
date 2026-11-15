@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### migrations - 옛 버전을 깨는 새 마이그레이션을 CI 가 잡는다 (expand/contract) (2026-11-16)
+
+- 새 `scripts/migration-risk.pl`(+ `MigrationRiskTest`, CI 한 줄): 후보 리비전 · 롤링 · 롤백 동안 옛 버전이 같은 DB 를 쓰므로, `migrations.lock` 의 `baseline` 보다 새 마이그레이션이 컬럼 · 표 삭제, 이름 변경, 기본값 없는 `NOT NULL` 컬럼 추가, `SET NOT NULL`, 타입 변경, 제약(UNIQUE · CHECK · FK · PK) 추가, `TRUNCATE` 를 하면 실패한다(PostgreSQL · MySQL). 의도한 contract 단계는 파일 안 `-- allow-destructive: <이유>`(이유 필수). 같은 파일에서 만든 표 · 더한 NULL 허용 컬럼의 UNIQUE 는 통과. 찍은 프로젝트는 찍은 시점이 기준선이라 앱이 더하는 마이그레이션부터 검사한다(`test-new-project.sh` 가 확인). 절차: `docs/schema-management.md` 「Rolling deploys」. 기존 마이그레이션 · 잠금은 그대로다(검사를 통과한다).
+
 ### notification-broadcast - 앱 세그먼트로 보내기를 문서로 못박고, 대상을 비우면 전체 (2026-11-16)
 
 - 대상 고르기는 이미 `AudienceSource`(앱이 빈 하나로 등록 · 계정 id 오름차순 키셋 `page` · `count` · 보낼 때마다 다시 읽음)로 있다 - 앱 코드 쓰는 법 · 없는 `kind` · 제공자 예외 · 예약 때 재계산 · 광고 동의 / 야간이 대상에도 그대로임을 `docs/modules/notification-broadcast.md` 에 적고 시험으로 고정했다(`BroadcastAudienceStepTest`).

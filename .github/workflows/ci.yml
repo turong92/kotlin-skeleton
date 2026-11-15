@@ -25,6 +25,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg && ffmpeg -version | head -1
       - run: perl scripts/build-capabilities.pl --check   # 기능 카탈로그 생성물이 최신인가(빠른 실패) — 전체 가드는 ./gradlew build 의 Capabilities*Test
       - run: perl scripts/migrations-lock.pl --check            # 동결된 마이그레이션이 그대로인가(빠른 실패) — 같은 검사가 ./gradlew build 의 MigrationLockTest 에도 있다
+      - run: perl scripts/migration-risk.pl                     # 옛 버전을 깨는 새 마이그레이션(컬럼 삭제 · 이름 변경 · 기본값 없는 NOT NULL …)이 없는가 — 허용은 파일 안 `-- allow-destructive: <이유>`, MigrationRiskTest 에도 있다
       - run: ./gradlew build -x newProjectChecks -x mysqlTest
       # 위 build 에서 ffmpeg 시험이 건너뛰어졌다면(ffmpeg 설치가 깨졌다면) 조용히 초록이 되지 않게 한다
       - run: "! grep -l 'skipped=\"[1-9]' apps/video-worker/build/test-results/test/TEST-*FfmpegIntegrationTest.xml"

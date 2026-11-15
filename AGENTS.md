@@ -8,7 +8,7 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 
 - 전체 빌드: `./gradlew build` (Docker/Testcontainers 필요). 바뀐 모듈만: `./gradlew :modules:<module>:test`. 문서 · 카탈로그 시험은 `:modules:platform:test`.
 - 찍기(new-project) 시험: `bash scripts/test-new-project.sh --quick` (`--full` 은 조합별 빌드, 수 분).
-- 카탈로그 검사: `perl scripts/build-capabilities.pl --check`. 마이그레이션 잠금 검사: `perl scripts/migrations-lock.pl --check`.
+- 카탈로그 검사: `perl scripts/build-capabilities.pl --check`. 마이그레이션 잠금 검사: `perl scripts/migrations-lock.pl --check`. 옛 버전을 깨는 새 마이그레이션 검사(expand/contract, 허용은 파일 안 `-- allow-destructive: <이유>`): `perl scripts/migration-risk.pl` (`docs/schema-management.md` 「Rolling deploys」).
 
 ## 기능 카탈로그 — 만들기 전에 먼저 읽는다
 

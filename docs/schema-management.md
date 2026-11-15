@@ -84,6 +84,36 @@ representative rows for every module, migrates to the latest and asserts the row
 repositories read and write them. So every new migration runs over existing data — one that adds a `NOT NULL` column
 without a default fails there. The baseline does not move when files are added; move it only together with the test's rows.
 
+### Rolling deploys — expand / contract (`scripts/migration-risk.pl`)
+
+During a candidate revision, a rolling update or a rollback the **new and the old version use the same database for a while**,
+and Flyway has already run the new migration. A migration that breaks the old version's queries turns that window into errors.
+`perl scripts/migration-risk.pl` (CI, and `MigrationRiskTest` in `./gradlew build`) fails on such DDL in every migration file
+**newer than the lock's `baseline`** — in a stamped project that is whatever the app adds after stamping. PostgreSQL and MySQL both.
+
+| Rule | Caught | Why the old version breaks |
+|---|---|---|
+| `drop-table` · `drop-column` | `drop table`, `alter table … drop [column]` | it still reads and writes it |
+| `rename-table` · `rename-column` | `rename to`, `rename column`, MySQL `rename table` / `change a b …` | it uses the old name |
+| `add-not-null-column` | `add column … not null` without `default` (identity / serial / auto_increment excepted) | its `INSERT` does not know the column |
+| `set-not-null` | `alter column … set not null` | it can still write NULL |
+| `change-column-type` | `alter column … type`, MySQL `modify` / `change a a …` | it reads and writes the old type (narrowing truncates or fails) |
+| `add-constraint` | `add constraint` / `unique` / `check` / `foreign key` / `primary key`, `create unique index` | its writes may violate it. Exempt: a `unique` over a column added in the same file (nullable, no default) — only NULLs exist |
+| `truncate` | `truncate` | all rows, irreversibly |
+
+Tables created in the same file are not checked (the old version does not know them). Comments and string literals are ignored.
+
+The safe order is two releases:
+
+1. **Expand** — add what the new code needs, keeping everything the old code uses: a nullable (or defaulted) column, a new table,
+   a new index. Deploy the code that writes both and reads the new one (backfill old rows in a separate migration).
+2. **Contract** — once no old version can run any more (the previous release is out of the rollback window), drop / rename / constrain.
+   This is the migration the check stops, on purpose: put `-- allow-destructive: <why it is safe now>` anywhere in the file
+   (the reason is required; a bare marker does not pass). The marker covers the whole file — keep such files to one change.
+
+The check is syntactic: it does not know your old column types (so every type change is reported — allow it with a reason when it only
+widens) and it does not parse procedural blocks (`DO $$ … $$`) or SQL built at run time. It is a guard, not a proof.
+
 #### Local databases
 
 The `local` profile no longer wipes your database. `skeleton.migration.clean-on-validation-error` is `false` in every

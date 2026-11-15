@@ -205,6 +205,7 @@
 - script-dev: 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) [로컬 실행, 개발 서버]
 - script-dev-multi: 한 프로세스에 프로젝트 둘(a.localhost ·… [프로젝트 여럿 로컬 실행, 멀티 프로젝트 견본]
 - script-dev-sample: 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 →… [샘플 실행, 노트 앱 실행]
+- script-migration-risk: 기준선(migrations.lock) [위험한 마이그레이션, 롤링 배포 마이그레이션]
 - script-migrations-lock: 동결된 Flyway 마이그레이션의 잠금(migrations.lock:… [마이그레이션 잠금, 마이그레이션 동결]
 - script-native-build: GraalVM 25 공식 Docker 이미지 안에서 앱을 네이티브 실행… [네이티브 이미지, 네이티브 빌드]
 - script-native-smoke: 떠 있는 tools/native-check 서버에 가입 · 로그인 ·… [네이티브 시험, 핵심 흐름 시험]

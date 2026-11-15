@@ -4993,6 +4993,41 @@
       }
     },
     {
+      "id": "script-migration-risk",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/migration-risk.pl",
+      "status": "stable",
+      "summary": "기준선(migrations.lock) 이후의 새 마이그레이션이 옛 버전을 깨는지 검사한다(expand/contract: 컬럼·표 삭제, 이름 변경, 기본값 없는 NOT NULL 추가, 타입 변경, 제약 추가, TRUNCATE; PostgreSQL · MySQL) — 의도한 것은 파일 안 `-- allow-destructive: <이유>`.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/schema-management.md"],
+      "frontend": null,
+      "notFor": [
+        "이미 나간 마이그레이션을 고치는 도구가 아니다 — 잠금 검사는 migrations-lock.pl",
+        "SQL 을 문법으로 완전히 파싱하지 않는다(DO $$ 블록 · 실행 때 만든 SQL 은 못 본다) — 가드이지 증명이 아니다"
+      ],
+      "keywords": {
+        "ko": ["위험한 마이그레이션", "롤링 배포 마이그레이션", "컬럼 삭제 검사", "expand contract"],
+        "en": [
+          "risky migration",
+          "expand contract",
+          "backward compatible migration",
+          "squawk",
+          "allow-destructive"
+        ]
+      }
+    },
+    {
       "id": "script-migrations-lock",
       "kind": "script",
       "module": null,

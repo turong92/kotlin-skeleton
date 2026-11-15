@@ -207,6 +207,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `script-dev` | 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다. | (도구 — 켜는 조각 없음) | 로컬 실행, 개발 서버, 한 줄 실행, DB 띄우기 / run locally, dev server, local stack, start database | — |
 | `script-dev-multi` | 한 프로세스에 프로젝트 둘(a.localhost · b.localhost) 견본을 로컬에서 띄운다 — Docker Postgres 에 프로젝트 계정 · 스키마(scripts/project-account.sql, 멱등)를 만들고 multi 프로필로 apps/api 를 기동한다. | (도구 — 켜는 조각 없음) | 프로젝트 여럿 로컬 실행, 멀티 프로젝트 견본 / multi project local run, multi tenant sample | — |
 | `script-dev-sample` | 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 → 백엔드(apps/sample) → 짝 프런트(react-skeleton 의 apps/sample). | (도구 — 켜는 조각 없음) | 샘플 실행, 노트 앱 실행 / run sample, notes app | — |
+| `script-migration-risk` | 기준선(migrations.lock) 이후의 새 마이그레이션이 옛 버전을 깨는지 검사한다(expand/contract: 컬럼·표 삭제, 이름 변경, 기본값 없는 NOT NULL 추가, 타입 변경, 제약 추가, TRUNCATE; PostgreSQL · MySQL) — 의도한 것은 파일 안 `-- allow-destructive: <이유>`. | (도구 — 켜는 조각 없음) | 위험한 마이그레이션, 롤링 배포 마이그레이션, 컬럼 삭제 검사, expand contract / risky migration, expand contract, backward compatible migration, squawk, allow-destructive | — |
 | `script-migrations-lock` | 동결된 Flyway 마이그레이션의 잠금(migrations.lock: 경로 + sha256 + 업그레이드 시험의 baseline)을 검사하고(--check) 새 파일만 더한다 — 기존 줄의 변경은 --rewrite <경로> 로만. | (도구 — 켜는 조각 없음) | 마이그레이션 잠금, 마이그레이션 동결, 체크섬 불일치, 마이그레이션 수정 금지 / migration lock, frozen migrations, flyway checksum, migrations.lock | — |
 | `script-native-build` | GraalVM 25 공식 Docker 이미지 안에서 앱을 네이티브 실행 파일로 만든다(선택 빌드 -Pnative, 기본 JVM 빌드는 그대로) — 결과 apps/<앱>/build/native/nativeCompile/app. | (도구 — 켜는 조각 없음) | 네이티브 이미지, 네이티브 빌드, GraalVM, 콜드스타트 / native image, graalvm build, cold start | — |
 | `script-native-smoke` | 떠 있는 tools/native-check 서버에 가입 · 로그인 · 갱신 · 가짜 결제사 결제 · 구독 · 작업 큐(깨우기 주소) · 웹훅을 실제 HTTP 로 돌려 본다. | (도구 — 켜는 조각 없음) | 네이티브 시험, 핵심 흐름 시험 / native smoke test, core flow check | — |
@@ -2080,6 +2081,16 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - --with-sample 로 찍은 프로젝트에서만 남는다
   - 얇은 래퍼다 — 하는 일은 scripts/dev.sh
 - 키워드: 샘플 실행, 노트 앱 실행 / run sample, notes app
+
+### `script-migration-risk` — 기준선(migrations.lock) 이후의 새 마이그레이션이 옛 버전을 깨는지 검사한다(expand/contract: 컬럼·표 삭제, 이름 변경, 기본값 없는 NOT NULL 추가, 타입 변경, 제약 추가, TRUNCATE; PostgreSQL · MySQL) — 의도한 것은 파일 안 `-- allow-destructive: <이유>`.
+
+- 종류 · 상태: script · stable — 위치 `scripts/migration-risk.pl`
+- 켜는 법: (도구 — 켜는 조각 없음)
+- 문서: `docs/schema-management.md`
+- 쓰지 않는 경우:
+  - 이미 나간 마이그레이션을 고치는 도구가 아니다 — 잠금 검사는 migrations-lock.pl
+  - SQL 을 문법으로 완전히 파싱하지 않는다(DO $$ 블록 · 실행 때 만든 SQL 은 못 본다) — 가드이지 증명이 아니다
+- 키워드: 위험한 마이그레이션, 롤링 배포 마이그레이션, 컬럼 삭제 검사, expand contract / risky migration, expand contract, backward compatible migration, squawk, allow-destructive
 
 ### `script-migrations-lock` — 동결된 Flyway 마이그레이션의 잠금(migrations.lock: 경로 + sha256 + 업그레이드 시험의 baseline)을 검사하고(--check) 새 파일만 더한다 — 기존 줄의 변경은 --rewrite <경로> 로만.
 

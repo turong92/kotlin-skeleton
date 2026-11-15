@@ -118,6 +118,7 @@ MARKER="$TMP/marker"; touch "$MARKER"; sleep 1
 A="$TMP/a"
 expect_exit 0 "기본 조합을 찍는다 (rename 잔여 검사 포함)" stamp "$A"
 check "찍은 프로젝트의 마이그레이션 잠금이 맞다 (migrations-lock.pl --check) — 기본 조합" bash -c "cd '$A' && perl scripts/migrations-lock.pl --check"
+check "찍은 프로젝트의 위험한 마이그레이션 검사(migration-risk.pl)는 찍은 직후 통과하고, 앱이 더한 새 컬럼 삭제는 잡는다" bash -c "cd '$A' && perl scripts/migration-risk.pl >/dev/null && f=apps/api/src/main/resources/db/migration/postgresql/V29991231000000__risk_probe.sql && echo 'alter table x drop column y;' > \$f && { perl scripts/migration-risk.pl >/dev/null 2>&1; rc=\$?; rm -f \$f; test \$rc -eq 1; }"
 check "스타터 앱만 남는다 (apps/workbench 없음)" test -d "$A/apps/api" -a ! -e "$A/apps/workbench"
 check "build · .gradle · .git · .claude · .superpowers 는 복사하지 않는다" bash -c "! ls -d '$A/build' '$A/.gradle' '$A/.git' '$A/.claude' '$A/.superpowers' '$A/.kotlin' 2>/dev/null | grep -q ."
 # 스타터에는 계정(account-jdbc · auth-session-jdbc)이 들어 있다 — 그 모듈들의 compileOnly 선택 통합(alert · auth-social · captcha-turnstile · idempotency · job-queue-jdbc · notification-mail)은
