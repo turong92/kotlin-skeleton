@@ -49,6 +49,8 @@ data class VideoResponse(
     val bytes: Long,
     val compat: TrackStatus,
     val ladder: TrackStatus,
+    /** 소리 전용 판 — `READY` 면 재생 허가에 `audio` 가 있다 */
+    val audio: TrackStatus,
     /** 변환 중일 때 0~100 */
     val progress: Int?,
     val failCode: String?,
@@ -60,7 +62,7 @@ data class VideoResponse(
 ) {
     companion object {
         fun of(video: Video) = VideoResponse(
-            video.id, video.purpose, video.visibility, video.status, video.uploadBytes, video.compatStatus, video.ladderStatus, video.progress, video.failCode,
+            video.id, video.purpose, video.visibility, video.status, video.uploadBytes, video.compatStatus, video.ladderStatus, video.audioStatus, video.progress, video.failCode,
             video.srcWidth, video.srcHeight, video.srcDurationMs, video.createdAt, video.updatedAt,
         )
     }
@@ -112,7 +114,7 @@ class VideoController(private val uploads: VideoUploads, private val library: Vi
         Response.ok(uploads.list(VideoCallers.account(authentication), purpose).map(VideoResponse::of))
 
     @Operation(
-        summary = "A playback grant: the addresses a player needs (original tier src, compat, hls master, poster) and when a private video's token ends",
+        summary = "A playback grant: the addresses a player needs (original tier src, compat, hls master, sound-only audio, poster) and when a private video's token ends",
         description = "A private video's addresses carry a short-lived token in the path and need no login; a public video's are the plain public addresses. " +
             "409 VIDEO.NOT_READY until the video is PLAYABLE. The apps that show public videos without a login put this answer in their own public response.",
     )

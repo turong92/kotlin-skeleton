@@ -120,6 +120,7 @@ class JdbcVideoStore(
             .firstOrNull() ?: return@execute null
         val set = when (lane) {
             VideoLane.REMUX -> "status = 'REMUXING'"
+            VideoLane.AUDIO -> "audio_status = 'RUNNING'"
             VideoLane.COMPAT -> "compat_status = 'RUNNING'"
             VideoLane.LADDER -> "ladder_status = 'RUNNING', ladder_build = :build"
             VideoLane.ANIMATED -> error("not a video lane")
@@ -134,6 +135,7 @@ class JdbcVideoStore(
 
     private fun candidate(lane: VideoLane) = when (lane) {
         VideoLane.REMUX -> "status = 'QUEUED'"
+        VideoLane.AUDIO -> "status = 'PLAYABLE' and audio_status = 'QUEUED' and lease_owner is null"
         VideoLane.COMPAT -> "status = 'PLAYABLE' and compat_status = 'QUEUED' and lease_owner is null"
         VideoLane.LADDER -> "status = 'PLAYABLE' and ladder_status = 'QUEUED' and lease_owner is null"
         VideoLane.ANIMATED -> error("not a video lane")
@@ -151,7 +153,7 @@ class JdbcVideoStore(
             """
             update videos set status = 'PLAYABLE', orig_key = :origKey, orig_bytes = :origBytes, orig_sha256 = :origSha, src_container = :container, src_codec = :codec,
                 src_codec_string = :codecString, src_width = :w, src_height = :h, src_rotation = :rotation, src_duration_ms = :durationMs, src_fps = :fps, src_bitrate = :bitrate,
-                src_audio_codec = :audio, poster_key = :posterKey, poster_w = :posterW, poster_h = :posterH, compat_status = :compat, compat_key = :compatKey, ladder_status = :ladder,
+                src_audio_codec = :audio, poster_key = :posterKey, poster_w = :posterW, poster_h = :posterH, compat_status = :compat, compat_key = :compatKey, ladder_status = :ladder, audio_status = :audio_track,
                 attempts = 0, lease_owner = null, lease_until = null, lane = null, progress = null, updated_at = :at
             where id = :id and status = 'REMUXING' and lease_owner = :owner
             """.trimIndent(),
@@ -161,12 +163,18 @@ class JdbcVideoStore(
                 .addValue("fps", result.srcFps?.let { BigDecimal.valueOf(it).setScale(3, RoundingMode.HALF_UP) }).addValue("bitrate", result.srcBitrate)
                 .addValue("audio", result.srcAudioCodec).addValue("posterKey", result.posterKey).addValue("posterW", result.posterWidth).addValue("posterH", result.posterHeight)
                 .addValue("compat", result.compat.name).addValue("compatKey", if (result.compat == TrackStatus.SKIPPED) result.origKey else null)
-                .addValue("ladder", result.ladder.name).addValue("at", dialect.instantParam(at)).addValue("id", id).addValue("owner", owner),
+                .addValue("ladder", result.ladder.name).addValue("audio_track", result.audio.name).addValue("at", dialect.instantParam(at)).addValue("id", id).addValue("owner", owner),
         ) == 1
 
     override fun markCompatReady(id: String, owner: String, key: String, bytes: Long, at: Instant): Boolean =
         jdbc.update(
             "update videos set compat_status = 'READY', compat_key = :key, compat_bytes = :bytes, attempts = 0, $RELEASE where id = :id and status = 'PLAYABLE' and compat_status = 'RUNNING' and lease_owner = :owner",
+            MapSqlParameterSource().addValue("key", key).addValue("bytes", bytes).addValue("at", dialect.instantParam(at)).addValue("id", id).addValue("owner", owner),
+        ) == 1
+
+    override fun markAudioReady(id: String, owner: String, key: String, bytes: Long, at: Instant): Boolean =
+        jdbc.update(
+            "update videos set audio_status = 'READY', audio_key = :key, audio_bytes = :bytes, attempts = 0, $RELEASE where id = :id and status = 'PLAYABLE' and audio_status = 'RUNNING' and lease_owner = :owner",
             MapSqlParameterSource().addValue("key", key).addValue("bytes", bytes).addValue("at", dialect.instantParam(at)).addValue("id", id).addValue("owner", owner),
         ) == 1
 
@@ -184,7 +192,7 @@ class JdbcVideoStore(
         val lane = row.second
         if (row.first != owner || lane == null) return null
         val requeue = retry && row.third < VideoStatus.MAX_ATTEMPTS
-        val column = when (lane) { VideoLane.REMUX -> "status"; VideoLane.COMPAT -> "compat_status"; VideoLane.LADDER -> "ladder_status"; VideoLane.ANIMATED -> error("not a video lane") }
+        val column = when (lane) { VideoLane.REMUX -> "status"; VideoLane.AUDIO -> "audio_status"; VideoLane.COMPAT -> "compat_status"; VideoLane.LADDER -> "ladder_status"; VideoLane.ANIMATED -> error("not a video lane") }
         val set = when {
             requeue -> "$column = 'QUEUED'"
             lane == VideoLane.REMUX -> "status = 'FAILED', fail_code = :code, fail_detail = :detail"
@@ -207,7 +215,7 @@ class JdbcVideoStore(
         failed += failExpired("$remuxExpired and attempts >= :max", "status = 'FAILED', fail_code = 'LEASE_EXPIRED'", params, remux = true)
         requeued += jdbc.update("update videos set $RELEASE, status = 'QUEUED' where $remuxExpired and attempts < :max", params())
         // 트랙 — 트랙만 실패 · 다시 줄. 영상(PLAYABLE)과 원본 단은 그대로. 시도 칸은 차선 공용이라 닫힌 트랙이 다음 트랙에 남은 시도를 물려주지 않게 0 으로
-        for (column in listOf("compat_status", "ladder_status")) {
+        for (column in listOf("audio_status", "compat_status", "ladder_status")) {
             val expired = "status = 'PLAYABLE' and $column = 'RUNNING' and lease_until < :now"
             failed += failExpired("$expired and attempts >= :max", "$column = 'FAILED', fail_code = 'LEASE_EXPIRED', attempts = 0", params, remux = false)
             requeued += jdbc.update("update videos set $RELEASE, $column = 'QUEUED' where $expired and attempts < :max", params())
@@ -233,16 +241,31 @@ class JdbcVideoStore(
             MapSqlParameterSource().addValue("at", dialect.instantParam(at)).addValue("floor", floor),
         )
 
+    override fun queueDeferredAudio(at: Instant): Int {
+        // 소리가 없는 영상은 일꾼이 만들 것이 없다 — 줄 세우지 않고 닫아 둔다(원본 단 완료 때 같은 판정을 한다)
+        jdbc.update(
+            "update videos set audio_status = 'SKIPPED', updated_at = :at where status = 'PLAYABLE' and audio_status = 'NONE' and src_audio_codec is null",
+            MapSqlParameterSource().addValue("at", dialect.instantParam(at)),
+        )
+        return jdbc.update(
+            "update videos set audio_status = 'QUEUED', updated_at = :at where status = 'PLAYABLE' and audio_status = 'NONE' and src_audio_codec is not null",
+            MapSqlParameterSource().addValue("at", dialect.instantParam(at)),
+        )
+    }
+
     override fun countQueuedRemux(): Int = count("select count(*) from videos where status = 'QUEUED'")
 
     override fun countClaimableTracks(): Int =
-        count("select count(*) from videos where status = 'PLAYABLE' and lease_owner is null and (compat_status = 'QUEUED' or ladder_status = 'QUEUED')")
+        count("select count(*) from videos where status = 'PLAYABLE' and lease_owner is null and (audio_status = 'QUEUED' or compat_status = 'QUEUED' or ladder_status = 'QUEUED')")
 
     override fun countCompatQueuedBefore(before: Instant): Int =
         count("select count(*) from videos where status = 'PLAYABLE' and compat_status = 'QUEUED' and updated_at < :t", before)
 
+    override fun countAudioQueuedBefore(before: Instant): Int =
+        count("select count(*) from videos where status = 'PLAYABLE' and audio_status = 'QUEUED' and updated_at < :t", before)
+
     override fun countFailedSince(since: Instant): Int =
-        count("select count(*) from videos where updated_at >= :t and status <> 'DELETED' and (status = 'FAILED' or compat_status = 'FAILED' or ladder_status = 'FAILED')", since)
+        count("select count(*) from videos where updated_at >= :t and status <> 'DELETED' and (status = 'FAILED' or audio_status = 'FAILED' or compat_status = 'FAILED' or ladder_status = 'FAILED')", since)
 
     private fun count(sql: String, t: Instant? = null): Int =
         jdbc.queryForObject(sql, MapSqlParameterSource().also { if (t != null) it.addValue("t", dialect.instantParam(t)) }, Int::class.java)!!
@@ -277,6 +300,9 @@ class JdbcVideoStore(
         ladderBuild = getString("ladder_build"),
         ladderBytes = long("ladder_bytes"),
         ladderRungs = getString("ladder_rungs"),
+        audioStatus = TrackStatus.valueOf(getString("audio_status")),
+        audioKey = getString("audio_key"),
+        audioBytes = long("audio_bytes"),
         posterKey = getString("poster_key"),
         posterWidth = int("poster_w"),
         posterHeight = int("poster_h"),

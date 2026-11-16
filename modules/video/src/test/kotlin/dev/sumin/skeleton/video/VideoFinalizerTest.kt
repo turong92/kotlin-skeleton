@@ -82,6 +82,26 @@ class VideoFinalizerTest {
     }
 
     @Test
+    fun `sweep keeps the sound-only folder of a ready tier - the cleanup must never delete it - and removes a loser's audio folder`() {
+        val v = playable { it.copy(audioStatus = TrackStatus.READY, audioKey = "videos/p/v1/a-1111111111111111/index.m3u8") }
+        val keep = listOf("videos/p/v1/a-1111111111111111/index.m3u8", "videos/p/v1/a-1111111111111111/init.mp4", "videos/p/v1/a-1111111111111111/s00000.m4s")
+        val lose = listOf("videos/p/v1/a-2222222222222222/index.m3u8", "videos/p/v1/a-2222222222222222/s00000.m4s")
+        (keep + lose).forEach { storage.objects[it] = 1 }
+
+        finalizer.handle(v.id, VideoFinalizeEvent.SWEEP)
+
+        assertEquals(lose.sorted(), storage.deleted.sorted())
+        assertTrue(keep.all { it in storage.objects })
+    }
+
+    @Test
+    fun `the app hears about a ready sound-only tier as a track ready event`() {
+        playable { it.copy(audioStatus = TrackStatus.READY, audioKey = "videos/p/v1/a-1111111111111111/index.m3u8") }
+        finalizer.handle("v1", VideoFinalizeEvent.AUDIO_READY)
+        assertEquals(listOf("track:AUDIO:v1"), events.calls)
+    }
+
+    @Test
     fun `sweep leaves a folder alone while a worker still holds the lease, and clears a failed video's folder entirely`() {
         playable { it.copy(leaseOwner = "w1", leaseUntil = t0.plusSeconds(60), lane = VideoLane.COMPAT) }
         storage.objects["videos/p/v1/c-eeeeeeeeeeeeeeee/index.m3u8"] = 1

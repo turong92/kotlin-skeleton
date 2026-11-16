@@ -144,6 +144,91 @@ class VideoJobsDbTest {
         }
     }
 
+    private fun playableWithAudio(audio: TrackStatus = TrackStatus.QUEUED, created: Instant = t0): String {
+        val id = queued(created)
+        store.claimNext(VideoLane.REMUX, "w1", t0.plusSeconds(600), "b".repeat(32), t0)!!
+        assertTrue(store.markPlayable(id, "w1", result.copy(audio = audio), t0))
+        return id
+    }
+
+    @Test
+    fun `the sound-only lane is a track of its own - markPlayable writes its start state, a claim leases it, ready records the folder`() {
+        val id = playableWithAudio()
+        assertEquals(TrackStatus.QUEUED, store.find(id)!!.audioStatus)
+
+        val job = store.claimNext(VideoLane.AUDIO, "w2", t0.plusSeconds(600), "c".repeat(32), t0)!!
+        assertEquals(id, job.id)
+        assertEquals(TrackStatus.RUNNING, job.audioStatus)
+        assertEquals(VideoLane.AUDIO, job.lane)
+        assertEquals(TrackStatus.QUEUED, job.compatStatus, "the other tracks wait their turn - one lane at a time per video")
+        assertNull(store.claimNext(VideoLane.COMPAT, "w3", t0.plusSeconds(600), "c".repeat(32), t0))
+
+        assertFalse(store.markAudioReady(id, "w3", "videos/p/x/a-0011223344556677/index.m3u8", 100, t0), "not the owner")
+        assertTrue(store.markAudioReady(id, "w2", "videos/p/x/a-0011223344556677/index.m3u8", 100, t0.plusSeconds(1)))
+        assertFalse(store.markAudioReady(id, "w2", "videos/p/x/a-0011223344556677/index.m3u8", 100, t0.plusSeconds(2)), "already ready")
+        store.find(id)!!.also {
+            assertEquals(TrackStatus.READY, it.audioStatus)
+            assertEquals("videos/p/x/a-0011223344556677/index.m3u8", it.audioKey)
+            assertEquals(100, it.audioBytes)
+            assertNull(it.leaseOwner)
+            assertEquals(0, it.attempts)
+        }
+        assertEquals(VideoLane.COMPAT, store.claimNext(VideoLane.COMPAT, "w3", t0.plusSeconds(600), "c".repeat(32), t0)!!.lane)
+    }
+
+    @Test
+    fun `a sound-only lane that fails or runs out of lease fails only that track`() {
+        val failing = playableWithAudio()
+        store.claimNext(VideoLane.AUDIO, "w1", t0.plusSeconds(600), "c".repeat(32), t0)
+        assertEquals(LeaseEnd.FAILED, store.failLeased(failing, "w1", "PROCESSING_FAILED", "no aac", false, t0.plusSeconds(1)))
+        store.find(failing)!!.also {
+            assertEquals(TrackStatus.FAILED, it.audioStatus)
+            assertEquals(VideoStatus.PLAYABLE, it.status)
+            assertEquals(TrackStatus.QUEUED, it.compatStatus)
+            assertEquals(0, it.attempts)
+        }
+        assertEquals(1, store.countFailedSince(t0))
+
+        val retried = playableWithAudio(created = t0.plusSeconds(10))
+        store.claimNext(VideoLane.AUDIO, "w1", t0.plusSeconds(600), "c".repeat(32), t0)
+        assertEquals(LeaseEnd.REQUEUED, store.failLeased(retried, "w1", "PROCESSING_FAILED", null, true, t0.plusSeconds(2)))
+        assertEquals(TrackStatus.QUEUED, store.find(retried)!!.audioStatus)
+
+        val expiring = playableWithAudio(created = t0.plusSeconds(20))
+        store.claimNext(VideoLane.AUDIO, "w4", t0.minusSeconds(1), "c".repeat(32), t0)
+        store.claimNext(VideoLane.AUDIO, "w4", t0.minusSeconds(1), "c".repeat(32), t0)
+        val ids = listOf(retried, expiring).map { store.find(it)!! }.filter { it.audioStatus == TrackStatus.RUNNING }
+        assertTrue(ids.isNotEmpty())
+        val expiry = store.expireLeases(t0, t0.plusSeconds(3))
+        assertEquals(ids.size, expiry.requeued, "within the attempt budget they go back in line")
+        assertTrue(ids.all { store.find(it.id)!!.audioStatus == TrackStatus.QUEUED && store.find(it.id)!!.status == VideoStatus.PLAYABLE })
+    }
+
+    @Test
+    fun `deferred audio queues playable videos with sound, marks silent ones skipped, and leaves the rest alone`() {
+        val loud = playableWithAudio(TrackStatus.NONE)
+        val silent = playableWithAudio(TrackStatus.NONE, t0.plusSeconds(1))
+        val queuedRemux = queued(t0.plusSeconds(2))
+        jdbc.update("update videos set src_audio_codec = null where id = ?", silent)
+
+        assertEquals(1, store.queueDeferredAudio(t0.plusSeconds(5)))
+
+        assertEquals(TrackStatus.QUEUED, store.find(loud)!!.audioStatus)
+        assertEquals(TrackStatus.SKIPPED, store.find(silent)!!.audioStatus)
+        assertEquals(TrackStatus.NONE, store.find(queuedRemux)!!.audioStatus, "not playable yet - decided when it becomes playable")
+        assertEquals(0, store.queueDeferredAudio(t0.plusSeconds(6)), "nothing new the second time")
+    }
+
+    @Test
+    fun `sound-only counts - claimable tracks include it, the stale count is its own`() {
+        playableWithAudio()
+        assertEquals(1, store.countClaimableTracks())
+        assertEquals(1, store.countAudioQueuedBefore(t0.plusSeconds(60)))
+        assertEquals(0, store.countAudioQueuedBefore(t0.minusSeconds(60)))
+        store.claimNext(VideoLane.AUDIO, "w1", t0.plusSeconds(600), "c".repeat(32), t0)
+        assertEquals(0, store.countAudioQueuedBefore(t0.plusSeconds(60)))
+    }
+
     @Test
     fun `a compat-skipped video uses the original tier as its compat key`() {
         val id = queued()

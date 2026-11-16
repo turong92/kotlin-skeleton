@@ -13,6 +13,8 @@ object VideoResultVerifier {
     private val POSTER = Regex("^p-[0-9a-f]{16}\\.jpg$")
     private val COMPAT = Regex("^c-[0-9a-f]{16}/$FOLDER_FILE$")
     private val COMPAT_PLAYLIST = Regex("^c-[0-9a-f]{16}/index\\.m3u8$")
+    private val AUDIO = Regex("^a-[0-9a-f]{16}/$FOLDER_FILE$")
+    private val AUDIO_PLAYLIST = Regex("^a-[0-9a-f]{16}/index\\.m3u8$")
     private val HLS_FILE = Regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\\.(m3u8|m4s|mp4)$")
     private val BUILD = Regex("^[0-9a-f]{32}$")
     private val DISPLAY = Regex("^display\\.(mp4|webp)$")
@@ -20,6 +22,7 @@ object VideoResultVerifier {
     /** [build] 는 사다리 차선에서 서버가 정해 준 폴더 id */
     fun allowedName(lane: VideoLane, build: String?, name: String): Boolean = when (lane) {
         VideoLane.REMUX -> ORIG.matches(name) || POSTER.matches(name)
+        VideoLane.AUDIO -> AUDIO.matches(name)
         VideoLane.COMPAT -> COMPAT.matches(name)
         VideoLane.LADDER -> build != null && BUILD.matches(build) && name.startsWith("h-$build/") && HLS_FILE.matches(name.removePrefix("h-$build/"))
         VideoLane.ANIMATED -> DISPLAY.matches(name)
@@ -38,11 +41,13 @@ object VideoResultVerifier {
 
     fun isCompatPlaylist(name: String): Boolean = COMPAT_PLAYLIST.matches(name)
 
+    fun isAudioPlaylist(name: String): Boolean = AUDIO_PLAYLIST.matches(name)
+
     /** 폴더 이름의 해시(`o-<16>/…`)는 일꾼이 보고한 폴더 내용 SHA-256 의 앞 16자다 — 키가 곧 내용이다 */
     fun hashMatches(name: String, sha256: String): Boolean =
         ORIG_PLAYLIST.matches(name) && sha256.length == 64 && sha256.all { it in '0'..'9' || it in 'a'..'f' } && name.substring(2, 18) == sha256.substring(0, 16)
 
-    /** 결과 이름이 속한 폴더(`o-<16>/` · `c-<16>/`) — 접두사 */
+    /** 결과 이름이 속한 폴더(`o-<16>/` · `c-<16>/` · `a-<16>/`) — 접두사 */
     fun folderOf(name: String): String = name.substringBefore('/') + "/"
 
     fun isBuild(value: String?): Boolean = value != null && BUILD.matches(value)

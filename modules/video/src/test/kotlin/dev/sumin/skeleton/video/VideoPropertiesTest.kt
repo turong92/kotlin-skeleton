@@ -29,6 +29,12 @@ class VideoPropertiesTest {
     }
 
     @Test
+    fun `the sound-only tier is off unless an app switches it on`() {
+        assertTrue(!VideoProperties().audio.enabled)
+        assertTrue(VideoProperties(audio = VideoProperties.Audio(enabled = true)).audio.enabled)
+    }
+
+    @Test
     fun `limits that cannot work are refused when the properties are built`() {
         assertFailsWith<IllegalArgumentException> { VideoProperties(partSize = DataSize.ofMegabytes(4)) }   // S3 규약: 마지막 조각 말고는 5MB 이상
         assertFailsWith<IllegalArgumentException> { VideoProperties(maxBytes = DataSize.ofGigabytes(200)) }   // 16MB 조각이 10,000 개를 넘는다

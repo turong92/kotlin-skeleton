@@ -261,6 +261,125 @@ class VideoJobsTest {
     }
 
     @Test
+    fun `the sound-only tier is queued only when the switch is on, and a video without sound is skipped whatever the switch says`() {
+        val v = video()
+        claimed(v)
+        jobs().complete(all, "w1", "v1", remuxResult(putFolder(v, "o-$hash")))
+        assertEquals(TrackStatus.NONE, store.rows.getValue("v1").audioStatus, "off by default - the skeleton does not change defaults")
+
+        props = VideoProperties(enabled = true, audio = VideoProperties.Audio(enabled = true))
+        val w = video("v2")
+        claimed(w, workerId = "w2")
+        jobs().complete(all, "w2", "v2", remuxResult(putFolder(w, "o-$hash")))
+        assertEquals(TrackStatus.QUEUED, store.rows.getValue("v2").audioStatus)
+
+        val silent = video("v3")
+        claimed(silent, workerId = "w3")
+        jobs().complete(all, "w3", "v3", remuxResult(putFolder(silent, "o-$hash"), p = probe.copy(audioCodec = null)))
+        assertEquals(TrackStatus.SKIPPED, store.rows.getValue("v3").audioStatus)
+
+        props = VideoProperties(enabled = true)
+        val quiet = video("v4")
+        claimed(quiet, workerId = "w4")
+        jobs().complete(all, "w4", "v4", remuxResult(putFolder(quiet, "o-$hash"), p = probe.copy(audioCodec = null)))
+        assertEquals(TrackStatus.SKIPPED, store.rows.getValue("v4").audioStatus, "no sound is known at once, even with the switch off")
+    }
+
+    @Test
+    fun `a queued sound-only tier asks for a wake like the other tracks`() {
+        props = VideoProperties(enabled = true, ladder = false, audio = VideoProperties.Audio(enabled = true))
+        waker = object : VideoWaker {
+            override val enabled = true
+            override fun wake() = WakeTicket("exec-1")
+        }
+        val v = video()
+        claimed(v)
+        jobs().complete(all, "w1", "v1", remuxResult(putFolder(v, "o-$hash"), compatible = true))
+        assertEquals(TrackStatus.SKIPPED, store.rows.getValue("v1").compatStatus)
+        assertEquals(1, followUps.wakes, "only the sound-only tier is waiting, and that is enough to wake")
+    }
+
+    @Test
+    fun `the queue order is sound-only first, then compat, then the ladder - the cheapest lane goes first`() {
+        props = VideoProperties(enabled = true, audio = VideoProperties.Audio(enabled = true))
+        val ready = playable()
+        assertEquals(TrackStatus.QUEUED, ready.audioStatus)
+
+        val first = jobs().claim(all, "w9", null)!!
+        assertEquals(VideoLane.AUDIO, first.lane)
+        assertEquals("o-$hash", first.origFolder)
+        assertEquals("https://cdn.example.com/${ready.origKey}", first.inputUrl)
+        store.rows["v1"] = store.rows.getValue("v1").copy(leaseOwner = null, leaseUntil = null, lane = null, audioStatus = TrackStatus.READY)
+        assertEquals(VideoLane.COMPAT, jobs().claim(all, "w9", null)!!.lane)
+        store.rows["v1"] = store.rows.getValue("v1").copy(leaseOwner = null, leaseUntil = null, lane = null, compatStatus = TrackStatus.READY)
+        assertEquals(VideoLane.LADDER, jobs().claim(all, "w9", null)!!.lane)
+    }
+
+    @Test
+    fun `a token without the audio lane never takes a sound-only job and one with only the audio lane takes nothing else`() {
+        props = VideoProperties(enabled = true, audio = VideoProperties.Audio(enabled = true))
+        playable()
+        val audioOnly = all.copy(id = 4, name = "audio-only", lanes = setOf(VideoLane.AUDIO))
+
+        assertEquals(VideoLane.COMPAT, jobs().claim(compatOnly, "w1", null)!!.lane)
+        store.rows["v1"] = store.rows.getValue("v1").copy(leaseOwner = null, leaseUntil = null, lane = null, compatStatus = TrackStatus.QUEUED)
+        assertEquals(VideoLane.AUDIO, jobs().claim(audioOnly, "w2", null)!!.lane)
+        assertNull(jobs().claim(audioOnly, "w2", null))
+    }
+
+    @Test
+    fun `a sound-only job is signed only the audio names and complete marks the tier ready after checking the folder`() {
+        props = VideoProperties(enabled = true, audio = VideoProperties.Audio(enabled = true))
+        val ready = playable()
+        jobs().claim(all, "w9", null)!!.also { assertEquals(VideoLane.AUDIO, it.lane) }
+        val audioHash = "00112233445566ff"
+
+        assertFailsWith<VideoPathNotAllowedException> { jobs().uploadUrls(all, "w9", "v1", listOf("a-$audioHash/index.m3u8", "c-$audioHash/index.m3u8")) }
+        assertFailsWith<VideoPathNotAllowedException> { jobs().uploadUrls(all, "w9", "v1", listOf("o-$audioHash/index.m3u8")) }
+        assertTrue(storage.signedUploads.isEmpty())
+        jobs().uploadUrls(all, "w9", "v1", listOf("a-$audioHash/index.m3u8", "a-$audioHash/init.mp4", "a-$audioHash/s00000.m4s"))
+        assertEquals("videos/p/v1/a-$audioHash/index.m3u8", storage.signedUploads.first().key.value)
+
+        assertFailsWith<VideoResultMismatchException> { jobs().complete(all, "w9", "v1", VideoJobResult(audio = ResultFile("a-$audioHash/index.m3u8", 330))) }   // 아직 폴더가 없다
+        val bytes = putFolder(ready, "a-$audioHash")
+        assertFailsWith<VideoResultMismatchException> { jobs().complete(all, "w9", "v1", VideoJobResult(audio = ResultFile("a-$audioHash/index.m3u8", bytes + 1))) }
+        assertFailsWith<VideoPathNotAllowedException> { jobs().complete(all, "w9", "v1", VideoJobResult(audio = ResultFile("c-$audioHash/index.m3u8", bytes))) }
+
+        jobs().complete(all, "w9", "v1", VideoJobResult(audio = ResultFile("a-$audioHash/index.m3u8", bytes)))
+
+        store.rows.getValue("v1").also {
+            assertEquals(TrackStatus.READY, it.audioStatus)
+            assertEquals("videos/p/v1/a-$audioHash/index.m3u8", it.audioKey)
+            assertEquals(bytes, it.audioBytes)
+            assertEquals(VideoStatus.PLAYABLE, it.status)
+            assertNull(it.leaseOwner)
+        }
+        assertTrue(VideoFinalizeEvent.AUDIO_READY in followUps.events("v1") && VideoFinalizeEvent.SWEEP in followUps.events("v1"))
+
+        val events = followUps.finalized.toList()
+        jobs().complete(all, "w9", "v1", VideoJobResult(audio = ResultFile("a-$audioHash/index.m3u8", bytes)))
+        assertEquals(events, followUps.finalized, "the same complete twice follows up once")
+    }
+
+    @Test
+    fun `a failed sound-only job fails only that tier - the video, the original tier and the other tracks stay`() {
+        props = VideoProperties(enabled = true, audio = VideoProperties.Audio(enabled = true))
+        val ready = playable()
+        jobs().claim(all, "w9", null)!!.also { assertEquals(VideoLane.AUDIO, it.lane) }
+
+        jobs().fail(all, "w9", "v1", VideoFailCode.PROCESSING_FAILED, "no aac", retry = false)
+
+        store.rows.getValue("v1").also {
+            assertEquals(TrackStatus.FAILED, it.audioStatus)
+            assertEquals(VideoStatus.PLAYABLE, it.status)
+            assertEquals(TrackStatus.QUEUED, it.compatStatus)
+            assertEquals(ready.origKey, it.origKey)
+        }
+        assertTrue(VideoFinalizeEvent.TRACK_FAILED in followUps.events("v1"))
+        assertTrue(storage.deleted.isEmpty())
+    }
+
+    @Test
     fun `a wake is requested only when the waker is on and a track was queued`() {
         waker = object : VideoWaker {
             override val enabled = true

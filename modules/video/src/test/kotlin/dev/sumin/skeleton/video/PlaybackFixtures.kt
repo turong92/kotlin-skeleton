@@ -7,6 +7,7 @@ object PlaybackFixtures {
     val t0: Instant = Instant.parse("2026-11-04T00:00:00Z")
     const val ORIG = "o-0123456789abcdef"
     const val COMPAT = "c-fedcba9876543210"
+    const val AUDIO = "a-0011223344556677"
     const val POSTER = "p-0123456789abcdef.jpg"
     val BUILD = "a".repeat(32)
     val SECRET = "k".repeat(40)
@@ -20,6 +21,7 @@ object PlaybackFixtures {
         owner: String = "acc_a",
         compat: TrackStatus = TrackStatus.READY,
         ladder: TrackStatus = TrackStatus.READY,
+        audio: TrackStatus = TrackStatus.NONE,
     ): Video {
         val folder = "${root(visibility)}/$id"
         return Video(
@@ -29,6 +31,7 @@ object PlaybackFixtures {
             origKey = "$folder/$ORIG/index.m3u8", origBytes = 330, posterKey = "$folder/$POSTER",
             compatStatus = compat, compatKey = when (compat) { TrackStatus.READY -> "$folder/$COMPAT/index.m3u8"; TrackStatus.SKIPPED -> "$folder/$ORIG/index.m3u8"; else -> null },
             ladderStatus = ladder, ladderBuild = if (ladder == TrackStatus.READY) BUILD else null,
+            audioStatus = audio, audioKey = if (audio == TrackStatus.READY) "$folder/$AUDIO/index.m3u8" else null,
         )
     }
 }

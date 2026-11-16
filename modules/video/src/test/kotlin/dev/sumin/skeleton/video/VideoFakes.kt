@@ -165,6 +165,7 @@ class FakeVideoStore : VideoStore {
         val leased = row.copy(leaseOwner = owner, leaseUntil = leaseUntil, lane = lane, attempts = row.attempts + 1, progress = null, updatedAt = at)
         return when (lane) {
             VideoLane.REMUX -> leased.copy(status = VideoStatus.REMUXING)
+            VideoLane.AUDIO -> leased.copy(audioStatus = TrackStatus.RUNNING)
             VideoLane.COMPAT -> leased.copy(compatStatus = TrackStatus.RUNNING)
             VideoLane.LADDER -> leased.copy(ladderStatus = TrackStatus.RUNNING, ladderBuild = ladderBuild)
             VideoLane.ANIMATED -> error("not a video lane")
@@ -173,6 +174,7 @@ class FakeVideoStore : VideoStore {
 
     private fun candidate(lane: VideoLane, v: Video) = when (lane) {
         VideoLane.REMUX -> v.status == VideoStatus.QUEUED
+        VideoLane.AUDIO -> v.status == VideoStatus.PLAYABLE && v.audioStatus == TrackStatus.QUEUED && v.leaseOwner == null
         VideoLane.COMPAT -> v.status == VideoStatus.PLAYABLE && v.compatStatus == TrackStatus.QUEUED && v.leaseOwner == null
         VideoLane.LADDER -> v.status == VideoStatus.PLAYABLE && v.ladderStatus == TrackStatus.QUEUED && v.leaseOwner == null
         VideoLane.ANIMATED -> false
@@ -190,7 +192,7 @@ class FakeVideoStore : VideoStore {
             status = VideoStatus.PLAYABLE, origKey = result.origKey, origBytes = result.origBytes, origSha256 = result.origSha256,
             srcCodecString = result.srcCodecString, srcWidth = result.srcWidth, srcHeight = result.srcHeight, srcDurationMs = result.srcDurationMs,
             posterKey = result.posterKey, compatStatus = result.compat, compatKey = if (result.compat == TrackStatus.SKIPPED) result.origKey else null,
-            ladderStatus = result.ladder, attempts = 0, leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at,
+            ladderStatus = result.ladder, audioStatus = result.audio, srcAudioCodec = result.srcAudioCodec, attempts = 0, leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at,
         )
         return true
     }
@@ -198,6 +200,12 @@ class FakeVideoStore : VideoStore {
     override fun markCompatReady(id: String, owner: String, key: String, bytes: Long, at: Instant): Boolean {
         val v = rows[id]?.takeIf { it.status == VideoStatus.PLAYABLE && it.compatStatus == TrackStatus.RUNNING && it.leaseOwner == owner } ?: return false
         rows[id] = v.copy(compatStatus = TrackStatus.READY, compatKey = key, compatBytes = bytes, attempts = 0, leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at)
+        return true
+    }
+
+    override fun markAudioReady(id: String, owner: String, key: String, bytes: Long, at: Instant): Boolean {
+        val v = rows[id]?.takeIf { it.status == VideoStatus.PLAYABLE && it.audioStatus == TrackStatus.RUNNING && it.leaseOwner == owner } ?: return false
+        rows[id] = v.copy(audioStatus = TrackStatus.READY, audioKey = key, audioBytes = bytes, attempts = 0, leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at)
         return true
     }
 
@@ -213,6 +221,7 @@ class FakeVideoStore : VideoStore {
         val released = v.copy(leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at)
         rows[id] = when (v.lane) {
             VideoLane.REMUX -> if (requeue) released.copy(status = VideoStatus.QUEUED) else released.copy(status = VideoStatus.FAILED, failCode = code, failDetail = detail)
+            VideoLane.AUDIO -> if (requeue) released.copy(audioStatus = TrackStatus.QUEUED) else released.copy(audioStatus = TrackStatus.FAILED, failCode = code, failDetail = detail, attempts = 0)
             VideoLane.COMPAT -> if (requeue) released.copy(compatStatus = TrackStatus.QUEUED) else released.copy(compatStatus = TrackStatus.FAILED, failCode = code, failDetail = detail, attempts = 0)
             VideoLane.LADDER -> if (requeue) released.copy(ladderStatus = TrackStatus.QUEUED) else released.copy(ladderStatus = TrackStatus.FAILED, failCode = code, failDetail = detail, attempts = 0)
             VideoLane.ANIMATED, null -> return null
@@ -232,6 +241,9 @@ class FakeVideoStore : VideoStore {
                 v.status == VideoStatus.REMUXING ->
                     if (exhausted) { rows[v.id] = released.copy(status = VideoStatus.FAILED, failCode = VideoFailCode.LEASE_EXPIRED); failed += ExpiredFailure(v.id, true) }
                     else { rows[v.id] = released.copy(status = VideoStatus.QUEUED); requeued++ }
+                v.status == VideoStatus.PLAYABLE && v.lane == VideoLane.AUDIO ->
+                    if (exhausted) { rows[v.id] = released.copy(audioStatus = TrackStatus.FAILED, failCode = VideoFailCode.LEASE_EXPIRED, attempts = 0); failed += ExpiredFailure(v.id, false) }
+                    else { rows[v.id] = released.copy(audioStatus = TrackStatus.QUEUED); requeued++ }
                 v.status == VideoStatus.PLAYABLE && v.lane == VideoLane.COMPAT ->
                     if (exhausted) { rows[v.id] = released.copy(compatStatus = TrackStatus.FAILED, failCode = VideoFailCode.LEASE_EXPIRED, attempts = 0); failed += ExpiredFailure(v.id, false) }
                     else { rows[v.id] = released.copy(compatStatus = TrackStatus.QUEUED); requeued++ }
@@ -255,15 +267,26 @@ class FakeVideoStore : VideoStore {
         return ids.size
     }
 
+    override fun queueDeferredAudio(at: Instant): Int {
+        val playable = rows.values.filter { it.status == VideoStatus.PLAYABLE && it.audioStatus == TrackStatus.NONE }
+        playable.filter { it.srcAudioCodec == null }.forEach { rows[it.id] = it.copy(audioStatus = TrackStatus.SKIPPED, updatedAt = at) }
+        val queued = playable.filter { it.srcAudioCodec != null }
+        queued.forEach { rows[it.id] = it.copy(audioStatus = TrackStatus.QUEUED, updatedAt = at) }
+        return queued.size
+    }
+
     override fun countQueuedRemux() = rows.values.count { it.status == VideoStatus.QUEUED }
 
-    override fun countClaimableTracks() = rows.values.count { candidate(VideoLane.COMPAT, it) || candidate(VideoLane.LADDER, it) }
+    override fun countClaimableTracks() = rows.values.count { candidate(VideoLane.AUDIO, it) || candidate(VideoLane.COMPAT, it) || candidate(VideoLane.LADDER, it) }
+
+    override fun countAudioQueuedBefore(before: Instant) =
+        rows.values.count { it.status == VideoStatus.PLAYABLE && it.audioStatus == TrackStatus.QUEUED && it.updatedAt < before }
 
     override fun countCompatQueuedBefore(before: Instant) =
         rows.values.count { it.status == VideoStatus.PLAYABLE && it.compatStatus == TrackStatus.QUEUED && it.updatedAt < before }
 
     override fun countFailedSince(since: Instant) =
-        rows.values.count { it.updatedAt >= since && it.status != VideoStatus.DELETED && (it.status == VideoStatus.FAILED || it.compatStatus == TrackStatus.FAILED || it.ladderStatus == TrackStatus.FAILED) }
+        rows.values.count { it.updatedAt >= since && it.status != VideoStatus.DELETED && (it.status == VideoStatus.FAILED || it.compatStatus == TrackStatus.FAILED || it.ladderStatus == TrackStatus.FAILED || it.audioStatus == TrackStatus.FAILED) }
 
     private companion object {
         val IN_FLIGHT = setOf(VideoStatus.UPLOADING, VideoStatus.UPLOADED, VideoStatus.QUEUED, VideoStatus.REMUXING)

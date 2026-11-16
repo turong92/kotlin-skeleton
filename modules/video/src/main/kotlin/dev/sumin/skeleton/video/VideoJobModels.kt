@@ -2,7 +2,7 @@ package dev.sumin.skeleton.video
 
 import java.time.Instant
 
-/** `claim` 응답 — 일꾼은 이것만 보고 일한다. 입력은 remux = 서버가 서명한 읽기 주소(일꾼은 저장소 키를 갖지 않는다), 호환 · 사다리 = 원본 단 재생 목록 주소 */
+/** `claim` 응답 — 일꾼은 이것만 보고 일한다. 입력은 remux = 서버가 서명한 읽기 주소(일꾼은 저장소 키를 갖지 않는다), 소리 · 호환 · 사다리 = 원본 단 재생 목록 주소 */
 data class VideoJob(
     /** 영상 id 가 곧 작업 id — 이후 모든 호출의 경로에 쓴다 */
     val jobId: String,
@@ -15,11 +15,11 @@ data class VideoJob(
     val height: Int?,
     val durationMs: Long?,
     val codec: String?,
-    /** 일꾼이 임시 공간을 가늠하는 값 — 호환 단 21MB/분 · 사다리 32MB/분 · remux 는 입력 크기 */
+    /** 일꾼이 임시 공간을 가늠하는 값 — 소리 판 2MB/분 · 호환 단 21MB/분 · 사다리 32MB/분 · remux 는 입력 크기 */
     val expectedOutputBytes: Long,
     /** 사다리 차선만 — 서버가 정한 HLS 빌드 폴더 id(32 hex) */
     val build: String?,
-    /** 호환 · 사다리 차선만 — 읽을 원본 단 폴더 이름 `o-<해시>`. 마스터 목록에 원본 단을 끼울 때 쓴다 */
+    /** 소리 · 호환 · 사다리 차선만 — 읽을 원본 단 폴더 이름 `o-<해시>`. 마스터 목록에 원본 단을 끼울 때 쓴다 */
     val origFolder: String?,
     /** remux 차선만 — true 면 올리기 전에 모든 프레임을 디코드해 본다(공개 영상, `skeleton.video.verify-public`) */
     val verifyDecode: Boolean,
@@ -45,7 +45,7 @@ data class ProbeResult(
 
 data class LadderRung(val name: String, val height: Int, val bandwidth: Long)
 
-/** `complete` 본문 — 차선은 어떤 칸이 있느냐로 안다: [orig] = remux, [compat] = 호환 단, [ladderBuild] = 사다리, [display] = 움직이는 이미지 표시본 */
+/** `complete` 본문 — 차선은 어떤 칸이 있느냐로 안다: [orig] = remux, [compat] = 호환 단, [ladderBuild] = 사다리, [display] = 움직이는 이미지 표시본, [audio] = 소리 전용 판 */
 data class VideoJobResult(
     val orig: ResultFile? = null,
     val poster: ResultFile? = null,
@@ -57,6 +57,8 @@ data class VideoJobResult(
     val rungs: List<LadderRung>? = null,
     /** ANIMATED 차선 - 올린 표시본(`display.mp4` 또는 `display.webp`) */
     val display: ResultFile? = null,
+    /** AUDIO 차선 - 소리 전용 판의 변형 목록(`a-<16>/index.m3u8`) */
+    val audio: ResultFile? = null,
 )
 
 /**

@@ -22,9 +22,9 @@ class VideoMonitorTest {
     }
     private val monitor = VideoMonitor(VideoProperties(enabled = true), store, workers, NoopWaker, alerts, TimeProvider { t0 })
 
-    private fun video(id: String, status: VideoStatus = VideoStatus.QUEUED, updated: Instant = t0, compat: TrackStatus = TrackStatus.NONE, ladder: TrackStatus = TrackStatus.NONE) {
+    private fun video(id: String, status: VideoStatus = VideoStatus.QUEUED, updated: Instant = t0, compat: TrackStatus = TrackStatus.NONE, ladder: TrackStatus = TrackStatus.NONE, audio: TrackStatus = TrackStatus.NONE) {
         store.rows[id] = Video(
-            id = id, ownerAccountId = "a", purpose = "note", visibility = VideoVisibility.PRIVATE, status = status, compatStatus = compat, ladderStatus = ladder,
+            id = id, ownerAccountId = "a", purpose = "note", visibility = VideoVisibility.PRIVATE, status = status, compatStatus = compat, ladderStatus = ladder, audioStatus = audio,
             lastUploadActivityAt = t0, createdAt = updated, updatedAt = updated,
         )
     }
@@ -62,6 +62,26 @@ class VideoMonitorTest {
         monitor.check()
         assertTrue(emitted.any { it.first == VideoAlertKind.VIDEO_FAILED_SURGE })
         assertTrue(emitted.single { it.first == VideoAlertKind.VIDEO_FAILED_SURGE }.second.startsWith("5 video failures"))
+    }
+
+    @Test
+    fun `a sound-only tier waiting over two hours raises VIDEO_AUDIO_STALE and one waiting less does not`() {
+        video("a", VideoStatus.PLAYABLE, updated = t0.minus(Duration.ofHours(1)), audio = TrackStatus.QUEUED)
+        monitor.check()
+        assertTrue(emitted.none { it.first == VideoAlertKind.VIDEO_AUDIO_STALE })
+
+        video("b", VideoStatus.PLAYABLE, updated = t0.minus(Duration.ofHours(3)), audio = TrackStatus.QUEUED)
+        monitor.check()
+        val alert = emitted.single { it.first == VideoAlertKind.VIDEO_AUDIO_STALE }
+        assertTrue(alert.second.startsWith("1 video(s)") && "AUDIO lane" in alert.second, alert.second)
+        assertTrue(emitted.none { it.first == VideoAlertKind.VIDEO_COMPAT_STALE })
+    }
+
+    @Test
+    fun `a failed sound-only tier counts toward the failure surge`() {
+        repeat(5) { video("f$it", VideoStatus.PLAYABLE, updated = t0.minusSeconds(60), audio = TrackStatus.FAILED) }
+        monitor.check()
+        assertTrue(emitted.any { it.first == VideoAlertKind.VIDEO_FAILED_SURGE })
     }
 
     @Test

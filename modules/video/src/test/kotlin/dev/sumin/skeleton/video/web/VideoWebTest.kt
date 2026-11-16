@@ -112,6 +112,7 @@ class VideoWebTest {
             .andExpect(jsonPath("$.values[0].bytes").value(40000000))
             .andExpect(jsonPath("$.values[0].compat").value("NONE"))
             .andExpect(jsonPath("$.values[0].ladder").value("NONE"))
+            .andExpect(jsonPath("$.values[0].audio").value("NONE"))
             .andExpect(jsonPath("$.values[0].progress").doesNotExist())
             .andExpect(jsonPath("$.values[0].failCode").doesNotExist())
             .andExpect(jsonPath("$.values[0].width").doesNotExist())

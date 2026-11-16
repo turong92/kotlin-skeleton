@@ -26,6 +26,7 @@ class VideoMaintenanceTest {
         id = id, ownerAccountId = "acc_a", purpose = "note", visibility = VideoVisibility.PRIVATE, status = status, uploadKey = "videos/u/$id", uploadBytes = 1000,
         origKey = "videos/p/$id/o-aaaaaaaaaaaaaaaa/index.m3u8".takeIf { status == VideoStatus.PLAYABLE }, srcWidth = 1920, srcHeight = 1080,
         compatStatus = if (lane == VideoLane.COMPAT) track else TrackStatus.SKIPPED, ladderStatus = if (lane == VideoLane.LADDER) track else TrackStatus.SKIPPED,
+        audioStatus = if (lane == VideoLane.AUDIO) track else TrackStatus.NONE,
         attempts = attempts, leaseOwner = "w1", leaseUntil = t0.minusSeconds(1), lane = lane, lastUploadActivityAt = t0, createdAt = t0, updatedAt = t0,
     ).also { store.rows[id] = it }
 
@@ -105,6 +106,46 @@ class VideoMaintenanceTest {
         props = VideoProperties(enabled = true)
         assertEquals(1, maintenance().run().laddersQueued)
         assertEquals(TrackStatus.QUEUED, store.rows.getValue("x").ladderStatus)
+    }
+
+    @Test
+    fun `when the audio switch is turned on later, playable videos with sound left at NONE are queued and silent ones are marked skipped`() {
+        fun playableRow(id: String, audioCodec: String?) = leased(id, VideoStatus.PLAYABLE, VideoLane.REMUX, 0)
+            .copy(audioStatus = TrackStatus.NONE, srcAudioCodec = audioCodec, leaseOwner = null, leaseUntil = null, lane = null).also { store.rows[id] = it }
+        playableRow("loud", "aac")
+        playableRow("silent", null)
+        store.rows["queued"] = playableRow("queued", "aac").copy(status = VideoStatus.QUEUED)
+        assertEquals(0, maintenance().run().audioQueued, "off - nothing is queued")
+        assertEquals(TrackStatus.NONE, store.rows.getValue("loud").audioStatus)
+
+        props = VideoProperties(enabled = true, audio = VideoProperties.Audio(enabled = true))
+        assertEquals(1, maintenance().run().audioQueued)
+        assertEquals(TrackStatus.QUEUED, store.rows.getValue("loud").audioStatus)
+        assertEquals(TrackStatus.SKIPPED, store.rows.getValue("silent").audioStatus)
+        assertEquals(TrackStatus.NONE, store.rows.getValue("queued").audioStatus, "a video not yet playable is decided when it becomes playable")
+        assertEquals(0, maintenance().run().audioQueued, "a second sweep finds nothing new")
+    }
+
+    @Test
+    fun `a backfilled sound-only tier asks for a wake when the waker is on`() {
+        props = VideoProperties(enabled = true, audio = VideoProperties.Audio(enabled = true))
+        waker = object : VideoWaker { override val enabled = true; override fun wake() = WakeTicket(null) }
+        store.rows["x"] = leased("x", VideoStatus.PLAYABLE, VideoLane.REMUX, 0).copy(audioStatus = TrackStatus.NONE, srcAudioCodec = "aac", leaseOwner = null, leaseUntil = null, lane = null)
+        maintenance().run()
+        assertTrue(followUps.wakes >= 1)
+    }
+
+    @Test
+    fun `an expired sound-only lease fails only that tier at the third try and requeues before`() {
+        leased("p", VideoStatus.PLAYABLE, VideoLane.AUDIO, attempts = 3, track = TrackStatus.RUNNING)
+        leased("q", VideoStatus.PLAYABLE, VideoLane.AUDIO, attempts = 1, track = TrackStatus.RUNNING)
+
+        maintenance().run()
+
+        assertEquals(TrackStatus.FAILED, store.rows.getValue("p").audioStatus)
+        assertEquals(TrackStatus.QUEUED, store.rows.getValue("q").audioStatus)
+        assertEquals(VideoStatus.PLAYABLE, store.rows.getValue("p").status)
+        assertEquals(listOf(VideoFinalizeEvent.TRACK_FAILED, VideoFinalizeEvent.SWEEP), followUps.events("p"))
     }
 
     @Test

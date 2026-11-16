@@ -19,11 +19,12 @@ import org.springframework.util.unit.DataSize
  *     verify-public: true     # 공개 영상은 일꾼이 올리기 전에 모든 프레임을 디코드해 본다(claim 응답의 verifyDecode)
  *     worker-token-sha256: "" # 로컬 전용 — 이 해시(SHA-256 16진수 64자)의 일꾼을 기동 때 등록한다. stage · prod 에서는 기동 실패
  *     cleanup-delay: 1h       # 원본 단 검증 뒤 이만큼 있다가 올린 원 파일을 지우고 중복 결과 폴더를 쓴다
+ *     audio: { enabled: false } # 소리 전용 판(AUDIO 차선, a-<16>/) — 켜면 소리가 있는 영상마다 만들고, 이미 올라간 영상은 청소가 줄 세운다. 화면 없이 소리만 틀 때 영상 바이트를 안 받는다
  *     worker: { lease-duration: 10m, url-ttl: 6h }
  *     playback:
  *       secret: ""            # 비공개 영상 재생 출입증의 HMAC 비밀 — 켜면 32자 이상 필수(환경변수 <P>_VIDEO_PLAYBACK_SECRET, 선언의 secrets:). 무작위로 충분, 바꾸면 발급된 출입증이 모두 끊긴다
  *       ttl: 4h               # 재생 허가 한 번의 출입증 수명 — 조각 주소도 이 남은 수명으로 서명한다
- *     monitor: { worker-absent: 5m, compat-stale-after: 2h, failure-surge-count: 5, failure-window: 1h }   # 주인 경보 문턱
+ *     monitor: { worker-absent: 5m, compat-stale-after: 2h, audio-stale-after: 2h, failure-surge-count: 5, failure-window: 1h }   # 주인 경보 문턱
  *     http:
  *       enabled: true         # false 면 /api/v1/videos 를 등록하지 않는다
  * ```
@@ -40,12 +41,16 @@ data class VideoProperties(
     val verifyPublic: Boolean = true,
     val workerTokenSha256: String = "",
     val cleanupDelay: Duration = Duration.ofHours(1),
+    val audio: Audio = Audio(),
     val worker: Worker = Worker(),
     val playback: Playback = Playback(),
     val monitor: Monitor = Monitor(),
     val http: Http = Http(),
 ) {
     data class Http(val enabled: Boolean = true)
+
+    /** 소리 전용 판 — 모듈 기본은 꺼짐(앱 yml 이 켠다). 켜면 소리가 있는 영상마다 소리 판 일이 줄을 서고, 설정을 켠 뒤에는 청소가 이미 올라간 영상도 채운다 */
+    data class Audio(val enabled: Boolean = false)
 
     data class Worker(
         /** 한 번 집으면 이만큼 임대 — heartbeat 가 늘린다 */
@@ -72,6 +77,8 @@ data class VideoProperties(
         val workerAbsent: Duration = Duration.ofMinutes(5),
         /** 호환 단이 이만큼 넘게 대기 중이면 `VIDEO_COMPAT_STALE` */
         val compatStaleAfter: Duration = Duration.ofHours(2),
+        /** 소리 판이 이만큼 넘게 대기 중이면 `VIDEO_AUDIO_STALE` */
+        val audioStaleAfter: Duration = Duration.ofHours(2),
         /** [failureWindow] 안에 실패(영상 · 호환 · 사다리)가 이만큼 이상이면 `VIDEO_FAILED_SURGE` */
         val failureSurgeCount: Int = 5,
         val failureWindow: Duration = Duration.ofHours(1),

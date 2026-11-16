@@ -18,7 +18,7 @@ internal const val PLAY_PATH = "/api/v1/videos/play/"
 
 /**
  * 재생 허가 — 화면 부품(`@skeleton/video`)이 읽는 모양. [src] 는 원본 단 목록, [compat] 은 호환 단 목록(준비됐을 때만 — 원본이 이미 호환이면 없다),
- * [hls] 는 사다리 마스터 목록(준비됐을 때만), [big] 은 원본이 호환 조건 밖이라는 뜻이다. 공개 영상은 [expiresAt] 이 없다
+ * [hls] 는 사다리 마스터 목록(준비됐을 때만), [audio] 는 소리 전용 판 목록(준비됐을 때만), [big] 은 원본이 호환 조건 밖이라는 뜻이다. 공개 영상은 [expiresAt] 이 없다
  */
 data class PlaybackGrant(
     val src: String,
@@ -31,6 +31,8 @@ data class PlaybackGrant(
     val durationMs: Long?,
     val big: Boolean,
     val expiresAt: Instant?,
+    /** 소리 전용 판 목록 — 준비됐을 때만. 화면 없이 소리만 틀 때 영상 조각을 받지 않으려고 쓴다 */
+    val audio: String? = null,
 )
 
 /**
@@ -113,15 +115,16 @@ class StorageVideoPlayback(
         val orig = checkNotNull(video.origKey) { "playable video without an original tier" }
         val compat = video.compatKey.takeIf { video.compatStatus == TrackStatus.READY }
         val hls = video.ladderBuild?.takeIf { video.ladderStatus == TrackStatus.READY }?.let { "${keys.folder(video)}h-$it/master.m3u8" }
+        val audio = video.audioKey.takeIf { video.audioStatus == TrackStatus.READY }
         val big = video.compatStatus != TrackStatus.SKIPPED
         return if (video.visibility == VideoVisibility.PUBLIC) {
             val pub = publicArea(publicProps())
-            PlaybackGrant(pub.absoluteUrl(orig), compat?.let(pub::absoluteUrl), hls?.let(pub::absoluteUrl), video.posterKey?.let(pub::absoluteUrl), video.srcCodecString, video.srcWidth, video.srcHeight, video.srcDurationMs, big, null)
+            PlaybackGrant(pub.absoluteUrl(orig), compat?.let(pub::absoluteUrl), hls?.let(pub::absoluteUrl), video.posterKey?.let(pub::absoluteUrl), video.srcCodecString, video.srcWidth, video.srcHeight, video.srcDurationMs, big, null, audio?.let(pub::absoluteUrl))
         } else {
             val token = tokens.issue(video.id, props.playback.ttl)
             fun url(key: String) = "$PLAY_PATH${token.value}/${relative(keys, video, key)}"
             val poster = video.posterKey?.let { storage.presignDownload(PresignedDownloadRequest(ObjectKey(it), expiresIn = props.playback.ttl)).url.toString() }
-            PlaybackGrant(url(orig), compat?.let(::url), hls?.let(::url), poster, video.srcCodecString, video.srcWidth, video.srcHeight, video.srcDurationMs, big, token.expiresAt)
+            PlaybackGrant(url(orig), compat?.let(::url), hls?.let(::url), poster, video.srcCodecString, video.srcWidth, video.srcHeight, video.srcDurationMs, big, token.expiresAt, audio?.let(::url))
         }
     }
 }

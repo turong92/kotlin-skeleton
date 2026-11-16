@@ -39,7 +39,7 @@ interface VideoStore {
 
     /**
      * [lane] 의 다음 일 한 건을 집는다 — 두 일꾼이 같은 줄을 못 갖는다(`FOR UPDATE SKIP LOCKED`). 집으면 임대 · 시도 +1 · 차선을 적는다.
-     * 호환 · 사다리는 영상이 `PLAYABLE` 이고 다른 차선이 임대를 쥐고 있지 않을 때만. 사다리는 [ladderBuild] 를 폴더 id 로 적는다. 없으면 null
+     * 소리 · 호환 · 사다리는 영상이 `PLAYABLE` 이고 다른 차선이 임대를 쥐고 있지 않을 때만. 사다리는 [ladderBuild] 를 폴더 id 로 적는다. 없으면 null
      */
     fun claimNext(lane: VideoLane, owner: String, leaseUntil: Instant, ladderBuild: String, at: Instant): Video?
 
@@ -51,6 +51,9 @@ interface VideoStore {
 
     /** 호환 단 `RUNNING` → `READY` — 임대 소유자만, 한 번만 */
     fun markCompatReady(id: String, owner: String, key: String, bytes: Long, at: Instant): Boolean
+
+    /** 소리 판 `RUNNING` → `READY` — 임대 소유자만, 한 번만 */
+    fun markAudioReady(id: String, owner: String, key: String, bytes: Long, at: Instant): Boolean
 
     /** 사다리 `RUNNING` → `READY` — [rungsJson] 은 판 목록 */
     fun markLadderReady(id: String, owner: String, build: String, bytes: Long, rungsJson: String, at: Instant): Boolean
@@ -73,11 +76,20 @@ interface VideoStore {
     /** 사다리 `NONE`(스위치가 꺼진 동안 만들어진 영상)을 `QUEUED` 로 — 짧은 변이 [floor] 보다 큰 재생 가능 영상만. 줄 세운 수 */
     fun queueDeferredLadders(floor: Int, at: Instant): Int
 
+    /**
+     * 소리 판 `NONE`(스위치가 꺼진 동안 만들어진 영상)을 정리한다 — 소리가 있는 재생 가능 영상은 `QUEUED`, 소리가 없는 것은 `SKIPPED`.
+     * 줄 세운 수(`SKIPPED` 로 닫은 것은 안 센다)
+     */
+    fun queueDeferredAudio(at: Instant): Int
+
     /** remux 를 기다리는(`QUEUED`) 영상 수 — 일꾼 부재 경보가 본다 */
     fun countQueuedRemux(): Int
 
-    /** 지금 일꾼이 집을 수 있는 호환 · 사다리 대기 수 — 깨우기가 이 수가 0 이면 부르지 않는다 */
+    /** 지금 일꾼이 집을 수 있는 소리 · 호환 · 사다리 대기 수 — 깨우기가 이 수가 0 이면 부르지 않는다 */
     fun countClaimableTracks(): Int
+
+    /** 소리 판이 [before] 이전부터 대기 중인 영상 수 */
+    fun countAudioQueuedBefore(before: Instant): Int
 
     /** 호환 단이 [before] 이전부터 대기 중인 영상 수 */
     fun countCompatQueuedBefore(before: Instant): Int
@@ -117,6 +129,8 @@ data class PlayableResult(
     val posterHeight: Int?,
     val compat: TrackStatus,
     val ladder: TrackStatus,
+    /** 소리 판 — 소리가 없으면 `SKIPPED`, 설정이 꺼졌으면 `NONE`, 켜졌으면 `QUEUED` */
+    val audio: TrackStatus = TrackStatus.NONE,
 )
 
 /** 일꾼 토큰 저장 포트 (표 `video_workers`) — 토큰은 SHA-256 16진수만 든다. `video.enabled` 이면 구현이 있어야 기동한다 */

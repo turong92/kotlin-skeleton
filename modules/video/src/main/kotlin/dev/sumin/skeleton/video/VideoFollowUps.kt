@@ -14,13 +14,14 @@ import org.slf4j.LoggerFactory
 enum class VideoFinalizeEvent {
     /** remux 가 끝나 원본 단이 올라갔다 */
     PLAYABLE,
+    AUDIO_READY,
     COMPAT_READY,
     LADDER_READY,
 
     /** remux 가 끝내 실패했다 */
     FAILED,
 
-    /** 호환 · 사다리가 끝내 실패했다 — 영상은 계속 재생된다 */
+    /** 소리 · 호환 · 사다리가 끝내 실패했다 — 영상은 계속 재생된다 */
     TRACK_FAILED,
 
     /** 원본 단 검증 [VideoProperties.cleanupDelay] 뒤 — 올린 원 파일을 지운다 */
@@ -44,7 +45,7 @@ interface VideoFollowUps {
     /** `video.finalize` — [delay] 뒤에 처리 */
     fun finalize(videoId: String, event: VideoFinalizeEvent, delay: Duration = Duration.ZERO)
 
-    /** `video.wake` — 호환 · 사다리를 집을 일꾼을 깨운다([VideoWaker.enabled] 일 때만 부른다) */
+    /** `video.wake` — 소리 · 호환 · 사다리를 집을 일꾼을 깨운다([VideoWaker.enabled] 일 때만 부른다) */
     fun wake()
 }
 
@@ -61,7 +62,7 @@ interface VideoEvents {
     /** 원본 단이 올라가 재생할 수 있게 됐다 */
     fun onPlayable(video: Video) {}
 
-    /** 호환 단 · 사다리가 준비됐다 */
+    /** 소리 판 · 호환 단 · 사다리가 준비됐다 */
     fun onTrackReady(video: Video, lane: VideoLane) {}
 
     /** 변환이 끝내 실패했다([Video.failCode]) */
@@ -82,7 +83,7 @@ data class WakeTicket(val execution: String?)
 class VideoWakeException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 
 /**
- * 호환 · 사다리 일꾼을 **깨우는** 이음매 — 0 으로 줄어드는 실행 환경(Cloud Run 등)만 필요하다. 상주하는 일꾼은 스스로 집으니 기본 [NoopWaker].
+ * 소리 · 호환 · 사다리 일꾼을 **깨우는** 이음매 — 0 으로 줄어드는 실행 환경(Cloud Run 등)만 필요하다. 상주하는 일꾼은 스스로 집으니 기본 [NoopWaker].
  * 깨우기가 실패해도 자동으로 다른 곳으로 넘기지 않는다 — 일은 큐에 남는다
  */
 interface VideoWaker {
@@ -98,7 +99,7 @@ object NoopWaker : VideoWaker {
     override fun wake(): WakeTicket = WakeTicket(null)
 }
 
-/** `video.wake` 처리 — 집을 호환 · 사다리 일이 있을 때만 깨운다(헛 깨우기는 돈이다). 상한 · 최소 간격은 깨우기 구현의 몫 */
+/** `video.wake` 처리 — 집을 소리 · 호환 · 사다리 일이 있을 때만 깨운다(헛 깨우기는 돈이다). 상한 · 최소 간격은 깨우기 구현의 몫 */
 class VideoWakeRunner(private val waker: VideoWaker, private val store: VideoStore) {
     fun run() {
         if (!waker.enabled || store.countClaimableTracks() == 0) return
@@ -129,6 +130,7 @@ class VideoFinalizer(
         when (event) {
             VideoFinalizeEvent.DELETED -> if (video.status == VideoStatus.DELETED) cleanupDeleted(video)
             VideoFinalizeEvent.PLAYABLE -> if (video.status == VideoStatus.PLAYABLE) events.onPlayable(video)
+            VideoFinalizeEvent.AUDIO_READY -> if (video.status == VideoStatus.PLAYABLE) events.onTrackReady(video, VideoLane.AUDIO)
             VideoFinalizeEvent.COMPAT_READY -> if (video.status == VideoStatus.PLAYABLE) events.onTrackReady(video, VideoLane.COMPAT)
             VideoFinalizeEvent.LADDER_READY -> if (video.status == VideoStatus.PLAYABLE) events.onTrackReady(video, VideoLane.LADDER)
             VideoFinalizeEvent.FAILED -> if (video.status == VideoStatus.FAILED) events.onFailed(video)
@@ -174,13 +176,13 @@ class VideoFinalizer(
         store.clearUploadKey(video.id, time.now())
     }
 
-    /** 이긴 쪽 결과(원본 단 · 포스터 · 호환 단 · 지금 사다리 폴더)만 남긴다. 일꾼이 임대 중이면 진행 중인 결과일 수 있어 건드리지 않는다 — 그 일이 끝나면 다음 쓸기가 따라붙는다 */
+    /** 이긴 쪽 결과(원본 단 · 포스터 · 호환 단 · 소리 판 · 지금 사다리 폴더)만 남긴다. 일꾼이 임대 중이면 진행 중인 결과일 수 있어 건드리지 않는다 — 그 일이 끝나면 다음 쓸기가 따라붙는다 */
     private fun sweep(video: Video) {
         if (video.leaseOwner != null) return
         val folder = keys.folder(video)
         val playable = video.status == VideoStatus.PLAYABLE
-        val keep = if (playable) setOfNotNull(video.origKey, video.posterKey, video.compatKey) else emptySet()
-        val keepFolders = if (playable) listOfNotNull(playlistFolder(video.origKey), playlistFolder(video.compatKey)) else emptyList()
+        val keep = if (playable) setOfNotNull(video.origKey, video.posterKey, video.compatKey, video.audioKey) else emptySet()
+        val keepFolders = if (playable) listOfNotNull(playlistFolder(video.origKey), playlistFolder(video.compatKey), playlistFolder(video.audioKey)) else emptyList()
         val ladderFolder = video.takeIf { playable && it.ladderStatus == TrackStatus.READY }?.ladderBuild?.let { "${folder}h-$it/" }
         val doomed = mutableListOf<ObjectKey>()
         var token: String? = null

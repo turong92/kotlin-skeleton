@@ -28,6 +28,21 @@ class VideoResultVerifierTest {
     }
 
     @Test
+    fun `소리 판 차선은 a- 만 - 소리 판 목록만 결과 이름으로 보고한다`() {
+        listOf("index.m3u8", "init.mp4", "s00000.m4s", "s00123.m4s").forEach { assertTrue(VideoResultVerifier.allowedName(VideoLane.AUDIO, null, "a-$hash/$it"), it) }
+        assertFalse(VideoResultVerifier.allowedName(VideoLane.AUDIO, null, "o-$hash/index.m3u8"), "원본판을 덮어쓰지 못한다")
+        assertFalse(VideoResultVerifier.allowedName(VideoLane.AUDIO, null, "c-$hash/index.m3u8"), "호환판은 호환판 차선 몫")
+        assertFalse(VideoResultVerifier.allowedName(VideoLane.AUDIO, null, "a-$hash/video.mp4"))
+        assertFalse(VideoResultVerifier.allowedName(VideoLane.AUDIO, null, "a-$hash.mp4"))
+        listOf(VideoLane.REMUX, VideoLane.COMPAT, VideoLane.LADDER, VideoLane.ANIMATED).forEach {
+            assertFalse(VideoResultVerifier.allowedName(it, build, "a-$hash/index.m3u8"), "$it 이 받으면 안 되는 이름")
+        }
+        assertTrue(VideoResultVerifier.isAudioPlaylist("a-$hash/index.m3u8"))
+        assertFalse(VideoResultVerifier.isAudioPlaylist("a-$hash/init.mp4"))
+        assertFalse(VideoResultVerifier.isAudioPlaylist("c-$hash/index.m3u8"))
+    }
+
+    @Test
     fun `사다리 차선은 자기 빌드 폴더 한 겹 아래만`() {
         assertTrue(VideoResultVerifier.allowedName(VideoLane.LADDER, build, "h-$build/master.m3u8"))
         assertTrue(VideoResultVerifier.allowedName(VideoLane.LADDER, build, "h-$build/v720_000.m4s"))

@@ -92,6 +92,7 @@ class VideoJobs(
         when {
             result.orig != null -> completeRemux(workerId, video, result)
             result.compat != null -> completeCompat(workerId, video, result.compat)
+            result.audio != null -> completeAudio(workerId, video, result.audio)
             else -> completeLadder(workerId, video, result)
         }
     }
@@ -144,20 +145,41 @@ class VideoJobs(
             props.ladder -> TrackStatus.QUEUED
             else -> TrackStatus.NONE
         }
+        // 소리가 없는 영상은 설정과 상관없이 지금 알 수 있으니 SKIPPED — 켜진 뒤 되채울 때 다시 보지 않게
+        val audio = when {
+            probe.audioCodec == null -> TrackStatus.SKIPPED
+            props.audio.enabled -> TrackStatus.QUEUED
+            else -> TrackStatus.NONE
+        }
         val playable = PlayableResult(
             origKey = "$folder${orig.name}", origBytes = origSize, origSha256 = sha,
             srcContainer = probe.container?.take(64), srcCodec = probe.codec?.substringBefore('.')?.take(32), srcCodecString = probe.codec?.take(64),
             srcWidth = probe.width, srcHeight = probe.height, srcRotation = probe.rotation, srcDurationMs = probe.durationMs, srcFps = probe.fps,
             srcBitrate = probe.bitrate, srcAudioCodec = probe.audioCodec?.take(32),
             posterKey = poster?.let { "$folder${it.name}" }, posterWidth = poster?.width, posterHeight = poster?.height,
-            compat = compat, ladder = ladder,
+            compat = compat, ladder = ladder, audio = audio,
         )
         tx.run {
             if (!store.markPlayable(video.id, workerId, playable, time.now())) return@run   // 동시에 온 다른 호출이 이겼다
             followUps.finalize(video.id, VideoFinalizeEvent.PLAYABLE)
             if (poster != null && posters?.enabled == true) followUps.finalize(video.id, VideoFinalizeEvent.POSTER)
             followUps.finalize(video.id, VideoFinalizeEvent.UPLOAD_CLEANUP, props.cleanupDelay)
-            if (compat == TrackStatus.QUEUED || ladder == TrackStatus.QUEUED) requestWake()
+            if (compat == TrackStatus.QUEUED || ladder == TrackStatus.QUEUED || audio == TrackStatus.QUEUED) requestWake()
+        }
+    }
+
+    private fun completeAudio(workerId: String, video: Video, file: ResultFile) {
+        if (video.status != VideoStatus.PLAYABLE) throw VideoLeaseLostException()
+        when (video.audioStatus) {
+            TrackStatus.READY -> return
+            TrackStatus.RUNNING -> if (video.leaseOwner != workerId) throw VideoLeaseLostException()
+            else -> throw VideoLeaseLostException()
+        }
+        if (!VideoResultVerifier.isAudioPlaylist(file.name)) throw VideoPathNotAllowedException()
+        val folder = keys.folder(video)
+        val size = requireFolder("$folder${VideoResultVerifier.folderOf(file.name)}", file.bytes)
+        tx.run {
+            if (store.markAudioReady(video.id, workerId, "$folder${file.name}", size, time.now())) trackDone(video.id, VideoFinalizeEvent.AUDIO_READY)
         }
     }
 
@@ -222,6 +244,7 @@ class VideoJobs(
             expectedOutputBytes = when (lane) {
                 VideoLane.ANIMATED -> error("display jobs are built by VideoDisplayJobs")
                 VideoLane.REMUX -> video.uploadBytes
+                VideoLane.AUDIO -> (minutes * AUDIO_BYTES_PER_MINUTE).toLong()
                 VideoLane.COMPAT -> (minutes * COMPAT_BYTES_PER_MINUTE).toLong()
                 VideoLane.LADDER -> (minutes * LADDER_BYTES_PER_MINUTE).toLong()
             },
@@ -243,6 +266,7 @@ class VideoJobs(
     private fun resultLane(result: VideoJobResult): VideoLane = when {
         result.orig != null -> VideoLane.REMUX
         result.compat != null -> VideoLane.COMPAT
+        result.audio != null -> VideoLane.AUDIO
         result.ladderBuild != null -> VideoLane.LADDER
         result.display != null -> VideoLane.ANIMATED
         else -> throw VideoWorkerInvalidException("result")
@@ -313,6 +337,8 @@ class VideoJobs(
 
         /** 짧은 변이 이 값 이하면 사다리를 안 만든다 — 아랫단이 원본보다 작아야 한다 */
         const val LADDER_FLOOR = 480
+        /** 소리 판은 원본 단의 소리를 그대로 복사한다 — 128kbps 면 분당 1MB 안팎, 여유를 두어 2MB */
+        const val AUDIO_BYTES_PER_MINUTE = 2L * 1024 * 1024
         const val COMPAT_BYTES_PER_MINUTE = 21L * 1024 * 1024
         const val LADDER_BYTES_PER_MINUTE = 32L * 1024 * 1024
     }

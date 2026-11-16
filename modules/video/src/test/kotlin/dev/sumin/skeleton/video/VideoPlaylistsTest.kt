@@ -123,6 +123,30 @@ class VideoPlaylistsTest {
     }
 
     @Test
+    fun `a ready audio playlist is served and its init and segments are signed inside the audio folder only`() {
+        store.rows["aud"] = PlaybackFixtures.video("aud", audio = TrackStatus.READY)
+        val audioFolder = "videos/p/aud/${PlaybackFixtures.AUDIO}/"
+        storage.texts["${audioFolder}index.m3u8"] = origPlaylist + "\n../$ORIG/s00009.m4s\n"
+
+        val out = playlists.playlist(token(id = "aud"), "${PlaybackFixtures.AUDIO}/index.m3u8")
+
+        assertEquals(listOf("${audioFolder}init.mp4", "${audioFolder}s00000.m4s", "${audioFolder}s00001.m4s"), signedKeys())
+        assertTrue("../$ORIG/s00009.m4s" in out.lines(), "a line out of the audio folder stays as written")
+    }
+
+    @Test
+    fun `an audio playlist that is not ready or does not belong to the video answers not found and reads nothing`() {
+        store.rows["queued"] = PlaybackFixtures.video("queued", audio = TrackStatus.QUEUED)
+        store.rows["aud"] = PlaybackFixtures.video("aud", audio = TrackStatus.READY)
+
+        assertFailsWith<VideoNotFoundException> { playlists.playlist(token(id = "queued"), "${PlaybackFixtures.AUDIO}/index.m3u8") }
+        assertFailsWith<VideoNotFoundException> { playlists.playlist(token(id = "aud"), "a-ffffffffffffffff/index.m3u8") }
+        assertFailsWith<VideoNotFoundException> { playlists.playlist(token(id = "aud"), "${PlaybackFixtures.AUDIO}/s00000.m4s") }
+
+        assertTrue(storage.signedDownloads.isEmpty() && storage.reads.isEmpty())
+    }
+
+    @Test
     fun `a forged, expired or foreign token answers not found and presigns and reads nothing`() {
         storage.texts["$folder$ORIG/index.m3u8"] = origPlaylist
         val good = token()

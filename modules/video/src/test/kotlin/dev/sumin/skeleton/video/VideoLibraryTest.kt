@@ -80,6 +80,21 @@ class VideoLibraryTest {
     }
 
     @Test
+    fun `the audio playlist is in the grant only when the sound-only tier is ready - on a private video behind the token, on a public one as the plain address`() {
+        put(PlaybackFixtures.video("ready", audio = TrackStatus.READY))
+        put(PlaybackFixtures.video("pub", visibility = VideoVisibility.PUBLIC, audio = TrackStatus.READY))
+        put(PlaybackFixtures.video("queued", audio = TrackStatus.QUEUED))
+        put(PlaybackFixtures.video("skipped", audio = TrackStatus.SKIPPED))
+        put(PlaybackFixtures.video("none"))
+
+        val grant = library.playback("acc_a", "ready")
+        val token = grant.src.removePrefix("/api/v1/videos/play/").substringBefore('/')
+        assertEquals("/api/v1/videos/play/$token/${PlaybackFixtures.AUDIO}/index.m3u8", grant.audio)
+        assertEquals("https://cdn.example.com/public/v/pub/${PlaybackFixtures.AUDIO}/index.m3u8", library.playback(null, "pub").audio)
+        listOf("queued", "skipped", "none").forEach { assertNull(library.playback("acc_a", it).audio, it) }
+    }
+
+    @Test
     fun `someone else's private video, a deleted one and an unknown id are all not found - and nothing is signed`() {
         put(PlaybackFixtures.video())
         put(PlaybackFixtures.video("gone", status = VideoStatus.DELETED))

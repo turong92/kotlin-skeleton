@@ -39,10 +39,11 @@ class VideoPlaylists(
         }
     }
 
-    /** 이 영상이 가진 목록뿐 — 원본 단 · 호환 단은 기록된 키 그대로, 사다리는 준비됐을 때 그 빌드 폴더의 `.m3u8` */
+    /** 이 영상이 가진 목록뿐 — 원본 단 · 호환 단 · 소리 판은 기록된 키 그대로(호환 · 소리는 준비됐을 때), 사다리는 준비됐을 때 그 빌드 폴더의 `.m3u8` */
     private fun isOwnPlaylist(video: Video, name: String): Boolean {
         val key = keys.folder(video) + name
         if (key == video.origKey || (key == video.compatKey && video.compatStatus == TrackStatus.READY)) return true
+        if (key == video.audioKey && video.audioStatus == TrackStatus.READY) return true
         val build = video.ladderBuild?.takeIf { video.ladderStatus == TrackStatus.READY } ?: return false
         return name.endsWith(".m3u8") && VideoResultVerifier.allowedName(VideoLane.LADDER, build, name)
     }
@@ -50,7 +51,7 @@ class VideoPlaylists(
     /** 조각 폴더 안에서 일꾼이 올릴 수 있는 이름과 같은 모양인가 */
     private fun allowed(video: Video, candidate: String): Boolean =
         VideoResultVerifier.allowedName(VideoLane.REMUX, null, candidate) || VideoResultVerifier.allowedName(VideoLane.COMPAT, null, candidate) ||
-            VideoResultVerifier.allowedName(VideoLane.LADDER, video.ladderBuild, candidate)
+            VideoResultVerifier.allowedName(VideoLane.AUDIO, null, candidate) || VideoResultVerifier.allowedName(VideoLane.LADDER, video.ladderBuild, candidate)
 
     private companion object {
         const val MAX_PLAYLIST_BYTES = 1024 * 1024

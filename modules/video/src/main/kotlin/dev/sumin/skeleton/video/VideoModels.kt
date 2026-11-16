@@ -31,14 +31,14 @@ enum class VideoStatus {
 
 enum class VideoEvent { COMPLETE, VERIFIED, CLAIM, REMUX_DONE, LEASE_EXPIRED, FAIL, DELETE }
 
-/** 호환 · 사다리 트랙 상태 — 실패해도 영상은 계속 재생된다 */
+/** 소리 · 호환 · 사다리 트랙 상태 — 실패해도 영상은 계속 재생된다 */
 enum class TrackStatus { NONE, SKIPPED, QUEUED, RUNNING, READY, FAILED }
 
 /**
  * 일꾼이 집는 일의 종류. [ANIMATED] 는 영상 줄이 아니라 이미지 모듈의 움직이는 GIF · WebP 표시본 변환이다(`video` 와 `storage-image` 가 둘 다 켜졌을 때만 일이 생긴다) -
  * 영상 줄([Video])의 차선이 아니므로 [Video.lane] 에는 오지 않는다
  */
-enum class VideoLane { REMUX, COMPAT, LADDER, ANIMATED }
+enum class VideoLane { REMUX, AUDIO, COMPAT, LADDER, ANIMATED }
 
 /** 영상 한 줄 — 표 `videos` 의 모양 그대로. 올리기 흐름은 앞쪽 칸만 쓰고, 나머지는 일꾼 API 가 채운다 */
 data class Video(
@@ -72,6 +72,10 @@ data class Video(
     val ladderBuild: String? = null,
     val ladderBytes: Long? = null,
     val ladderRungs: String? = null,
+    /** 소리 전용 판(`a-<16>/index.m3u8`) — 영상 없이 소리만 들을 때 받는 판 */
+    val audioStatus: TrackStatus = TrackStatus.NONE,
+    val audioKey: String? = null,
+    val audioBytes: Long? = null,
     val posterKey: String? = null,
     val posterWidth: Int? = null,
     val posterHeight: Int? = null,

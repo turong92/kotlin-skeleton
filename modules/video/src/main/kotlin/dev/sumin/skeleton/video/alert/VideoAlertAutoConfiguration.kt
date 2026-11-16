@@ -27,6 +27,7 @@ enum class VideoAlertKind(override val severity: AlertSeverity, override val tit
     VIDEO_WAKE_FAILED(AlertSeverity.ERROR, "Waking the video worker keeps failing", Duration.ofMinutes(30)),
     VIDEO_FAILED_SURGE(AlertSeverity.ERROR, "Video processing failures are piling up", Duration.ofMinutes(30)),
     VIDEO_COMPAT_STALE(AlertSeverity.WARN, "Compatible video tiers have waited a long time", Duration.ofHours(6)),
+    VIDEO_AUDIO_STALE(AlertSeverity.WARN, "Sound-only video tiers have waited a long time", Duration.ofHours(6)),
 }
 
 /**
@@ -47,6 +48,7 @@ class VideoMonitor(
         step("queue") { queueStale() }
         step("failures") { failedSurge() }
         step("compat") { compatStale() }
+        step("audio") { audioStale() }
     }
 
     /** remux 일꾼을 [VideoProperties.Monitor.workerAbsent] 넘게 못 봤는데 대기가 있다 */
@@ -73,6 +75,14 @@ class VideoMonitor(
         if (stale == 0) return
         val hint = if (waker.enabled) "check that the waker runs" else "no waker is configured, so a resident worker with the COMPAT lane must be running"
         alerts.emit(VideoAlertKind.VIDEO_COMPAT_STALE, detail = "$stale video(s) have waited for a compatible tier for over ${cfg.compatStaleAfter.toHours()} hours - $hint")
+    }
+
+    private fun audioStale() {
+        val cfg = props.monitor
+        val stale = store.countAudioQueuedBefore(time.now().minus(cfg.audioStaleAfter))
+        if (stale == 0) return
+        val hint = if (waker.enabled) "check that the waker runs" else "no waker is configured, so a resident worker with the AUDIO lane must be running"
+        alerts.emit(VideoAlertKind.VIDEO_AUDIO_STALE, detail = "$stale video(s) have waited for a sound-only tier for over ${cfg.audioStaleAfter.toHours()} hours - $hint")
     }
 
     private fun step(what: String, block: () -> Unit) {
