@@ -108,8 +108,9 @@ class AnimatedConversion(
             }
         }
         val exit = process.exitValue()
-        // 신호로 죽은 것(OOM kill 137 · SIGTERM 143)은 파일 탓이 아니다 - 던져서 큐가 다시 한다
-        if (exit > 128) throw FfmpegFailedException("ffmpeg was killed by a signal (exit $exit)")
+        // 신호로 죽은 것(OOM kill 137 · SIGTERM 143)은 파일 탓이 아니다 - 던져서 큐가 다시 한다.
+        // 129~255 의 다른 값은 ffmpeg 자기 오류(AVERROR 하위 8비트 - 열기 실패 183 등)라 파일 탓으로 본다
+        if (exit in KILLED_BY_SIGNAL) throw FfmpegFailedException("ffmpeg was killed by a signal (exit $exit)")
         return if (exit == 0) null else "exit $exit ${tail(errors.toFile())}"
     }
 
@@ -123,5 +124,6 @@ class AnimatedConversion(
     private companion object {
         const val HEAD_BYTES = 12L
         val RESULTS = listOf(AnimatedPlan.MP4 to "mp4", AnimatedPlan.WEBP to "webp")
+        val KILLED_BY_SIGNAL = setOf(137, 143)
     }
 }
