@@ -75,6 +75,7 @@ class Runner(
             checkSpace(job)
             when (job.lane) {
                 "REMUX" -> remux(job, dir, cancel, progress)
+                "AUDIO" -> audio(job, dir, cancel, progress)
                 "COMPAT" -> compat(job, dir, cancel, progress)
                 "LADDER" -> ladder(job, dir, cancel, progress)
                 "ANIMATED" -> animated(job, dir, cancel, progress)
@@ -152,6 +153,27 @@ class Runner(
                 compatible = result.compatible,
             ),
         )
+    }
+
+    /** 원본 단 → 소리 판(영상 없는 AAC fMP4 HLS 폴더 `a-<해시>/`). 소리 트랙을 복사만 하니 CPU 를 거의 안 쓴다 */
+    private fun audio(job: Job, dir: Path, cancel: AtomicBoolean, progress: Progress) {
+        val src = transfer.resolve(job.inputUrl)
+        val info = tools.probeRemoteHls(src.url, src.ffmpegHeaders)
+        // 소리가 없는 영상은 서버가 원본 단 완료 때 SKIPPED 로 닫는다 — 여기까지 왔으면 다시 해도 같다
+        if (!info.hasAudio) throw JobFailure(VideoFail.PROCESSING_FAILED, "원본 단에 소리 트랙이 없다")
+        progress.raise(3)
+        val out = Files.createDirectories(dir.resolve("a"))
+        tools.run(AudioPlan.args(src.url, src.ffmpegHeaders), out, cancel, progress.band(3, 90, info.durationMs))
+        val files = hlsFiles(out)
+        val playlistText = Files.readString(out.resolve(HlsNames.PLAYLIST))
+        ResultCheck.hlsPlaylist(playlistText, info.durationMs, files.map { it.fileName.toString() }.toSet())?.let { throw JobFailure(VideoFail.PROCESSING_FAILED, "소리 판: $it", retryable = true) }
+        val made = tools.probeHls(out.resolve(HlsNames.PLAYLIST).toString())
+        ResultCheck.audio(info, made)?.let { throw JobFailure(VideoFail.PROCESSING_FAILED, it, retryable = true) }
+        val sha = Transfer.sha256(files)
+        val folder = "a-${sha.take(16)}"
+        progress.raise(93)
+        upload(job, folderUploads(folder, files))
+        api.complete(job.jobId, CompleteBody(config.workerId, audio = ResultFile("$folder/${HlsNames.PLAYLIST}", files.sumOf { it.fileSize() }, sha)))
     }
 
     /** 원본 단 → 호환 단(H.264 720p fMP4 HLS 폴더 `c-<해시>/`). 공개된 원본 단 주소를 읽는다 — 내려받을 디스크가 필요 없다 */

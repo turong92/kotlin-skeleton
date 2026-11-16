@@ -56,7 +56,7 @@ private fun inputArgs(input: String, headers: String?, format: String = "mov"): 
     add("-i"); add(input)
 }
 
-/** 조각 폴더 파일 이름 — 원본 단(`o-<해시>/`) · 호환 단(`c-<해시>/`)이 같은 모양이고 서버 허용 패턴(`VideoResultVerifier`)과 같다 */
+/** 조각 폴더 파일 이름 — 원본 단(`o-<해시>/`) · 호환 단(`c-<해시>/`) · 소리 판(`a-<해시>/`)이 같은 모양이고 서버 허용 패턴(`VideoResultVerifier`)과 같다 */
 object HlsNames {
     const val PLAYLIST = "index.m3u8"
     const val INIT = "init.mp4"
@@ -95,6 +95,25 @@ object RemuxPlan {
         if (info.needsHvc1Tag) { add("-tag:v"); add("hvc1") }
         add("-fflags"); add("+bitexact")
         add("-flags:v"); add("+bitexact")
+        add("-flags:a"); add("+bitexact")
+        addAll(hlsOutput())
+    }
+}
+
+/**
+ * 원본 단 → 소리 판: 영상 없이 소리 트랙만 **복사**(원본 단의 소리는 이미 AAC 라 재인코딩이 없다)해 6초 fMP4 HLS 한 판(`a-<해시>/`)으로 낸다.
+ * 출력마다 원본 메타데이터를 뗀다. 작업 폴더에서 돌린다(상대 이름)
+ */
+object AudioPlan {
+    fun args(input: String, headers: String?): List<String> = buildList {
+        add("ffmpeg")
+        addAll(inputArgs(input, headers, "hls"))
+        add("-map"); add("0:a:0")
+        add("-vn")
+        add("-map_metadata"); add("-1")
+        add("-map_chapters"); add("-1")
+        add("-c:a"); add("copy")
+        add("-fflags"); add("+bitexact")
         add("-flags:a"); add("+bitexact")
         addAll(hlsOutput())
     }

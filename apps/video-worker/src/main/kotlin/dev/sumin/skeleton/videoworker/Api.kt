@@ -61,6 +61,8 @@ data class CompleteBody(
     val rungs: List<LadderRungResult>? = null,
     /** ANIMATED 차선 - `display.mp4` 또는 `display.webp` */
     val display: ResultFile? = null,
+    /** AUDIO 차선 - 소리 판의 변형 목록(`a-<해시>/index.m3u8`) */
+    val audio: ResultFile? = null,
 )
 
 /** 임대를 잃었다(409) — 하던 일을 멈춘다 */

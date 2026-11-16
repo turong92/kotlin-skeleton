@@ -54,4 +54,13 @@ class ApiContractTest {
             assertEquals(setOf("name", "bytes", "sha256"), body["compat"].propertyNames().toSet())
         }
     }
+
+    @Test
+    fun `소리 판 complete 는 audio 칸 하나만 싣는다`() {
+        FakeVideoServer().use { server ->
+            api(server).complete("j1", CompleteBody("w-1", audio = ResultFile("a-0123456789abcdef/index.m3u8", 5, "ab")))
+            val body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(server.completes["j1"])
+            assertEquals(setOf("workerId", "audio"), body.propertyNames().toSet())
+        }
+    }
 }

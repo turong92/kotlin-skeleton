@@ -29,6 +29,15 @@ object ResultCheck {
         return null
     }
 
+    /** 소리 판(영상 없음 · 소리 트랙 하나 · aac) 검사. 어긋나면 이유, 맞으면 null */
+    fun audio(source: MediaInfo, made: MediaInfo): String? {
+        if (made.videoStreams != 0) return "소리 판에 영상 트랙이 ${made.videoStreams}개 들어 있다"
+        if (made.audioStreams != 1) return "소리 판의 소리 트랙이 ${made.audioStreams}개다"
+        if (made.audioCodec != "aac") return "소리 판 코덱이 ${made.audioCodec} 이다"
+        if (durationOff(source, made)) return "소리 판 길이가 다르다(${made.durationMs}ms ≠ 원본 ${source.durationMs}ms)"
+        return null
+    }
+
     /** 사다리 한 판(변형 목록을 ffprobe 로 읽은 결과) 검사 */
     fun ladderRung(source: MediaInfo, rung: Rung, made: MediaInfo): String? {
         tracks(source, made)?.let { return "사다리 ${rung.height}: $it" }

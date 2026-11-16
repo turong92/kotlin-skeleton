@@ -359,6 +359,48 @@ class FfmpegIntegrationTest {
     }
 
     @Test
+    fun `소리 판 차선 — 소리 있는 원본 단을 주소로 읽어 영상 없이 aac 한 트랙 6초 HLS 한 판을 만든다`() {
+        val (folder, url) = servedOrig("job0000060", Synth.h264(dir, "snd.mp4", sec = 14))
+        server.enqueue(server.job("job0000061", "AUDIO", url, 1, mapOf("origFolder" to folder)))
+        runner.runUntilIdle()
+        val done = complete("job0000061")
+        val name = done["audio"]["name"].asString()
+        assertTrue(Regex("a-[0-9a-f]{16}/index\\.m3u8").matches(name), name)
+        assertNull(done["orig"], "소리 판 결과는 audio 칸 하나다")
+        val audioFolder = name.substringBefore('/')
+        val names = storedNames("job0000061", audioFolder)
+        assertTrue(names.containsAll(listOf("index.m3u8", "init.mp4", "s00000.m4s")), names.toString())
+        assertTrue(names.all { Regex("index\\.m3u8|init\\.mp4|s\\d{5}\\.m4s").matches(it) }, "서버 허용 이름만: $names")
+        assertTrue(names.count { it.endsWith(".m4s") } >= 2, "14초는 6초 조각 셋 안팎: $names")
+        assertEquals(done["audio"]["bytes"].asLong(), names.sumOf { server.stored["/store/job0000061/$audioFolder/$it"]!!.size.toLong() }, "bytes 는 폴더 합")
+        assertEquals("public, max-age=31536000, immutable", server.storedHeaders["/store/job0000061/$audioFolder/index.m3u8"]!!["cache-control"])
+        val made = probeFolder(materialize("job0000061", audioFolder))
+        assertEquals(0, made.videoStreams, "영상 트랙이 없다")
+        assertEquals(1, made.audioStreams)
+        assertEquals("aac", made.audioCodec)
+        assertTrue(Math.abs(made.durationMs - 14_000) <= 500, made.durationMs.toString())
+    }
+
+    @Test
+    fun `소리가 없는 영상 — 원본 단 보고의 probe 에 소리 코덱이 없고(서버가 SKIPPED 로 닫는다), 그래도 온 소리 판 일은 다시 하지 않는 실패로 알린다`() {
+        server.enqueue(remuxJob("job0000062", Synth.h264(dir, "mute.mp4", audio = false)))
+        runner.runUntilIdle()
+        val done = complete("job0000062")
+        val codec = done["probe"]["audioCodec"]
+        assertTrue(codec == null || codec.isNull, "소리가 없으면 audioCodec 이 비어 있다: $codec")
+        val folder = folderOf(done, "orig")
+        val url = server.serveTree("job0000062-$folder", materialize("job0000062", folder))
+
+        server.enqueue(server.job("job0000063", "AUDIO", url, 1, mapOf("origFolder" to folder)))
+        runner.runUntilIdle()
+
+        assertNull(server.completes["job0000063"])
+        val failed = json.readTree(assertNotNull(server.fails["job0000063"], "fail 이 안 왔다"))
+        assertEquals("PROCESSING_FAILED", failed["code"].asString())
+        assertFalse(failed["retryable"].asBoolean(), "소리 없는 원본은 다시 해도 같다")
+    }
+
+    @Test
     fun `호환 단 차선 — 세로(회전 표지) 원본 단은 구워서 세로 720 으로`() {
         val (folder, url) = servedOrig("job0000014", Synth.rotated(dir, Synth.h264(dir, "b.mp4", 1920, 1080, 2)))
         server.enqueue(server.job("job0000015", "COMPAT", url, 1, mapOf("origFolder" to folder)))

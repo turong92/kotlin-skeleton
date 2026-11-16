@@ -117,6 +117,34 @@ class PlansTest {
     }
 
     @Test
+    fun `소리 판 — 원본 단 목록을 hls 로 읽어 영상 없이 소리만 복사하고 6초 fMP4 HLS 로 내며 메타데이터를 뗀다`() {
+        val args = AudioPlan.args("https://x/o-0123456789abcdef/index.m3u8", headers = null)
+        assertTrue(args.contains("-vn"), "영상 트랙을 만들지 않는다")
+        assertEquals("copy", args.pair("-c:a"), "재인코딩 없이 복사")
+        assertNull(args.pair("-c:v"))
+        assertEquals("0:a:0", args.pair("-map"))
+        assertEquals("-1", args.pair("-map_metadata"), "출력마다 원본 메타데이터를 뗀다")
+        assertEquals("-1", args.pair("-map_chapters"))
+        assertEquals("hls", args.pair("-f"), "입력 형식 강제 — 원본 단은 HLS 만")
+        assertEquals("h264,hevc,aac", args.pair("-codec_whitelist"), "우리가 만든 조각을 읽는 허용 목록")
+        assertNull(args.pair("-format_whitelist"))
+        assertEquals("file,http,https,tcp,tls,crypto", args.pair("-protocol_whitelist"))
+        assertEquals("6", args.pair("-hls_time"))
+        assertEquals("fmp4", args.pair("-hls_segment_type"))
+        assertEquals("init.mp4", args.pair("-hls_fmp4_init_filename"))
+        assertEquals("s%05d.m4s", args.pair("-hls_segment_filename"))
+        assertEquals("index.m3u8", args.last())
+        assertTrue(args.indexOf("-codec_whitelist") < args.indexOf("-i"), "입력 옵션이라 -i 앞에 있어야 걸린다")
+    }
+
+    @Test
+    fun `소리 판 — 숨은 Host 헤더는 입력 앞에, 입력이 http 가 아니면 허용 목록에서 http 를 뺀다`() {
+        val hosted = AudioPlan.args("http://s3:8333/x/index.m3u8", headers = "Host: a.b:3902\r\n")
+        assertTrue(hosted.indexOf("-headers") < hosted.indexOf("-i"))
+        assertEquals("file,pipe", AudioPlan.args("/work/in/index.m3u8", headers = null).pair("-protocol_whitelist"))
+    }
+
+    @Test
     fun `호환 단 — 입력이 http 가 아니면 허용 목록에서 http 를 뺀다 · 숨은 Host 헤더는 입력 앞에`() {
         val local = CompatPlan.args("/work/in/index.m3u8", info(), headers = null)
         assertEquals("file,pipe", local.pair("-protocol_whitelist"))

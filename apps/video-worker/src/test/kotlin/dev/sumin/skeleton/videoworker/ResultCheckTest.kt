@@ -45,6 +45,27 @@ class ResultCheckTest {
     }
 
     @Test
+    fun `소리 판 — 소리 트랙 하나만 aac 이고 길이가 맞으면 통과`() {
+        assertNull(ResultCheck.audio(source, info(codec = "", w = 0, h = 0, durationMs = 60_100, videoStreams = 0)))
+    }
+
+    @Test
+    fun `소리 판 — 영상 트랙이 남았거나 소리가 없거나 둘이거나 aac 가 아니면 거절`() {
+        fun made(codec: String? = "aac", videoStreams: Int = 0, audioStreams: Int = 1, durationMs: Long = 60_000) =
+            info(codec = "", w = 0, h = 0, audio = codec, durationMs = durationMs, videoStreams = videoStreams, audioStreams = audioStreams)
+        assertNotNull(ResultCheck.audio(source, made(videoStreams = 1)), "소리 판에 영상이 들어 있다")
+        assertNotNull(ResultCheck.audio(source, made(codec = null, audioStreams = 0)), "소리가 없다")
+        assertNotNull(ResultCheck.audio(source, made(audioStreams = 2)), "소리 트랙이 둘이다")
+        assertNotNull(ResultCheck.audio(source, made(codec = "mp3")), "aac 가 아니다")
+    }
+
+    @Test
+    fun `소리 판 — 길이가 허용 오차를 넘게 다르면 거절`() {
+        assertNotNull(ResultCheck.audio(source, info(codec = "", w = 0, h = 0, durationMs = 50_000, videoStreams = 0)))
+        assertNotNull(ResultCheck.audio(source, info(codec = "", w = 0, h = 0, durationMs = 61_300, videoStreams = 0)))
+    }
+
+    @Test
     fun `사다리 판 — 짧은 변 · 길이 · 영상 소리 트랙이 맞아야 한다`() {
         val rung = Rung(720, 2800)
         assertNull(ResultCheck.ladderRung(source, rung, info(w = 1280, h = 720, durationMs = 60_000)))
