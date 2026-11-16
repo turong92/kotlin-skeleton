@@ -27,6 +27,10 @@ class LocalMode(private val tools: Tools) {
             System.err.println("사용법: video-worker local <입력 파일> <출력 폴더> [--compat]")
             return 2
         }
+        if (!Path.of(paths[0]).isRegularFile()) {
+            System.err.println("입력 파일이 없다: ${paths[0]}")
+            return 2
+        }
         return try {
             run(Path.of(paths[0]).toAbsolutePath(), Path.of(paths[1]).toAbsolutePath(), compat = "--compat" in flags)
             0
@@ -39,6 +43,10 @@ class LocalMode(private val tools: Tools) {
         } catch (e: java.io.IOException) {
             System.err.println("실패: ${e.javaClass.simpleName} - ${e.message}")
             1
+        } catch (e: RuntimeException) {
+            // 예상 밖 오류도 스택트레이스 대신 한 줄과 종료 1 — 호출한 스크립트가 종료 코드만 본다
+            System.err.println("실패: ${e.javaClass.simpleName} - ${e.message}")
+            1
         }
     }
 
@@ -46,7 +54,10 @@ class LocalMode(private val tools: Tools) {
     fun run(input: Path, out: Path, compat: Boolean) {
         if (!input.isRegularFile()) throw JobFailure(VideoFail.CORRUPT, "입력 파일이 없다: $input")
         Files.createDirectories(out)
-        val work = Files.createTempDirectory(out, ".work-")
+        // 같은 폴더로 다시 돌릴 때 실패해도 낡은 manifest 가 남아 완성본처럼 보이지 않게 시작하면서 지운다
+        Files.deleteIfExists(out.resolve(MANIFEST))
+        // 작업 폴더는 출력 밖(시스템 임시 폴더) — 강제 종료로 남아도 출력 폴더와 함께 올라가지 않는다
+        val work = Files.createTempDirectory("video-worker-local-")
         val cancel = AtomicBoolean(false)
         val progress = Progress()
         try {
@@ -66,11 +77,18 @@ class LocalMode(private val tools: Tools) {
             if (audio != null) manifest["audio"] = entry(audio)
             if (compatTier != null) manifest["compat"] = entry(compatTier)
             manifest["poster"] = mapOf("path" to original.posterName, "width" to original.posterSize.first, "height" to original.posterSize.second, "bytes" to original.poster.fileSize())
-            Files.writeString(out.resolve("manifest.json"), json.writerWithDefaultPrettyPrinter().writeValueAsString(manifest) + "\n")
+            // 임시 이름으로 다 쓴 뒤 바꿔치기 — 반쯤 쓰인 manifest 가 보이지 않는다
+            val tmp = out.resolve("$MANIFEST.tmp")
+            Files.writeString(tmp, json.writerWithDefaultPrettyPrinter().writeValueAsString(manifest) + "\n")
+            Files.move(tmp, out.resolve(MANIFEST), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             log.info("끝 {} → {}", input.fileName, out)
         } finally {
             runCatching { work.toFile().deleteRecursively() }
         }
+    }
+
+    private companion object {
+        const val MANIFEST = "manifest.json"
     }
 
     /** 만든 폴더를 출력 폴더로 — 이미 같은 이름(= 같은 내용 해시)이 있으면 덮어쓴다 */

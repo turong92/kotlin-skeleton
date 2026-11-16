@@ -111,6 +111,31 @@ class LocalModeTest {
         val badOut = dir.resolve("bad-out")
         assertEquals(1, local.cli(listOf(bad.toString(), badOut.toString())))
         assertFalse(Files.exists(badOut.resolve("manifest.json")))
-        assertEquals(1, local.cli(listOf(dir.resolve("missing.mp4").toString(), badOut.toString())))
+        assertEquals(2, local.cli(listOf(dir.resolve("missing.mp4").toString(), badOut.toString())), "입력 파일이 없는 것은 사용법 오류")
+    }
+
+    @Test
+    fun `같은 출력 폴더로 다시 돌려 실패하면 이전 manifest 가 남지 않는다`() {
+        val out = dir.resolve("again")
+        assertEquals(0, local.cli(listOf(Synth.h264(dir, "ok.mp4", sec = 2).toString(), out.toString())))
+        assertTrue(Files.isRegularFile(out.resolve("manifest.json")))
+
+        val bad = dir.resolve("bad2.mp4").also { Files.writeString(it, "not a video") }
+        assertEquals(1, local.cli(listOf(bad.toString(), out.toString())))
+
+        assertFalse(Files.exists(out.resolve("manifest.json")), "낡은 manifest 를 믿고 올리면 안 된다")
+    }
+
+    @Test
+    fun `성공하면 manifest 는 임시 이름 없이 바로 완성본이고, 예상 밖 예외도 스택트레이스 없이 종료 1 이다`() {
+        val out = dir.resolve("atomic")
+        assertEquals(0, local.cli(listOf(Synth.h264(dir, "ok2.mp4", sec = 2).toString(), out.toString())))
+        assertTrue(out.listDirectoryEntries().none { it.fileName.toString().endsWith(".tmp") })
+        assertEquals(1, json.readTree(Files.readString(out.resolve("manifest.json")))["version"].asInt())
+
+        val boom = LocalMode(object : Tools("ffmpeg", "ffprobe", 0, Duration.ofMinutes(1)) {
+            override fun probe(input: String, headers: String?, forceMov: Boolean): MediaInfo = throw IllegalStateException("boom")
+        })
+        assertEquals(1, boom.cli(listOf(Synth.h264(dir, "ok3.mp4", sec = 2).toString(), dir.resolve("boom-out").toString())))
     }
 }
