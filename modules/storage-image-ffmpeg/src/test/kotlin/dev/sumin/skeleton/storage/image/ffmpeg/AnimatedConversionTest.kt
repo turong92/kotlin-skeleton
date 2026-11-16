@@ -83,6 +83,29 @@ class AnimatedConversionTest {
     }
 
     @Test
+    fun `GIF 주석 블록 같은 원본 메타데이터는 변환본에 남지 않는다`() {
+        needFfmpeg()
+        put(withGifComment(Synth.gifOpaque(dir), "SECRET-COMMENT"))
+
+        assertEquals(AnimatedConversion.Outcome.Converted("mp4"), conversion().convert(hash))
+
+        val out = dir.resolve("out.mp4")
+        Files.write(out, storage.objects.getValue("${folder}display.mp4"))
+        val tags = ProcessBuilder("ffmpeg", "-hide_banner", "-v", "error", "-i", out.toString(), "-f", "ffmetadata", "-").redirectErrorStream(true).start()
+            .inputStream.readAllBytes().toString(Charsets.UTF_8)
+        assertTrue(!tags.contains("SECRET-COMMENT") && !tags.contains("comment"), "메타데이터가 남았다: $tags")
+        assertTrue(!String(storage.objects.getValue("${folder}display.mp4"), Charsets.ISO_8859_1).contains("SECRET-COMMENT"))
+    }
+
+    /** 논리 화면 서술자(와 전역 색 표) 바로 뒤에 GIF 주석 확장 블록(0x21 0xFE)을 끼운다 */
+    private fun withGifComment(gif: ByteArray, text: String): ByteArray {
+        val flags = gif[10].toInt() and 0xFF
+        val headerEnd = 13 + if (flags and 0x80 != 0) 3 * (1 shl ((flags and 0x07) + 1)) else 0
+        val block = byteArrayOf(0x21, 0xFE.toByte(), text.length.toByte()) + text.toByteArray() + byteArrayOf(0)
+        return gif.copyOfRange(0, headerEnd) + block + gif.copyOfRange(headerEnd, gif.size)
+    }
+
+    @Test
     fun `실제 투명 배경 GIF 는 합성한 화면에 알파가 있어 움직이는 WebP 가 된다`() {
         needFfmpeg()
         put(Synth.gifTransparent(dir))
@@ -128,6 +151,28 @@ class AnimatedConversionTest {
         val outcome = conversion(FfmpegProperties(path = "/no/such/ffmpeg", maxSourceBytes = 1000)).convert(hash)
 
         assertTrue(outcome is AnimatedConversion.Outcome.Skipped, "$outcome")
+    }
+
+    @Test
+    fun `픽셀 상한을 넘는 그림은 ffmpeg 를 부르지 않고 사본을 쓴다 - 압축된 거대 GIF 가 메모리를 먹지 않게`() {
+        put("GIF89a".toByteArray().copyOf(2000))
+        store.rows[hash] = store.rows.getValue(hash).copy(width = 4000, height = 4000)
+
+        val outcome = conversion(FfmpegProperties(path = "/no/such/ffmpeg", maxPixels = 10_000_000)).convert(hash)
+
+        assertTrue(outcome is AnimatedConversion.Outcome.Skipped, "$outcome")
+    }
+
+    @Test
+    fun `ffmpeg 가 오류 종료하면 같은 입력은 매번 같으니 던지지 않고 사본을 쓴다`() {
+        needFfmpeg()
+        val broken = "GIF89a".toByteArray() + ByteArray(2000) { 7 }   // 머리만 GIF 인 고장 난 파일
+        put(broken)
+
+        val outcome = conversion().convert(hash)
+
+        assertTrue(outcome is AnimatedConversion.Outcome.Skipped, "$outcome")
+        assertEquals(0, storage.uploads)
     }
 
     @Test

@@ -7,6 +7,8 @@ skeleton:
         path: ffmpeg                        # ffmpeg 실행 파일 - 이름(PATH 에서 찾는다)이나 절대 경로 예: /usr/bin/ffmpeg
         timeout: 60s                        # 안전 상한: ffmpeg 프로세스 하나의 시간 - 넘으면 죽이고 실패(큐가 다시 한다). job-queue 의 stale-lock-timeout 보다 짧게 둔다
         max-source-bytes: 20971520          # 안전 상한: 원본 바이트 (20 MB) - 넘으면 변환하지 않고 사본을 쓴다. 변환본이 원본보다 작지 않아도 올리지 않는다
+        max-pixels: 16777216                # 안전 상한: 가로 x 세로 (4096 x 4096) - 넘는 그림은 ffmpeg 를 부르지 않고 사본을 쓴다. 20MB 안에도 1만 x 1만 GIF 가 들어가 수 GB 를 쓰기 때문
+        threads: 2                          # 안전 상한: ffmpeg 디코더 · 필터 · 인코더 스레드 수 - 작게 둬서 한 변환이 CPU 를 다 먹지 않게
         crf: 27                             # libx264 -crf (0..51) - 낮을수록 고화질 · 큰 파일. 26~28 이 보통의 균형
         preset: veryfast                    # libx264 -preset - 느릴수록 같은 화질에 더 작다 (ultrafast … veryslow)
         pixel-format: yuv420p               # 출력 -pix_fmt - 브라우저 호환은 yuv420p (짝수 크기는 항상 맞춘다)

@@ -18,7 +18,7 @@ class FfmpegFailedException(message: String, cause: Throwable? = null) : Runtime
 /**
  * 움직이는 이미지 하나의 표시본 변환 - 원본을 임시 폴더로 받아 ffmpeg 를 한 번 돌리고 결과(MP4 또는 움직이는 WebP)를 `<폴더>display.<ext>` 로 올려 [AnimatedDisplays.use] 로 더한다.
  * **멱등이다**: 변환본이 이미 올라가 있으면(올리고 상태 줄에 더하기 전에 죽은 일 · 같은 요청이 또 온 일) 다시 인코딩하지 않고 [AnimatedDisplays.use] 만 한다 - use 가 이미 더해져 있어도 같은 결과를 낸다.
- * 못 만들거나 만들 필요가 없는 모든 길은 [Outcome.Skipped] 로 끝난다(사본이 계속 쓰인다) - 던지는 것은 다시 해 볼 만한 실패([FfmpegFailedException] · 저장소 오류)뿐이다.
+ * 못 만들거나 만들 필요가 없는 모든 길은 [Outcome.Skipped] 로 끝난다(사본이 계속 쓰인다) - 던지는 것은 다시 해 볼 만한 실패(ffmpeg 를 못 띄움 · 시간 초과 · 신호 종료 = [FfmpegFailedException] · 저장소 오류)뿐이다. ffmpeg 의 오류 종료는 같은 입력이면 매번 같아 [Outcome.Skipped] 다.
  */
 class AnimatedConversion(
     private val storage: ObjectStorage,
@@ -49,6 +49,9 @@ class AnimatedConversion(
         if (size > props.maxSourceBytes) return skipped(keyHash, "source $size bytes is over max-source-bytes ${props.maxSourceBytes}")
         val head = storage.read(source, 0L until minOf(size, HEAD_BYTES)).use { it.readNBytes(HEAD_BYTES.toInt()) }
         val kind = AnimatedKind.sniff(head) ?: return skipped(keyHash, "not a GIF or WebP")
+        // 상태 줄의 크기는 머리에서 읽은 값이다(디코드 전) - 압축된 거대 그림은 ffmpeg 를 부르기 전에 막는다
+        val pixels = (row.width ?: 0).toLong() * (row.height ?: 0)
+        if (pixels > props.maxPixels) return skipped(keyHash, "${row.width}x${row.height} is over max-pixels ${props.maxPixels}")
 
         val work = Files.createTempDirectory("ffmpeg-animated-")
         try {
@@ -56,9 +59,8 @@ class AnimatedConversion(
             storage.read(source).use { Files.copy(it, input) }
             if (Files.size(input) > props.maxSourceBytes) return skipped(keyHash, "source grew past max-source-bytes")
             run(AnimatedPlan.args(props.path, input.toString(), kind, props, size), work)?.let { failure ->
-                // 움직이는 WebP 디코더는 최근 ffmpeg(8.0+)에만 있다 - 못 풀면 파일 탓이 아니라 이 ffmpeg 탓이니 다시 해도 같다
-                if (kind == AnimatedKind.WEBP) return skipped(keyHash, "this ffmpeg cannot decode the animated WebP (needs 8.0+): $failure")
-                throw FfmpegFailedException("ffmpeg failed: $failure")
+                // 오류 종료는 같은 입력이면 매번 같다 - 고장 난 파일이거나(움직이는 WebP 는 8.0 미만 ffmpeg 가 못 푸는 경우도) 다시 해도 소용없다. 사본을 쓴다
+                return skipped(keyHash, "ffmpeg could not convert this $kind: $failure")
             }
             return publish(keyHash, copyExt, folder, work, size, kind)
         } finally {
@@ -105,7 +107,10 @@ class AnimatedConversion(
                 process.waitFor(5, TimeUnit.SECONDS)
             }
         }
-        return if (process.exitValue() == 0) null else "exit ${process.exitValue()} ${tail(errors.toFile())}"
+        val exit = process.exitValue()
+        // 신호로 죽은 것(OOM kill 137 · SIGTERM 143)은 파일 탓이 아니다 - 던져서 큐가 다시 한다
+        if (exit > 128) throw FfmpegFailedException("ffmpeg was killed by a signal (exit $exit)")
+        return if (exit == 0) null else "exit $exit ${tail(errors.toFile())}"
     }
 
     private fun tail(file: File): String = if (file.isFile) file.readText().takeLast(300).trim() else ""

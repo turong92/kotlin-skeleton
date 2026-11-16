@@ -16,6 +16,13 @@ data class FfmpegProperties(
     val timeout: Duration = Duration.ofSeconds(60),
     /** 원본 바이트 상한 - 넘으면 읽지 않고 변환하지 않는다(사본이 쓰인다). storage-image 의 `max-source-bytes` 와 따로, 더 좁게 */
     val maxSourceBytes: Long = 20L * 1024 * 1024,
+    /**
+     * 가로 x 세로 상한 - 넘는 그림은 ffmpeg 를 부르지 않고 사본을 쓴다. 20MB 안에도 1만 x 1만 GIF 가 들어가고 ffmpeg 는 합성한 RGBA 프레임을 여럿 쥔다(수 GB).
+     * 기본 4096 x 4096 = 16,777,216 - 프레임 하나가 RGBA 로 약 64MB, 합성 · 분기 · 인코더 몫까지 해도 컨테이너 안에 든다. storage-image 의 `max-pixels` 와 따로, 더 좁게
+     */
+    val maxPixels: Long = 16_777_216L,
+    /** ffmpeg 의 디코더 · 필터 · 인코더 스레드 수 - 작게 둬서 한 변환이 CPU 를 다 먹지 않게 한다 */
+    val threads: Int = 2,
     /** libx264 `-crf` (0..51, 낮을수록 크고 고화질) */
     val crf: Int = 27,
     /** libx264 `-preset` */
@@ -29,6 +36,8 @@ data class FfmpegProperties(
         require(path.isNotBlank()) { "skeleton.storage.image.ffmpeg.path must not be blank" }
         require(!timeout.isZero && !timeout.isNegative) { "skeleton.storage.image.ffmpeg.timeout must be positive" }
         require(maxSourceBytes > 0) { "skeleton.storage.image.ffmpeg.max-source-bytes must be positive" }
+        require(maxPixels > 0) { "skeleton.storage.image.ffmpeg.max-pixels must be positive" }
+        require(threads >= 1) { "skeleton.storage.image.ffmpeg.threads must be at least 1" }
         require(crf in 0..51) { "skeleton.storage.image.ffmpeg.crf must be 0..51" }
         require(SAFE_WORD.matches(preset)) { "skeleton.storage.image.ffmpeg.preset must be letters, digits, '_' or '-'" }
         require(SAFE_WORD.matches(pixelFormat)) { "skeleton.storage.image.ffmpeg.pixel-format must be letters, digits, '_' or '-'" }

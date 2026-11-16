@@ -245,14 +245,12 @@ object AnimatedPlan {
                 "[s2]crop=trunc(iw/2)*2:trunc(ih/2)*2,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[mp4v];" +
                 "[s3]null[webpv]",
         )
-        add("-fps_mode"); add("passthrough")
-        add("-map_metadata"); add("-1")
-        add("-an")
-        add("-map"); add("[alpha]"); add("-f"); add("null"); add("-")
-        add("-map"); add("[mp4v]"); add("-c:v"); add("libx264"); add("-crf"); add("14"); add("-preset"); add("slow"); add("-pix_fmt"); add("yuv420p")
+        // 출력 옵션은 바로 뒤 출력 파일 하나에만 걸린다 - 메타데이터 제거(원본의 GIF 주석 등) · 프레임 시간 유지는 출력마다 적는다
+        add("-map"); add("[alpha]"); add("-an"); add("-map_metadata"); add("-1"); add("-fps_mode"); add("passthrough"); add("-f"); add("null"); add("-")
+        add("-map"); add("[mp4v]"); add("-an"); add("-map_metadata"); add("-1"); add("-fps_mode"); add("passthrough"); add("-c:v"); add("libx264"); add("-crf"); add("14"); add("-preset"); add("slow"); add("-pix_fmt"); add("yuv420p")
         add("-colorspace"); add("bt709"); add("-color_primaries"); add("bt709"); add("-color_trc"); add("bt709")
         add("-fflags"); add("+bitexact"); add("-flags:v"); add("+bitexact"); add("-movflags"); add("+faststart"); add(MP4)
-        add("-map"); add("[webpv]"); add("-c:v"); add("libwebp_anim"); add("-lossless"); add("1"); add("-loop"); add("0"); add(WEBP)
+        add("-map"); add("[webpv]"); add("-an"); add("-map_metadata"); add("-1"); add("-fps_mode"); add("passthrough"); add("-c:v"); add("libwebp_anim"); add("-lossless"); add("1"); add("-loop"); add("0"); add(WEBP)
     }
 
     /** `alpha.txt` - 프레임마다 한 줄 `lavfi.signalstats.YMIN=<0..255>`. 프레임 수와 알파 최솟값 */

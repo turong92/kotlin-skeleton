@@ -213,7 +213,13 @@ class PlansTest {
         listOf(Allowed.UPLOAD_FORMATS, Allowed.UPLOAD_CODECS, Allowed.BUILT_CODECS).forEach { list ->
             assertFalse(list.split(',').any { it == "gif" || it == "webp" || it == "webp_pipe" }, "영상 차선 목록에 gif · webp 가 들어갔다: $list")
         }
-        assertContains(gif, "-an")
-        assertEquals("passthrough", gif.pair("-fps_mode"))
+        // 출력 옵션은 다음 출력 파일 하나에만 걸린다 - 메타데이터 제거 · 프레임 시간 유지는 mp4 · webp 출력마다 있어야 한다
+        val mp4 = gif.subList(gif.indexOf("[mp4v]"), gif.indexOf(AnimatedPlan.MP4))
+        val webpOut = gif.subList(gif.indexOf("[webpv]"), gif.indexOf(AnimatedPlan.WEBP))
+        listOf(mp4, webpOut).forEach {
+            assertEquals("-1", it.pair("-map_metadata"))
+            assertEquals("passthrough", it.pair("-fps_mode"))
+            assertContains(it, "-an")
+        }
     }
 }

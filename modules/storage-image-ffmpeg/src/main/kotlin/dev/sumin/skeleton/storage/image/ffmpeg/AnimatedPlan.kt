@@ -33,23 +33,25 @@ object AnimatedPlan {
         add("-protocol_whitelist"); add("file")
         add("-format_whitelist"); add(kind.format)
         add("-codec_whitelist"); add(kind.codec)
+        add("-threads"); add(props.threads.toString())
         add("-f"); add(kind.format)
         add("-i"); add(input)
+        add("-filter_threads"); add(props.threads.toString()); add("-filter_complex_threads"); add(props.threads.toString())
         add("-filter_complex"); add(
             "[0:v:0]format=rgba,split=3[s1][s2][s3];" +
                 "[s1]alphaextract,signalstats,metadata=mode=print:key=lavfi.signalstats.YMIN:file=$ALPHA_STATS[alpha];" +
                 "[s2]crop=trunc(iw/2)*2:trunc(ih/2)*2,scale=out_color_matrix=bt709:out_range=tv,format=${props.pixelFormat}[mp4v];" +
                 "[s3]null[webpv]",
         )
-        add("-fps_mode"); add("passthrough")
-        add("-map_metadata"); add("-1")
-        add("-an")
-        add("-map"); add("[alpha]"); add("-f"); add("null"); add("-")
-        add("-map"); add("[mp4v]"); add("-c:v"); add("libx264"); add("-crf"); add(props.crf.toString()); add("-preset"); add(props.preset); add("-pix_fmt"); add(props.pixelFormat)
+        // 출력 옵션은 바로 뒤 출력 파일 하나에만 걸린다 - 메타데이터 제거(원본의 GIF 주석 등) · 프레임 시간 유지는 출력마다 적는다
+        add("-map"); add("[alpha]"); add("-an"); add("-map_metadata"); add("-1"); add("-fps_mode"); add("passthrough"); add("-f"); add("null"); add("-")
+        add("-map"); add("[mp4v]"); add("-an"); add("-map_metadata"); add("-1"); add("-fps_mode"); add("passthrough"); add("-threads"); add(props.threads.toString())
+        add("-c:v"); add("libx264"); add("-crf"); add(props.crf.toString()); add("-preset"); add(props.preset); add("-pix_fmt"); add(props.pixelFormat)
         add("-colorspace"); add("bt709"); add("-color_primaries"); add("bt709"); add("-color_trc"); add("bt709")
         add("-fflags"); add("+bitexact"); add("-flags:v"); add("+bitexact"); add("-movflags"); add("+faststart")
         add("-fs"); add(maxOutputBytes.toString()); add(MP4)
-        add("-map"); add("[webpv]"); add("-c:v"); add("libwebp_anim"); add("-lossless"); add("1"); add("-loop"); add("0")
+        add("-map"); add("[webpv]"); add("-an"); add("-map_metadata"); add("-1"); add("-fps_mode"); add("passthrough"); add("-threads"); add(props.threads.toString())
+        add("-c:v"); add("libwebp_anim"); add("-lossless"); add("1"); add("-loop"); add("0")
         add("-fs"); add(maxOutputBytes.toString()); add(WEBP)
     }
 

@@ -62,6 +62,27 @@ class AnimatedPlanTest {
     }
 
     @Test
+    fun `메타데이터 제거 · 프레임 시간 유지는 출력마다 걸린다 - 첫 출력 앞에만 두면 mp4 · webp 에 안 걸린다`() {
+        val args = AnimatedPlan.args("ffmpeg", "/work/in", AnimatedKind.GIF, props, 1000)
+        val mp4 = args.subList(args.indexOf("[mp4v]"), args.indexOf(AnimatedPlan.MP4))
+        val webp = args.subList(args.indexOf("[webpv]"), args.indexOf(AnimatedPlan.WEBP))
+        listOf(mp4, webp).forEach {
+            assertEquals("-1", it.pair("-map_metadata"))
+            assertEquals("passthrough", it.pair("-fps_mode"))
+        }
+        assertTrue("-an" in mp4)
+    }
+
+    @Test
+    fun `스레드 수는 설정 값으로 디코더 · 필터 · 두 인코더에 걸린다`() {
+        val args = AnimatedPlan.args("ffmpeg", "/work/in", AnimatedKind.GIF, FfmpegProperties(threads = 1), 1000)
+        assertEquals("1", args.pair("-filter_threads"))
+        assertEquals("1", args.pair("-filter_complex_threads"))
+        assertEquals(3, args.withIndex().count { it.value == "-threads" && args[it.index + 1] == "1" })
+        assertEquals(2, FfmpegProperties().threads)
+    }
+
+    @Test
     fun `알파 통계는 프레임마다 한 줄이고 최솟값을 쓴다 - 줄이 없으면 불투명`() {
         val stats = AnimatedPlan.parseAlpha("frame:0 pts:0\nlavfi.signalstats.YMIN=255\nframe:1 pts:1\nlavfi.signalstats.YMIN=0\nlavfi.signalstats.YMIN=255\n")
         assertEquals(AnimatedPlan.AlphaStats(frames = 3, minAlpha = 0), stats)
@@ -76,5 +97,7 @@ class AnimatedPlanTest {
         assertTrue(runCatching { FfmpegProperties(path = " ") }.isFailure)
         assertTrue(runCatching { FfmpegProperties(preset = "veryfast; rm") }.isFailure)
         assertTrue(runCatching { FfmpegProperties(maxAttempts = 0) }.isFailure)
+        assertTrue(runCatching { FfmpegProperties(maxPixels = 0) }.isFailure)
+        assertTrue(runCatching { FfmpegProperties(threads = 0) }.isFailure)
     }
 }
