@@ -6,7 +6,9 @@ import kotlin.system.exitProcess
 import org.slf4j.LoggerFactory
 
 /** 영상 일꾼 진입점 — `VIDEO_WORKER_MODE=once` 면 일이 없을 때까지 하고 끝낸다(Cloud Run 작업), 아니면 상주한다 */
-fun main() {
+fun main(args: Array<String>) {
+    // `local <입력 파일> <출력 폴더> [--compat]` — 서버 · 토큰 · 환경변수 없이 파일 하나를 판들로(LocalMode). 서버 모드의 설정은 읽지도 않는다
+    if (args.firstOrNull() == "local") exitProcess(LocalMode(Tools("ffmpeg", "ffprobe", 0, java.time.Duration.ofHours(3))).cli(args.drop(1)))
     val log = LoggerFactory.getLogger("video-worker")
     val config = try {
         WorkerConfig.fromEnv(System.getenv())

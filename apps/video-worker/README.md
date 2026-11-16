@@ -24,6 +24,22 @@
 
 서버(`storage-image` 와 `video` 가 함께 켜졌을 때)가 올린 움직이는 GIF · WebP 의 표시본 변환을 준다. 한 번의 ffmpeg 디코드에서 ① 소리 없는 H.264 MP4(`-crf 14`, 크기 · 프레임 시간 그대로, 홀수 크기는 마지막 한 줄만 자름, BT.709 표시) ② 움직이는 WebP(무손실, 투명 유지) ③ 합성한 실제 화면(RGBA)의 알파 최솟값을 한꺼번에 낸다. 알파가 255 미만인 픽셀이 하나라도 있으면 WebP(`display.webp`), 없으면 MP4(`display.mp4`)를 올리고 나머지는 버린다 - 파일의 투명 표시가 아니라 합성 결과를 본다. 올리지 않고 끝나는 길은 모두 **다시 하지 않는 실패**다(서버의 표시본은 사본으로 남는다): 변환본이 원본보다 작지 않다 → `PROCESSING_FAILED` · ffmpeg 가 못 읽는다(움직이는 WebP 는 ffmpeg 6.1 이 못 풀고, 정지 이미지로만 풀려도 같다) → `UNSUPPORTED_FORMAT` · 이미 투명한 움직이는 WebP → 변환하지 않는다. 입력 허용 목록(`-format_whitelist` · `-codec_whitelist`)은 이 차선만 `gif` · `webp` 를 열고 영상 차선의 목록은 그대로다.
 
+## 로컬 모드 (서버 · 큐 · 토큰 없이 파일 하나를)
+
+```bash
+./gradlew :apps:video-worker:installDist
+apps/video-worker/build/install/video-worker/bin/video-worker local <입력 파일> <출력 폴더> [--compat]
+# 이미지로도 같다(새 이미지가 아니라 지금 이미지의 인자 모양): 입력 · 출력 폴더를 마운트한다
+docker run --rm -v "$PWD:/data" video-worker:<tag> local /data/in.mp4 /data/out
+```
+
+환경변수(`VIDEO_WORKER_*`)도 서버 주소도 필요 없다 — 첫 인자가 `local` 이면 서버 모드의 설정을 읽지도 않는다. 출력 폴더에 이렇게 쓴다:
+
+- `o-<16>/` 원본 판(재인코딩 없는 fMP4 HLS) · `a-<16>/` 소리 판(소리가 **없으면 만들지 않는다**) · `p-<16>.jpg` 포스터 · `c-<16>/` 호환 판(`--compat` 일 때만, H.264 720p).
+- `manifest.json` — `hasAudio`, 그리고 판마다(`original` · `audio` · `compat`) `path`(출력 폴더 기준 `…/index.m3u8`) · `durationMs` · `width` · `height` · `bytes`(폴더 합) · `videoCodec` · `audioCodec`(소리 판은 가로 · 세로 · 영상 코덱이 null), `poster` 는 `path` · `width` · `height` · `bytes`. 실패하면 manifest 를 쓰지 않는다.
+
+만드는 코드와 검증은 서버 모드와 같다(`Builds`: 같은 ffmpeg 계획 · 같은 결과 검사, 입력은 서버 모드의 공개 영상처럼 끝까지 디코드해 본다). **올리기는 하지 않는다** — 이 폴더를 R2 같은 저장소로 올리는 것은 읽는 쪽 스크립트의 몫이다. 종료 코드: 0 = 끝, 1 = 못 만들었다(사유는 stderr), 2 = 사용법 오류.
+
 ## 한 일의 순서
 
 claim → 내려받기(remux 만) → probe → 거절 판정 → 조각 내기 → (공개 영상이면 `verifyDecode`: 쓰는 두 스트림을 끝까지 디코드, 오류가 나면 `CORRUPT`) → 결과 검사 → 폴더 해시 → 포스터 → `upload-urls` → PUT 전부(**목록 `index.m3u8` 은 맨 끝**) → `complete`.
