@@ -36,6 +36,9 @@ class JdbcVideoWorkerStore(
         jdbc.update("update video_workers set last_seen_at = :at where id = :id", MapSqlParameterSource().addValue("at", dialect.instantParam(at)).addValue("id", id))
     }
 
+    override fun updateLanes(id: Long, lanes: Set<VideoLane>): Boolean =
+        jdbc.update("update video_workers set lanes = :lanes where id = :id and revoked_at is null", MapSqlParameterSource().addValue("lanes", lanes.joinToString(",") { it.name }).addValue("id", id)) == 1
+
     override fun revoke(id: Long, at: Instant): Boolean =
         jdbc.update("update video_workers set revoked_at = :at where id = :id and revoked_at is null", MapSqlParameterSource().addValue("at", dialect.instantParam(at)).addValue("id", id)) == 1
 

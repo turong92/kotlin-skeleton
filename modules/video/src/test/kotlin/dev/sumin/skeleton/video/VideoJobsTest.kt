@@ -325,6 +325,11 @@ class VideoJobsTest {
         store.rows["v1"] = store.rows.getValue("v1").copy(leaseOwner = null, leaseUntil = null, lane = null, compatStatus = TrackStatus.QUEUED)
         assertEquals(VideoLane.AUDIO, jobs().claim(audioOnly, "w2", null)!!.lane)
         assertNull(jobs().claim(audioOnly, "w2", null))
+
+        // 임대를 풀고 소리 판을 끝낸 상태 — 호환 단이 대기 중이어도 소리 전용 토큰은 그것을 집지 못한다
+        store.rows["v1"] = store.rows.getValue("v1").copy(leaseOwner = null, leaseUntil = null, lane = null, audioStatus = TrackStatus.READY, compatStatus = TrackStatus.QUEUED)
+        assertNull(jobs().claim(audioOnly, "w2", null), "an audio-only token must not take a queued compat job")
+        assertEquals(TrackStatus.QUEUED, store.rows.getValue("v1").compatStatus)
     }
 
     @Test

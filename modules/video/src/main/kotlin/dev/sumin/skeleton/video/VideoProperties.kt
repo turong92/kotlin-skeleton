@@ -79,7 +79,7 @@ data class VideoProperties(
         val compatStaleAfter: Duration = Duration.ofHours(2),
         /** 소리 판이 이만큼 넘게 대기 중이면 `VIDEO_AUDIO_STALE` */
         val audioStaleAfter: Duration = Duration.ofHours(2),
-        /** [failureWindow] 안에 실패(영상 · 호환 · 사다리)가 이만큼 이상이면 `VIDEO_FAILED_SURGE` */
+        /** [failureWindow] 안에 실패(영상 · 소리 · 호환 · 사다리)가 이만큼 이상이면 `VIDEO_FAILED_SURGE` */
         val failureSurgeCount: Int = 5,
         val failureWindow: Duration = Duration.ofHours(1),
     )

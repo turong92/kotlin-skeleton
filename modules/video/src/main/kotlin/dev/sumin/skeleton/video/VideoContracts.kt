@@ -94,7 +94,7 @@ interface VideoStore {
     /** 호환 단이 [before] 이전부터 대기 중인 영상 수 */
     fun countCompatQueuedBefore(before: Instant): Int
 
-    /** [since] 이후 실패로 닫힌(영상 · 호환 · 사다리) 영상 수 */
+    /** [since] 이후 실패로 닫힌(영상 · 소리 · 호환 · 사다리) 영상 수 */
     fun countFailedSince(since: Instant): Int
 }
 
@@ -144,6 +144,9 @@ interface VideoWorkerStore {
     fun existsByTokenSha256(tokenSha256: String): Boolean
 
     fun touch(id: Long, at: Instant)
+
+    /** 폐기되지 않은 일꾼의 허용 차선을 바꾼다 — 폐기했거나 없으면 false */
+    fun updateLanes(id: Long, lanes: Set<VideoLane>): Boolean
 
     /** 폐기 — 행은 남긴다. 이미 폐기했으면 false */
     fun revoke(id: Long, at: Instant): Boolean

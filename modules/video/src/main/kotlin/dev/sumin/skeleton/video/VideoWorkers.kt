@@ -74,8 +74,8 @@ class VideoWorkerService(private val store: VideoWorkerStore, private val time: 
 }
 
 /**
- * 설정(`skeleton.video.worker-token-sha256`)에 해시가 있으면 기동 때 그 일꾼을 세 차선으로 한 번 등록한다 — 평문은 서버에 안 온다.
- * 로컬 compose 가 운영자 호출 없이 일꾼을 띄우는 길이다(stage · prod 에서는 [VideoDeployGuard] 가 막는다). 이미 있으면(폐기한 것 포함) 아무것도 안 한다 — 폐기를 되살리지 않는다
+ * 설정(`skeleton.video.worker-token-sha256`)에 해시가 있으면 기동 때 그 일꾼을 모든 차선으로 등록한다(이미 있는 일꾼은 차선만 모두로 채운다) — 평문은 서버에 안 온다.
+ * 로컬 compose 가 운영자 호출 없이 일꾼을 띄우는 길이다(stage · prod 에서는 [VideoDeployGuard] 가 막는다). 폐기한 것은 건드리지 않는다 — 되살리지 않는다
  */
 class VideoWorkerBootstrap(private val props: VideoProperties, private val store: VideoWorkerStore, private val time: TimeProvider) : ApplicationRunner {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -84,9 +84,18 @@ class VideoWorkerBootstrap(private val props: VideoProperties, private val store
 
     fun register() {
         val sha = props.workerTokenSha256.trim().lowercase()
-        if (sha.isEmpty() || store.existsByTokenSha256(sha)) return
-        store.insert(NAME, VideoLane.entries.toSet(), sha, time.now())
-        log.info("video worker registered from skeleton.video.worker-token-sha256 name={}", NAME)
+        if (sha.isEmpty()) return
+        val all = VideoLane.entries.toSet()
+        val active = store.findActiveByTokenSha256(sha)
+        when {
+            // 차선이 늘어난 버전으로 올린 뒤에도 기존 DB(local 은 DB 를 안 지운다)의 일꾼이 새 차선을 집게 채운다
+            active != null -> if (active.lanes != all && store.updateLanes(active.id, all)) log.info("video worker lanes refreshed from skeleton.video.worker-token-sha256 name={}", active.name)
+            store.existsByTokenSha256(sha) -> return   // 폐기한 것 — 되살리지 않는다
+            else -> {
+                store.insert(NAME, all, sha, time.now())
+                log.info("video worker registered from skeleton.video.worker-token-sha256 name={}", NAME)
+            }
+        }
     }
 
     private companion object {

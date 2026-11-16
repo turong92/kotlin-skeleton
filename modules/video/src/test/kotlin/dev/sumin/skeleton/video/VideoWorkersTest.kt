@@ -70,6 +70,32 @@ class VideoWorkersTest {
     }
 
     @Test
+    fun `a bootstrap worker registered before a lane existed gets the new lanes at the next start, and a revoked one is still not revived`() {
+        val hash = sha("local-dev-token")
+        val props = VideoProperties(enabled = true, workerTokenSha256 = hash)
+        store.insert("bootstrap", setOf(VideoLane.REMUX, VideoLane.COMPAT, VideoLane.LADDER, VideoLane.ANIMATED), hash, now)
+
+        VideoWorkerBootstrap(props, store, TimeProvider { now }).register()
+
+        assertEquals(1, store.rows.size)
+        assertEquals(VideoLane.entries.toSet(), assertNotNull(service.authenticate("local-dev-token")).lanes)
+
+    }
+
+    @Test
+    fun `a revoked bootstrap worker keeps its old lanes - the bootstrap neither revives nor edits it`() {
+        val hash = sha("local-dev-token")
+        val old = setOf(VideoLane.REMUX, VideoLane.COMPAT)
+        val worker = store.insert("bootstrap", old, hash, now)
+        service.revoke(worker.id)
+
+        VideoWorkerBootstrap(VideoProperties(enabled = true, workerTokenSha256 = hash), store, TimeProvider { now }).register()
+
+        assertNull(service.authenticate("local-dev-token"))
+        assertEquals(old, store.rows.getValue(worker.id).lanes)
+    }
+
+    @Test
     fun `a hash that is not 64 hex characters stops the start without echoing the value`() {
         val e = assertFailsWith<IllegalArgumentException> { VideoProperties(workerTokenSha256 = "plain-token-not-a-hash") }
         assertFalse("plain-token-not-a-hash" in e.message!!)

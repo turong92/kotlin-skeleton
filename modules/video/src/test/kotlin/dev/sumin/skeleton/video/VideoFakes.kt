@@ -310,6 +310,12 @@ class FakeVideoWorkerStore : VideoWorkerStore {
         rows.computeIfPresent(id) { _, w -> w.copy(lastSeenAt = at) }
     }
 
+    override fun updateLanes(id: Long, lanes: Set<VideoLane>): Boolean {
+        val w = rows[id]?.takeIf { it.revokedAt == null } ?: return false
+        rows[id] = w.copy(lanes = lanes)
+        return true
+    }
+
     override fun revoke(id: Long, at: Instant): Boolean {
         val w = rows[id]?.takeIf { it.revokedAt == null } ?: return false
         rows[id] = w.copy(revokedAt = at)

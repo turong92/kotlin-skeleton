@@ -358,7 +358,11 @@ class VideoJobsDbTest {
         workers.touch(worker.id, t0.plusSeconds(30))
         assertEquals(t0.plusSeconds(30), workers.lastSeenRemux())
 
+        assertTrue(workers.updateLanes(worker.id, VideoLane.entries.toSet()))
+        assertEquals(VideoLane.entries.toSet(), workers.findActiveByTokenSha256(sha)!!.lanes)
+
         assertTrue(workers.revoke(worker.id, t0.plusSeconds(60)))
+        assertFalse(workers.updateLanes(worker.id, setOf(VideoLane.REMUX)), "a revoked worker is not edited")
         assertFalse(workers.revoke(worker.id, t0.plusSeconds(61)))
         assertNull(workers.findActiveByTokenSha256(sha))
         assertTrue(workers.existsByTokenSha256(sha), "a revoked token still exists - the bootstrap does not revive it")
