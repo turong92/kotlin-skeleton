@@ -27,6 +27,8 @@ data class MediaInfo(
     val hdr: Boolean,
     /** 표지 그림(attached picture) 스트림의 번호 — 없으면 null. 포스터로 쓴다 */
     val coverStream: Int? = null,
+    /** 첫 소리 스트림의 프로파일(ffprobe `LC` · `HE-AAC` …) — 로컬 모드의 `codec` 문자열만 쓴다 */
+    val audioProfile: String? = null,
 ) {
     private val swapped: Boolean get() = rotation != null && abs(rotation) % 180 == 90
 
@@ -108,6 +110,7 @@ object Probe {
             otherStreams = streams.size - videos.size - audios.size,
             hdr = v?.text("color_transfer") in HDR_TRANSFERS,
             coverStream = streams.firstOrNull { it.text("codec_type") == "video" && it["disposition"]?.get("attached_pic")?.asInt(0) == 1 }?.get("index")?.asInt(),
+            audioProfile = audios.firstOrNull()?.text("profile"),
         )
     }
 

@@ -63,11 +63,13 @@ class LocalMode(private val tools: Tools) {
         val progress = Progress()
         try {
             val original = builds.remux(input, work, verifyDecode = true, jobId = "local", cancel, progress)
-            val tier = original.tier
+            // 조각만 읽은 ffprobe 는 소리 프로파일을 못 알려 줄 때가 있다 — 원본 소리는 AAC 면 복사(입력 파일의 프로파일), 아니면 일꾼이 AAC-LC 로 바꿔 만든 것이다
+            val copiedProfile = if (original.source.audioCodec == "aac") original.source.audioProfile else LC
+            val tier = original.tier.withAudioProfile(copiedProfile)
             place(tier, out)
             val playlist = out.resolve(tier.folder).resolve(HlsNames.PLAYLIST).toString()
-            val audio = if (tier.info.hasAudio) builds.audio(playlist, null, work, cancel, progress).also { place(it, out) } else null
-            val compatTier = if (compat) builds.compat(playlist, null, work, cancel, progress).also { place(it, out) } else null
+            val audio = if (tier.info.hasAudio) builds.audio(playlist, null, work, cancel, progress).withAudioProfile(copiedProfile).also { place(it, out) } else null
+            val compatTier = if (compat) builds.compat(playlist, null, work, cancel, progress).withAudioProfile(LC).also { place(it, out) } else null
             Files.copy(original.poster, out.resolve(original.posterName), StandardCopyOption.REPLACE_EXISTING)
 
             val manifest = linkedMapOf<String, Any?>(
@@ -77,8 +79,8 @@ class LocalMode(private val tools: Tools) {
             )
             if (audio != null) manifest["audio"] = entry(audio)
             if (compatTier != null) manifest["compat"] = entry(compatTier)
-            // 마스터는 두 영상 판의 코덱 문자열을 다 알 때만 — CODECS 없는 변형을 섞으면 재생기가 못 트는 단을 고를 수 있다. 못 만들면 manifest 에도 없다
-            val master = compatTier?.let { LocalMaster.text(listOf(tier, it)) }
+            // 마스터를 만드는 조건은 LocalMaster.text 에 — 못 만들면 파일도 manifest 항목도 없다
+            val master = compatTier?.let { LocalMaster.text(tier, it) }
             if (master != null) {
                 Files.writeString(out.resolve(LocalMaster.FILE), master)
                 manifest["master"] = mapOf("path" to LocalMaster.FILE)
@@ -96,7 +98,12 @@ class LocalMode(private val tools: Tools) {
 
     private companion object {
         const val MANIFEST = "manifest.json"
+        const val LC = "LC"
     }
+
+    /** 만든 판을 읽은 결과에 소리 프로파일이 없으면 [profile] 로 채운다 — 있으면 ffprobe 가 읽은 값을 믿는다 */
+    private fun BuiltTier.withAudioProfile(profile: String?): BuiltTier =
+        if (info.audioProfile != null) this else BuiltTier(folder, files, sha, info.copy(audioProfile = profile))
 
     /** 만든 폴더를 출력 폴더로 — 이미 같은 이름(= 같은 내용 해시)이 있으면 덮어쓴다 */
     private fun place(tier: BuiltTier, out: Path) {

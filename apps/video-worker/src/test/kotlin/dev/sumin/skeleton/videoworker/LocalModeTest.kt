@@ -100,7 +100,7 @@ class LocalModeTest {
     @Test
     fun `compat 이면 원본 판과 호환 판을 묶은 master 가 나오고 manifest 에 적히며 각 판에 codec 이 있다 - 소리 판은 마스터에 없다`() {
         val out = dir.resolve("out")
-        local.run(Synth.hevc4k(dir, "big2.mp4", sec = 3), out, compat = true)
+        local.run(Synth.h264(dir, "hd.mp4", sec = 3), out, compat = true)
 
         val m = manifest(out)
         assertEquals("master.m3u8", m["master"]["path"].asString())
@@ -112,7 +112,7 @@ class LocalModeTest {
         val originalPath = m["original"]["path"].asString()
         // 낮은 단(호환 720p)이 먼저 — 재생기가 첫 줄로 시작한다
         assertEquals(listOf(compatPath, originalPath), variants.map { master[master.indexOf(it) + 1] })
-        assertTrue(variants[0].contains("RESOLUTION=1280x720") && variants[1].contains("RESOLUTION=3840x2160"))
+        assertTrue(variants[0].contains("RESOLUTION=1280x720") && variants[1].contains("RESOLUTION=1920x1080"))
         assertTrue(variants.all { Regex("BANDWIDTH=\\d+,AVERAGE-BANDWIDTH=\\d+").containsMatchIn(it) && it.contains("CODECS=\"") })
         assertTrue(master.none { it.contains("a-") }, "소리 판은 재생기가 노래 모드에서 따로 쓴다")
 
@@ -121,6 +121,17 @@ class LocalModeTest {
         assertTrue(Regex("avc1\\.[0-9a-f]{6},mp4a\\.40\\.2").matches(m["compat"]["codec"].asString()))
         assertEquals("mp4a.40.2", m["audio"]["codec"].asString())
         assertTrue(variants[0].contains("CODECS=\"${m["compat"]["codec"].asString()}\"") && variants[1].contains("CODECS=\"${m["original"]["codec"].asString()}\""))
+    }
+
+    @Test
+    fun `4K HEVC 원본은 자동에 넣지 않고 코덱 계열도 달라 compat 이어도 master 가 없다 - codec 은 적힌다`() {
+        val out = dir.resolve("out")
+        local.run(Synth.hevc4k(dir, "big2.mp4", sec = 3), out, compat = true)
+
+        assertFalse(Files.exists(out.resolve("master.m3u8")))
+        val m = manifest(out)
+        assertFalse(m.has("master"))
+        assertTrue(m["original"]["codec"].asString().startsWith("hvc1.") && m["compat"]["codec"].asString().startsWith("avc1."))
     }
 
     @Test
