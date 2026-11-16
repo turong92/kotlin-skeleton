@@ -45,6 +45,7 @@
 | `storage-image-imageio` | 기본 변환 엔진: 앱 안 순수 자바(ImageIO), 추가 서버 없음 | [storage-image-imageio](storage-image-imageio.md) |
 | `storage-image-imgproxy` | 선택 변환 엔진: imgproxy 컨테이너 (HEIC 입력 · WebP 출력) | [storage-image-imgproxy](storage-image-imgproxy.md) |
 | `storage-image-pdfbox` | PDF 첫 쪽 썸네일 (기본 꺼짐, 상한 있음) | [storage-image-pdfbox](storage-image-pdfbox.md) |
+| `storage-image-ffmpeg` | 움직이는 GIF · WebP 표시본을 앱 안 ffmpeg 로 반복 MP4 로 (작업 큐, 기본 꺼짐) | [storage-image-ffmpeg](storage-image-ffmpeg.md) |
 | `board` | 게시판: 글 · 댓글 트리(대댓글) · 설정으로 늘리는 반응 종류, 운영자 숨김 · 고정, 댓글 알림 | [board](board.md) |
 | `board-jdbc` | 게시판 저장소 (PostgreSQL · MySQL) | [board-jdbc](board-jdbc.md) |
 | `author-profile` | 작성자 프로필: 한 계정이 닉네임 여러 개를 글 · 댓글마다 골라 쓴다 (서로 이어지지 않게), 첫 프로필 넘겨받기 | [author-profile](author-profile.md) |

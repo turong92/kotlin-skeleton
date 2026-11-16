@@ -182,6 +182,7 @@ fails when this table and the prefixes found in module code differ.
 | `storage-image` | `skeleton.storage.image` |
 | `storage-image-imgproxy` | `skeleton.storage.image.imgproxy` |
 | `storage-image-pdfbox` | `skeleton.storage.image.pdf` |
+| `storage-image-ffmpeg` | `skeleton.storage.image.ffmpeg` |
 | `storage-s3` | `skeleton.storage-s3` |
 | `time` | `skeleton.time` |
 
@@ -287,6 +288,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `storage-image-imageio` | yes (the default engine once `storage-image` is enabled) | nothing | headless AWT in a JVM image (not native-image) |
 | `storage-image-imgproxy` | off until enabled | an imgproxy container + its address / signing key | the imgproxy server |
 | `storage-image-pdfbox` | off until enabled | nothing | — |
+| `storage-image-ffmpeg` | off until enabled | `storage-image` enabled + `storage-s3` + `job-queue-jdbc` — enabling without them fails boot naming the missing bean | the `ffmpeg` executable in the image (8.0+ for animated WebP input) |
 | `time` | yes | nothing | — |
 
 What changed to make this true (2026-10-05 audit of every `matchIfMissing = true` and `enabled: false` pairing): `redis-lock` used to

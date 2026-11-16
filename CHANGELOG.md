@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### storage-image-ffmpeg - 움직이는 GIF · WebP 표시본을 앱 안 ffmpeg 로 반복 MP4 로 (2026-11-16)
+
+- 새 모듈 `storage-image-ffmpeg`: **기본 꺼짐**(`skeleton.storage.image.ffmpeg.enabled=false`) - 모듈을 넣기만 해서는 지금과 같다(사본 display). 켜면 `storage-image` 의 `AnimatedDisplayConverter` 확장 지점을 채워 `job-queue-jdbc` 작업(`storage.image.ffmpeg.animated`, 마이그레이션 없음)으로 변환한다 - 별도 일꾼 없이, 서버가 여럿이어도 한 번. 사본 display 가 먼저 쓰이고 변환본(`display.mp4`, 투명이면 `display.webp`)은 `AnimatedDisplays.use` 로 `alt` 에 더해진다. 실패하거나 원본보다 작지 않으면 사본 그대로.
+- ffmpeg 안전: 입력은 머리 바이트로 가린 gif · webp 뿐(`-protocol_whitelist file` · `-format_whitelist` · `-codec_whitelist` · `-f` 고정), 프로세스 시간 상한(`timeout`) · 입력 바이트 상한(`max-source-bytes`) · 출력은 원본 크기에서 멈춤. 인코딩 기본값은 `-an` · libx264 `crf 27` · `veryfast` · `yuv420p` · 짝수 크기 · `faststart`(`crf` · `preset` · `pixel-format` 설정). 움직이는 WebP 입력은 ffmpeg 8.0 이상. `video` 의 같은 자리 구현과 둘 다 켜면 이 모듈이 이긴다. 문서 `docs/modules/storage-image-ffmpeg.md`.
+
 ### app-control · app-control-jdbc - 재배포 없이 끄고 켜기: 기능 스위치 · 점검 모드 · 모바일 최소 버전 (2026-11-16)
 
 - 새 모듈 `app-control`(+ 저장소 `app-control-jdbc`): **기본 꺼짐**(`skeleton.app-control.enabled=false`). 값은 표 하나(`app_control_entries`, PostgreSQL · MySQL 마이그레이션 `V20261116150000`, 새 표)에 두고 짧은 캐시(`cache-ttl` 5초)로 읽는다 — 만료 뒤 첫 읽기가 표 전체를 쿼리 한 번으로 통째로 바꿔 끼우고, DB 를 못 읽으면 직전 값을 그대로 쓴다(한 번도 못 읽었으면 중립). 바꾼 인스턴스는 바로, 다른 인스턴스는 `cache-ttl` 안에 같은 값을 본다.

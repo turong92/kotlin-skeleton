@@ -4218,7 +4218,7 @@
       "needs": {
         "requires": ["storage-image-jdbc", "storage-image-imageio"],
         "oneOf": [],
-        "optional": ["storage-image-imgproxy", "storage-image-pdfbox"]
+        "optional": ["storage-image-imgproxy", "storage-image-pdfbox", "storage-image-ffmpeg"]
       },
       "config": {
         "prefixes": ["skeleton.storage.image"],
@@ -4240,6 +4240,38 @@
       "keywords": {
         "ko": ["이미지 썸네일", "이미지 리사이즈", "표시본", "EXIF 제거"],
         "en": ["image thumbnail", "image resize", "strip exif", "image variants"]
+      }
+    },
+    {
+      "id": "storage-image-ffmpeg",
+      "kind": "module",
+      "module": "storage-image-ffmpeg",
+      "path": "modules/storage-image-ffmpeg",
+      "status": "experimental",
+      "summary": "움직이는 GIF · WebP 표시본을 앱 안 ffmpeg 로 소리 없는 반복 MP4(투명이면 움직이는 WebP)로 — storage-image 의 변환 확장 지점을 job-queue-jdbc 작업으로 채운다(별도 일꾼 없음, 시간 · 크기 상한, 기본 꺼짐).",
+      "starter": false,
+      "newProjectFlag": "--modules storage-image-ffmpeg",
+      "autoIncludes": ["storage", "storage-image"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.storage.image.ffmpeg"],
+        "snippet": "docs/config/modules/storage-image-ffmpeg.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/storage-image-ffmpeg.md"],
+      "frontend": null,
+      "notFor": [
+        "storage-image 없이는 쓰지 않는다(따라온다)",
+        "컨테이너 이미지에 ffmpeg 가 있어야 한다 — 움직이는 WebP 입력은 8.0 이상. 별도 영상 일꾼 서버를 쓰는 쪽이면 video 모듈"
+      ],
+      "keywords": {
+        "ko": ["GIF MP4 변환", "움직이는 이미지", "ffmpeg"],
+        "en": ["gif to mp4", "animated image conversion", "ffmpeg"]
       }
     },
     {
@@ -4988,6 +5020,7 @@
         "search-jdbc",
         "storage",
         "storage-image",
+        "storage-image-ffmpeg",
         "storage-image-imageio",
         "storage-image-imgproxy",
         "storage-image-jdbc",
