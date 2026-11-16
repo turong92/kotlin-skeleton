@@ -13,21 +13,21 @@ import org.springframework.kafka.listener.ContainerProperties
 import org.springframework.kafka.listener.MessageListener
 
 // 이름이 `…Container(` 로 끝나면 Testcontainers 규칙 시험이 컨테이너 생성으로 오인한다
-private typealias ListenerBox = ConcurrentMessageListenerContainer<Any, Any>
+private typealias CheckedListener = ConcurrentMessageListenerContainer<Any, Any>
 
 /** 꾸미개가 실제 컨테이너에 달렸는지 — 앱이 자기 팩토리를 두면 Boot 가 꾸미개를 달아 주지 않는다 */
 class RouteKafkaListenerCheckTest {
-    private fun listener(batch: Boolean = false, autoStartup: Boolean = true): ListenerBox {
+    private fun listener(batch: Boolean = false, autoStartup: Boolean = true): CheckedListener {
         val props = ContainerProperties("orders").apply {
             setGroupId("orders-consumers")
             setMessageListener(if (batch) BatchMessageListener<Any, Any> { _: List<ConsumerRecord<Any, Any>> -> } else MessageListener<Any, Any> { })
         }
-        return ListenerBox(DefaultKafkaConsumerFactory<Any, Any>(mapOf("bootstrap.servers" to "localhost:1")), props).also { it.isAutoStartup = autoStartup }
+        return CheckedListener(DefaultKafkaConsumerFactory<Any, Any>(mapOf("bootstrap.servers" to "localhost:1")), props).also { it.isAutoStartup = autoStartup }
     }
 
     private fun properties(instance: String) = RequestRoutingProperties(enabled = true, service = "orders", instance = instance)
 
-    private fun problems(instance: String, vararg containers: ListenerBox) =
+    private fun problems(instance: String, vararg containers: CheckedListener) =
         RouteKafkaListenerCheck(properties(instance)) { containers.toList() }.problems()
 
     @Test
