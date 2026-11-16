@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### apps/video-worker - 로컬 모드 마스터 재생 목록 · 코덱 문자열 (2026-11-16)
+
+- `local --compat` 이 원본 판 + 호환 판을 묶은 `master.m3u8`(실측 `BANDWIDTH` · `AVERAGE-BANDWIDTH` · `RESOLUTION` · `CODECS`, 낮은 단 먼저)을 출력 폴더에 쓰고 manifest 에 `master.path` 를 더한다. manifest 의 각 판에 RFC 6381 `codec`(예 `avc1.640028,mp4a.40.2`)이 더해진다 — 모르는 코덱이면 null 이고 마스터는 만들지 않는다. 소리 판은 마스터에 넣지 않는다.
+
 ### video · video-jdbc · apps/video-worker - 소리 전용 HLS 판: 후속 차선 `AUDIO` (2026-11-16)
 
 - 화면 없이 소리만 틀 때 영상 바이트를 받지 않도록, 원본 단 목록을 입력으로 읽어 소리 트랙만 복사(`-vn -c:a copy`, 재인코딩 없음)한 6초 fMP4 HLS 한 판 `a-<16>/index.m3u8` 을 만드는 후속 차선. 호환 단(`COMPAT`)과 같은 상태 흐름 · 재시도(3회) · 올리기 전 검증(영상 트랙 없음 · 소리 트랙 하나 · `aac` · 길이) · 경보를 따르고, 실패해도 영상은 `PLAYABLE` 그대로다. 출력마다 `-map_metadata -1`.

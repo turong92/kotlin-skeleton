@@ -56,6 +56,7 @@ class LocalMode(private val tools: Tools) {
         Files.createDirectories(out)
         // 같은 폴더로 다시 돌릴 때 실패해도 낡은 manifest 가 남아 완성본처럼 보이지 않게 시작하면서 지운다
         Files.deleteIfExists(out.resolve(MANIFEST))
+        Files.deleteIfExists(out.resolve(LocalMaster.FILE))
         // 작업 폴더는 출력 밖(시스템 임시 폴더) — 강제 종료로 남아도 출력 폴더와 함께 올라가지 않는다
         val work = Files.createTempDirectory("video-worker-local-")
         val cancel = AtomicBoolean(false)
@@ -76,6 +77,12 @@ class LocalMode(private val tools: Tools) {
             )
             if (audio != null) manifest["audio"] = entry(audio)
             if (compatTier != null) manifest["compat"] = entry(compatTier)
+            // 마스터는 두 영상 판의 코덱 문자열을 다 알 때만 — CODECS 없는 변형을 섞으면 재생기가 못 트는 단을 고를 수 있다. 못 만들면 manifest 에도 없다
+            val master = compatTier?.let { LocalMaster.text(listOf(tier, it)) }
+            if (master != null) {
+                Files.writeString(out.resolve(LocalMaster.FILE), master)
+                manifest["master"] = mapOf("path" to LocalMaster.FILE)
+            }
             manifest["poster"] = mapOf("path" to original.posterName, "width" to original.posterSize.first, "height" to original.posterSize.second, "bytes" to original.poster.fileSize())
             // 임시 이름으로 다 쓴 뒤 바꿔치기 — 반쯤 쓰인 manifest 가 보이지 않는다
             val tmp = out.resolve("$MANIFEST.tmp")
@@ -109,6 +116,7 @@ class LocalMode(private val tools: Tools) {
             "bytes" to tier.bytes,
             "videoCodec" to if (hasVideo) info.videoCodec else null,
             "audioCodec" to info.audioCodec,
+            "codec" to LocalMaster.codec(info),
         )
     }
 }

@@ -36,7 +36,17 @@ docker run --rm -v "$PWD:/data" video-worker:<tag> local /data/in.mp4 /data/out
 환경변수(`VIDEO_WORKER_*`)도 서버 주소도 필요 없다 — 첫 인자가 `local` 이면 서버 모드의 설정을 읽지도 않는다. 출력 폴더에 이렇게 쓴다:
 
 - `o-<16>/` 원본 판(재인코딩 없는 fMP4 HLS) · `a-<16>/` 소리 판(소리가 **없으면 만들지 않는다**) · `p-<16>.jpg` 포스터 · `c-<16>/` 호환 판(`--compat` 일 때만, H.264 720p).
-- `manifest.json` — `hasAudio`, 그리고 판마다(`original` · `audio` · `compat`) `path`(출력 폴더 기준 `…/index.m3u8`) · `durationMs` · `width` · `height` · `bytes`(폴더 합) · `videoCodec` · `audioCodec`(소리 판은 가로 · 세로 · 영상 코덱이 null), `poster` 는 `path` · `width` · `height` · `bytes`. 실패하면 manifest 를 쓰지 않는다.
+- `manifest.json` — `hasAudio`, 그리고 판마다(`original` · `audio` · `compat`) `path`(출력 폴더 기준 `…/index.m3u8`) · `durationMs` · `width` · `height` · `bytes`(폴더 합) · `videoCodec` · `audioCodec`(소리 판은 가로 · 세로 · 영상 코덱이 null) · `codec`(RFC 6381 — 예 `"avc1.640028,mp4a.40.2"`, 웹 재생기 `PlayerSource.codec` 모양. H.264 는 ffprobe profile · level 로 만들고 소리는 AAC `mp4a.40.2`; 모르는 코덱 · 레벨을 못 읽은 영상이면 null), `poster` 는 `path` · `width` · `height` · `bytes`. 실패하면 manifest 를 쓰지 않는다.
+- `master.m3u8` + manifest 의 `master`(`{"path": "master.m3u8"}`) — `--compat` 일 때만, 원본 판과 호환 판을 묶은 HLS 마스터(대역폭 낮은 순, 변형마다 실측 `BANDWIDTH`(가장 큰 조각) · `AVERAGE-BANDWIDTH` · `RESOLUTION` · `CODECS`)라 재생기가 「자동」에서 낮은 단으로 시작해 올라간다. 소리 판은 넣지 않는다(노래 모드에서 따로 쓴다). 두 판 중 하나라도 `codec` 을 모르면 `CODECS` 없는 변형을 섞지 않으려고 마스터를 만들지 않고 manifest 에도 `master` 가 없다.
+
+```json
+{ "version": 1, "hasAudio": true,
+  "original": { "path": "o-…/index.m3u8", "width": 1920, "height": 1080, "codec": "avc1.640028,mp4a.40.2", "…": "…" },
+  "audio": { "path": "a-…/index.m3u8", "codec": "mp4a.40.2", "…": "…" },
+  "compat": { "path": "c-…/index.m3u8", "width": 1280, "height": 720, "codec": "avc1.64001f,mp4a.40.2", "…": "…" },
+  "master": { "path": "master.m3u8" },
+  "poster": { "path": "p-….jpg", "…": "…" } }
+```
 
 만드는 코드와 검증은 서버 모드와 같다(`Builds`: 같은 ffmpeg 계획 · 같은 결과 검사, 입력은 서버 모드의 공개 영상처럼 끝까지 디코드해 본다). **올리기는 하지 않는다** — 이 폴더를 R2 같은 저장소로 올리는 것은 읽는 쪽 스크립트의 몫이다. 종료 코드: 0 = 끝, 1 = 못 만들었다(사유는 stderr), 2 = 사용법 오류.
 

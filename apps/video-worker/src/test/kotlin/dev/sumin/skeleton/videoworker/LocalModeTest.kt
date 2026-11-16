@@ -98,6 +98,45 @@ class LocalModeTest {
     }
 
     @Test
+    fun `compat 이면 원본 판과 호환 판을 묶은 master 가 나오고 manifest 에 적히며 각 판에 codec 이 있다 - 소리 판은 마스터에 없다`() {
+        val out = dir.resolve("out")
+        local.run(Synth.hevc4k(dir, "big2.mp4", sec = 3), out, compat = true)
+
+        val m = manifest(out)
+        assertEquals("master.m3u8", m["master"]["path"].asString())
+        val master = Files.readString(out.resolve("master.m3u8")).lines()
+        assertEquals("#EXTM3U", master[0])
+        val variants = master.filter { it.startsWith("#EXT-X-STREAM-INF:") }
+        assertEquals(2, variants.size)
+        val compatPath = m["compat"]["path"].asString()
+        val originalPath = m["original"]["path"].asString()
+        // 낮은 단(호환 720p)이 먼저 — 재생기가 첫 줄로 시작한다
+        assertEquals(listOf(compatPath, originalPath), variants.map { master[master.indexOf(it) + 1] })
+        assertTrue(variants[0].contains("RESOLUTION=1280x720") && variants[1].contains("RESOLUTION=3840x2160"))
+        assertTrue(variants.all { Regex("BANDWIDTH=\\d+,AVERAGE-BANDWIDTH=\\d+").containsMatchIn(it) && it.contains("CODECS=\"") })
+        assertTrue(master.none { it.contains("a-") }, "소리 판은 재생기가 노래 모드에서 따로 쓴다")
+
+        // codec 은 manifest 의 각 판에 — 마스터 CODECS 와 같은 문자열
+        for (tier in listOf("original", "compat", "audio")) assertTrue(m[tier]["codec"].asString().contains("mp4a.40.2"), tier)
+        assertTrue(Regex("avc1\\.[0-9a-f]{6},mp4a\\.40\\.2").matches(m["compat"]["codec"].asString()))
+        assertEquals("mp4a.40.2", m["audio"]["codec"].asString())
+        assertTrue(variants[0].contains("CODECS=\"${m["compat"]["codec"].asString()}\"") && variants[1].contains("CODECS=\"${m["original"]["codec"].asString()}\""))
+    }
+
+    @Test
+    fun `compat 이 없으면 master 도 없고 manifest 에 master 항목이 없다 - 같은 폴더의 낡은 master 도 지운다`() {
+        val out = dir.resolve("out")
+        Files.createDirectories(out)
+        Files.writeString(out.resolve("master.m3u8"), "stale")
+        local.run(Synth.h264(dir, "single.mp4", sec = 3), out, compat = false)
+
+        assertFalse(Files.exists(out.resolve("master.m3u8")))
+        val m = manifest(out)
+        assertFalse(m.has("master"))
+        assertTrue(m["original"]["codec"].asString().startsWith("avc1."), "코덱 문자열은 단이 하나여도 적힌다")
+    }
+
+    @Test
     fun `명령줄 - 서버 설정 없이 돌고, 인자가 틀리면 2, 못 읽는 파일이면 1 이고 출력 폴더에 manifest 가 없다`() {
         val out = dir.resolve("cli-out")
         assertEquals(0, local.cli(listOf(Synth.h264(dir, "cli.mp4", sec = 2).toString(), out.toString())))

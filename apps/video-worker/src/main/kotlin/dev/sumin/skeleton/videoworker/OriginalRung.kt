@@ -9,7 +9,7 @@ import kotlin.math.ceil
  */
 object OriginalRung {
     const val AUTO_MAX_SHORT_SIDE = 1080
-    private const val AUDIO_CODEC = "mp4a.40.2"
+    const val AUDIO_CODEC = "mp4a.40.2"
     private val FOLDER = Regex("^o-[0-9a-f]{16}$")
 
     fun eligible(info: MediaInfo): Boolean = info.shortSide <= AUTO_MAX_SHORT_SIDE
