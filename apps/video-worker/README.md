@@ -1,6 +1,6 @@
 # apps/video-worker — 영상 변환 일꾼
 
-서버의 일꾼 API(`/api/internal/video/*`, 모듈 `video`)에서 일을 **집어 가** 원본 단(재인코딩 없는 fMP4 HLS 조각) · 호환 단(H.264 720p) · 사다리(1080/720/480)를 만들어 올리는 작은 Kotlin 프로그램 + ffmpeg 이미지다.
+서버의 일꾼 API(`/api/internal/video/*`, 모듈 `video`)에서 일을 **집어 가** 원본 단(재인코딩 없는 fMP4 HLS 조각) · 소리 판(소리만 복사한 HLS) · 호환 단(H.264 720p) · 사다리(1080/720/480)를 만들어 올리는 작은 Kotlin 프로그램 + ffmpeg 이미지다.
 서버 코드에 의존하지 않고(계약은 JSON 한 장 — `Api.kt` 의 DTO), **저장소 키를 갖지 않는다** — 서버가 서명한 GET · PUT 주소만 쓴다. 같은 이미지가 홈서버 컨테이너 · Cloud Run 작업 · 아무 기계(토큰만 있으면)에서 돈다.
 
 ## 환경변수
@@ -10,7 +10,7 @@
 | `VIDEO_WORKER_API` | (필수) | 서버 주소 (`http://app:8080`) |
 | `VIDEO_WORKER_TOKEN` | (필수) | 일꾼 토큰 — 운영자 발급 API 가 한 번 보여 준 평문. 로그 · 출력에 안 찍힌다 |
 | `VIDEO_WORKER_ID` | `worker-<HOSTNAME>` | 일꾼 이름(`[A-Za-z0-9._:-]{1,64}`) |
-| `VIDEO_WORKER_LANES` | `REMUX,COMPAT,LADDER,ANIMATED` | 이 일꾼이 맡을 차선 (토큰의 차선과 겹치는 것만 받는다). `ANIMATED` = 움직이는 GIF · WebP 의 표시본 변환(소리 없는 MP4, 투명 배경이면 움직이는 WebP) |
+| `VIDEO_WORKER_LANES` | `REMUX,AUDIO,COMPAT,LADDER,ANIMATED` | 이 일꾼이 맡을 차선 (토큰의 차선과 겹치는 것만 받는다). `AUDIO` = 소리 전용 판(`-vn -c:a copy`, 재인코딩 없어 CPU 를 거의 안 쓴다 - 서버가 `skeleton.video.audio.enabled` 일 때만 일을 낸다). `ANIMATED` = 움직이는 GIF · WebP 의 표시본 변환(소리 없는 MP4, 투명 배경이면 움직이는 WebP) |
 | `VIDEO_WORKER_MODE` | `poll` | `poll` = 상주(큐가 비면 쉬었다 다시 집는다) · `once` = 일이 없을 때까지 하고 끝낸다(Cloud Run 작업) |
 | `VIDEO_WORKER_POLL_SECONDS` | `5` | `poll` 에서 큐가 비었을 때 쉬는 간격 |
 | `VIDEO_WORKER_NICE` | `0` | 양수면 `nice -n` 으로 낮춘 우선순위로 ffmpeg 를 돌린다(홈서버에서 다른 일과 같이 쓸 때) |

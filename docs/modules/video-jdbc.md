@@ -2,7 +2,7 @@
 
 `video` 의 저장 포트 `VideoStore` · `VideoWorkerStore` 를 JDBC(PostgreSQL · MySQL)로 구현하고, 후속 작업 포트 `VideoFollowUps`(`video.finalize` · `video.wake`)를 `job-queue-jdbc` 에 얹는다. 표 넷을 한 번에 만든다.
 
-- `videos` — 영상 한 줄: 주소용 무작위 `id`(char 22, **대소문자 구분** — MySQL 은 이진 정렬) · 올린 계정(`owner_account_id`, 외래 키 없음) · 앱이 정하는 `purpose` · `visibility` · 주 상태 · 올린 파일 키 · 멀티파트 id · 마지막 올리기 움직임 · `src_*`(일꾼 probe 결과) · 원본 단 · 호환 · 사다리 트랙 · 포스터 · 진행률 · 시도 · 임대 · 실패 코드. 색인 `(status, lease_until)` · `compat_status` · `ladder_status` · `(owner_account_id, purpose)`.
+- `videos` — 영상 한 줄: 주소용 무작위 `id`(char 22, **대소문자 구분** — MySQL 은 이진 정렬) · 올린 계정(`owner_account_id`, 외래 키 없음) · 앱이 정하는 `purpose` · `visibility` · 주 상태 · 올린 파일 키 · 멀티파트 id · 마지막 올리기 움직임 · `src_*`(일꾼 probe 결과) · 원본 단 · 호환 · 사다리 · 소리 판(`audio_status` · `audio_key` · `audio_bytes`, 마이그레이션 `V20261116170000__video_audio_track`) 트랙 · 포스터 · 진행률 · 시도 · 임대 · 실패 코드. 색인 `(status, lease_until)` · `compat_status` · `ladder_status` · `audio_status` · `(owner_account_id, purpose)`.
 - `video_workers` — 일꾼 토큰(SHA-256 해시만) · 허용 차선 · 폐기 · 마지막 본 시각. 일꾼 API 가 쓴다.
 - `video_wake_runs` — 클라우드 작업 깨우기 기록. `VideoWakeRuns` 포트로 읽고 쓴다 - 쓰는 쪽은 `video-cloudrun` 이다.
 - `video_display_jobs` — 움직이는 GIF · WebP 의 표시본 변환 일(`DisplayJobStore`, `storage-image` 가 함께 켜졌을 때만 쓰인다). 이미지 상태 줄의 열쇠 하나가 한 줄이고(같은 이미지는 한 번만 줄을 선다), 집기는 `FOR UPDATE SKIP LOCKED` + 조건부 갱신 · 임대 만료와 3회 시도 상한은 영상과 같은 규칙이다.

@@ -1,6 +1,6 @@
 # video-cloudrun
 
-변환 일꾼이 0 으로 줄어드는 실행 환경(**Google Cloud Run 작업**)에서 돌 때, 서버가 호환 단 · 사다리 일이 줄 서면 그 작업을 **깨우는** `VideoWaker` 구현이다. 서버는 일꾼을 부르지 않는다 - 일꾼이 `claim` 으로 집어 간다. Cloud Run 은 0 으로 줄면 스스로 집지 못하니 서버가 **작업 실행만** 시작한다(Admin API `POST …/jobs/<작업>:run`, 덮어쓰기 없이 작업 정의 그대로). 실행은 `MODE=once` 로 큐가 빌 때까지 집고 끝난다.
+변환 일꾼이 0 으로 줄어드는 실행 환경(**Google Cloud Run 작업**)에서 돌 때, 서버가 소리 · 호환 단 · 사다리 일이 줄 서면 그 작업을 **깨우는** `VideoWaker` 구현이다. 서버는 일꾼을 부르지 않는다 - 일꾼이 `claim` 으로 집어 간다. Cloud Run 은 0 으로 줄면 스스로 집지 못하니 서버가 **작업 실행만** 시작한다(Admin API `POST …/jobs/<작업>:run`, 덮어쓰기 없이 작업 정의 그대로). 실행은 `MODE=once` 로 큐가 빌 때까지 집고 끝난다.
 
 **꺼짐이 기본이다** - Cloud Run 은 원할 때만 켜는 선택이다. 홈서버 컨테이너나 아무 기계에서 같은 일꾼 이미지를 상주(`poll`)로 돌리면 이 모듈이 필요 없다. 켜기: `skeleton.video.cloud-run.enabled=true` + `project` · `region` · `job` + `credentials-json`(+ `skeleton.video.enabled=true` 와 `video-jdbc`). 설정 이름 모양이 아니거나 키가 비었거나 읽을 수 없으면 **기동 실패**(속성 이름만 말하고 값은 싣지 않는다).
 
@@ -28,7 +28,7 @@
 1. 구글 클라우드 **프로젝트**를 만들고 **결제 계정**을 연결한다. **예산 알림**도 같이 만든다 - 상한이 없으면 폭주 때 비용이 사용량에 비례한다.
 2. API 를 켠다: Cloud Run Admin API, (이미지 저장소를 쓰면) Artifact Registry.
 3. **이미지 저장소**를 만들고 일꾼 이미지를 올린다 - 빌드는 `apps/video-worker`(그 README 가 정본). **x86 Cloud Run 이면 `--platform linux/amd64`** - 개발 PC 이미지는 arm64 일 수 있다.
-4. **Cloud Run 작업(Job)** 을 정의한다: 이미지, 환경변수 `VIDEO_WORKER_API=https://<앱 주소>` · `VIDEO_WORKER_MODE=once` · `VIDEO_WORKER_LANES=COMPAT,LADDER` · `VIDEO_WORKER_TOKEN`(Secret Manager 에 둔 일꾼 토큰 - 운영자 API 로 이 차선만 주고 발급). vCPU · 메모리 · 작업 시간 · 병렬 수는 아래 표를 보고 정한다.
+4. **Cloud Run 작업(Job)** 을 정의한다: 이미지, 환경변수 `VIDEO_WORKER_API=https://<앱 주소>` · `VIDEO_WORKER_MODE=once` · `VIDEO_WORKER_LANES=AUDIO,COMPAT,LADDER` (소리 판을 안 켠 앱이면 `COMPAT,LADDER`) · `VIDEO_WORKER_TOKEN`(Secret Manager 에 둔 일꾼 토큰 - 운영자 API 로 이 차선만 주고 발급). vCPU · 메모리 · 작업 시간 · 병렬 수는 아래 표를 보고 정한다.
 5. **깨우기용 서비스 계정**을 만든다: 그 작업 **하나**를 실행할 권한만(작업 단위 `run.jobs.run`, 예 `roles/run.invoker` 를 그 작업에만) 주고 키(JSON)를 만든다. 일꾼 실행 자체의 서비스 계정(Secret 읽기)과 따로 둔다.
 6. 서버 설정: `skeleton.video.cloud-run.project` · `region` · `job`(선언의 `env:`) 과 `credentials-json`(`<P>_VIDEO_CLOUDRUN_CREDENTIALS_JSON`, 선언의 `secrets:`). 상한 `max-executions` · `execution-window` · `min-wake-gap` 은 위 표.
 7. **먼저 stage 에서** 합성 영상으로 끝까지 본다(호환 조건 밖 영상 → 호환판 → 사다리 → 재생). 그다음 운영.

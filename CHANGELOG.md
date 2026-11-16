@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### video · video-jdbc · apps/video-worker - 소리 전용 HLS 판: 후속 차선 `AUDIO` (2026-11-16)
+
+- 화면 없이 소리만 틀 때 영상 바이트를 받지 않도록, 원본 단 목록을 입력으로 읽어 소리 트랙만 복사(`-vn -c:a copy`, 재인코딩 없음)한 6초 fMP4 HLS 한 판 `a-<16>/index.m3u8` 을 만드는 후속 차선. 호환 단(`COMPAT`)과 같은 상태 흐름 · 재시도(3회) · 올리기 전 검증(영상 트랙 없음 · 소리 트랙 하나 · `aac` · 길이) · 경보를 따르고, 실패해도 영상은 `PLAYABLE` 그대로다. 출력마다 `-map_metadata -1`.
+- **기본 꺼짐**: `skeleton.video.audio.enabled=false` — 앱 yml 이 켠다. 켜면 원본 단이 올라가는 순간 소리가 있는 영상을 `QUEUED` 로 줄 세우고(큐 순서 소리 → 호환 → 사다리), 소리가 없는 영상은 설정과 상관없이 `SKIPPED`. 설정을 켠 뒤에는 청소가 이미 올라간 `PLAYABLE` 영상(`NONE`)을 채운다(소리 없음 → `SKIPPED`).
+- 저장: 표 `videos` 에 `audio_status` · `audio_key` · `audio_bytes`(새 마이그레이션 `V20261116170000__video_audio_track`, PostgreSQL · MySQL, `migrations.lock` 에 잠금). 기존 마이그레이션은 건드리지 않았다.
+- 재생: `PlaybackGrant.audio`(준비됐을 때만 — 비공개는 출입증 경로 아래), 목록 한 줄 `VideoResponse.audio`(트랙 상태). `VideoPlaylists` 의 `isOwnPlaylist` · `allowed` 두 곳 모두 소리 판의 목록 · 조각을 서명한다. 청소(`SWEEP`)의 보존 목록에 `a-<16>/`.
+- 운영: 일꾼 차선 `AUDIO`(`VideoLane` 에 추가 — 토큰 발급 · `VIDEO_WORKER_LANES` · 일꾼 기본 차선), 후속 이벤트 `AUDIO_READY`(`VideoEvents.onTrackReady(video, AUDIO)`), 경보 `VIDEO_AUDIO_STALE`(`monitor.audio-stale-after` 2h), 실패 급증 경보에 소리 판 실패도 센다. 이전에 발급한 일꾼 토큰(`REMUX,COMPAT,LADDER`)은 그대로 쓰이되 소리 판은 못 만든다 — 켜는 앱은 `AUDIO` 가 든 토큰을 새로 발급한다. 저장 포트 `VideoStore` 에 `markAudioReady` · `queueDeferredAudio` · `countAudioQueuedBefore` 가 더해졌다(직접 구현한 앱은 채운다).
+
 ### storage-image-ffmpeg - 움직이는 GIF · WebP 표시본을 앱 안 ffmpeg 로 반복 MP4 로 (2026-11-16)
 
 - 새 모듈 `storage-image-ffmpeg`: **기본 꺼짐**(`skeleton.storage.image.ffmpeg.enabled=false`) - 모듈을 넣기만 해서는 지금과 같다(사본 display). 켜면 `storage-image` 의 `AnimatedDisplayConverter` 확장 지점을 채워 `job-queue-jdbc` 작업(`storage.image.ffmpeg.animated`, 마이그레이션 없음)으로 변환한다 - 별도 일꾼 없이, 서버가 여럿이어도 한 번. 사본 display 가 먼저 쓰이고 변환본(`display.mp4`, 투명이면 `display.webp`)은 `AnimatedDisplays.use` 로 `alt` 에 더해진다. 실패하거나 원본보다 작지 않으면 사본 그대로.

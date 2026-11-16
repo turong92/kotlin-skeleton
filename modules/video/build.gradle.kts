@@ -4,7 +4,7 @@ dependencies {
     // scheduler: 올리기 청소의 @SkeletonScheduled 표시만 쓴다 — 없으면 표시가 무시되고 요청 구동 모드(OnRequestTask)가 맡는다
     compileOnly("org.springframework.security:spring-security-core")
     compileOnly(project(":modules:scheduler"))
-    // alert: 영상 경보 셋(VIDEO_QUEUE_STALE · VIDEO_WAKE_FAILED · VIDEO_FAILED_SURGE · VIDEO_COMPAT_STALE) — alert 가 있을 때만 서는 별도 자동설정
+    // alert: 영상 경보(VIDEO_QUEUE_STALE · VIDEO_WAKE_FAILED · VIDEO_FAILED_SURGE · VIDEO_COMPAT_STALE · VIDEO_AUDIO_STALE) — alert 가 있을 때만 서는 별도 자동설정
     compileOnly(project(":modules:alert"))
     // storage-image: 움직이는 GIF · WebP 표시본 변환(ANIMATED 차선) - storage-image 가 있고 둘 다 켜졌을 때만 서는 별도 자동설정. storage-image 는 video 를 모른다
     compileOnly(project(":modules:storage-image"))
