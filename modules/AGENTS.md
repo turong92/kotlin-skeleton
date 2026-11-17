@@ -11,6 +11,7 @@
 - `modules/auth-magic-link` owns email-link sign-in as one more `SignInMethod` over the same one-time-token machinery.
 - `modules/auth-social` owns optional provider-neutral social-login contracts and endpoint routing (선택형 소셜 로그인 공통 흐름). 실제 provider 구현은 `modules/auth-social-google|kakao|naver` 같은 선택 Gradle 모듈로 둔다.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` own optional provider-specific OAuth HTTP clients. `modules/auth-social-oidc` is a generic OpenID Connect provider configured by properties (several providers per module instance — discovery, JWKS rotation, ID token validation, a LINE preset; on only when a provider has a `client-id`), `modules/auth-social-x` is X OAuth 2.0 + PKCE. PKCE (S256) / nonce are provider-declared (`pkce` / `nonce` in `GET /auth/methods`), checked in `auth-social` before the provider is called; contract: `docs/account-http-contract.md` "FINAL-3 + social PKCE".
+- `modules/ads-web-rewarded` owns the optional web rewarded-ad session endpoints (웹 보상형 광고: 1회용 세션 · 한도 · 보상은 `RewardIssuer` 또는 토큰). 저장소는 `WebRewardStore` 로 교체한다.
 - `modules/idempotency` owns optional `Idempotency-Key` command endpoint protection (중복 실행 방지가 필요한 command endpoint 만). 저장소는 `IdempotencyStore` 로 교체한다.
 - `modules/crypto` owns optional AES-GCM text encryption and opt-in persistence converters.
 - `modules/notification` owns provider-neutral notification contracts and the local broker default (알림 이벤트 계약과 기본 로컬 브로커).

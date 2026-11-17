@@ -98,6 +98,7 @@ fails when this table and the prefixes found in module code differ.
 | `alert` | `skeleton.alert` |
 | `alert-jdbc` | `skeleton.alert-jdbc` |
 | `ads-admob` | `skeleton.ads-admob` |
+| `ads-web-rewarded` | `skeleton.ads-web-rewarded` |
 | `alert` | wired (logs only); sends nothing until `skeleton.alert.webhook-url` is set | nothing | a Discord-compatible webhook URL, internet |
 | `alert-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration, as above) | — |
 | `account` | `skeleton.account` |
@@ -262,6 +263,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `notification-sse` | yes | nothing | — |
 | `notification-websocket` | yes (in-process simple broker; the endpoint is open until `authentication.enabled=true`) | a servlet web app | — |
 | `ads-admob` | off until `enabled=true` + `ad-units` | a servlet web app + `point` with a ledger (`point-jdbc`) | the AdMob console (server-side verification callback URL), internet (Google key list) |
+| `ads-web-rewarded` | off until `enabled=true` (and a `WebRewardStore` — `ads-web-rewarded-jdbc`) | a servlet web app + a `WebRewardStore`; `reward-type` needs that type's `RewardIssuer` (e.g. `point` with a ledger) | — |
 | `payment` | yes (routing only) | nothing | a provider module |
 | `payment-jdbc` | yes (turns the `payment` order ledger on) | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migration `payment_ledger`, as above) | a provider module (`payment-toss`) to take money |
 | `payment-toss` / `payment-kakaopay` / `payment-naverpay` / `payment-stripe` / `payment-paddle` | off until `enabled=true` | nothing | secret key, internet |

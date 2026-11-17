@@ -1,0 +1,12 @@
+# ads-web-rewarded — 웹 보상형 광고(GPT) 세션: 열기 · 보상 요청 두 경로 (POST /api/v1/ads/web-rewarded/sessions). 기본 꺼짐.
+skeleton:
+  ads-web-rewarded:
+    enabled: false              # true 면 두 경로가 선다 (꺼짐 → 404). 저장소(ads-web-rewarded-jdbc)가 있어야 한다
+    session-ttl: 15m            # 세션을 열고 보상 요청까지 허용하는 시간
+    min-elapsed: 7s             # 세션을 열고 이보다 빨리 온 보상 요청은 거절 - 구글: 표시 광고는 7초 이상 보여야 보상. 영상만 쓰면 광고 길이로 올린다
+    # account-daily-limit: 10   # 계정 하루 보상 횟수. 비우면(기본) 없음
+    # ip-daily-limit: 30        # IP 하루 보상 횟수. 비우면(기본) 없음. skeleton.web.client-ip.mode 를 정해야 믿을 수 있다
+    day-zone: UTC               # 「하루」의 기준 시간대(ZoneId.of 가 받는 이름 - IANA 이름 · 오프셋) - ads-admob 과 같은 뜻
+    # reward-type: point        # 보상 즉시 이 종류의 RewardIssuer 를 부른다. 비우면(기본) 1회용 토큰을 돌려준다
+    reward-params: {}           # 지급기에 넘길 params - point 면 amount(필수) · expiresInDays(선택)
+    token-ttl: 10m              # 토큰 모드에서 토큰을 쓸 수 있는 시간

@@ -11,6 +11,25 @@ import dev.sumin.skeleton.common.time.TimeProvider
 import java.time.Duration
 import java.time.Instant
 import java.util.Locale
+import org.springframework.boot.autoconfigure.SpringBootApplication
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.security.authentication.TestingAuthenticationToken
+
+// 모듈 패키지 밖에 둔다 — 모듈 클래스는 컴포넌트 스캔이 아니라 AutoConfiguration 으로만 들어온다
+@SpringBootApplication
+class WebRewardTestApplication
+
+fun account(id: String) = TestingAuthenticationToken(id, "n/a", "ROLE_USER")
+
+@TestConfiguration(proxyBeanMethods = false)
+class WebRewardFakes {
+    @Bean fun fakeWebRewardStore() = FakeWebRewardStore()
+
+    @Bean fun recordingIssuer() = RecordingIssuer()
+
+    @Bean fun mutableClock() = MutableClock()
+}
 
 /** 움직이는 고정 시계 */
 class MutableClock(var now: Instant = Instant.parse("2026-11-18T03:00:00Z")) : TimeProvider {

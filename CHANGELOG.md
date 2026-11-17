@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ads-web-rewarded - 웹 보상형 광고(GPT) 세션 (2026-11-18)
+
+- 새 모듈 `ads-web-rewarded`(기본 꺼짐, `skeleton.ads-web-rewarded.enabled=true` + 저장소 `WebRewardStore`): `POST /api/v1/ads/web-rewarded/sessions`(열기 — 상한이 찼으면 409 `ADS_WEB_REWARDED.DAILY_LIMIT`)와 `…/{sessionId}/grant`(한 번만 보상). 서버가 웹 광고 시청을 증명할 수 없어서 1회용 세션 · 최소 경과 시간(`min-elapsed` 7s) · 계정/IP 하루 상한(`account-daily-limit` · `ip-daily-limit`, 기본 없음, 단위는 보상 횟수)으로 남용을 막는다. 보상은 platform `RewardIssuer`(`reward-type: point` 등 — 종류를 정했는데 지급기가 없거나 params 가 틀리면 기동 실패)이거나, 정하지 않으면 앱이 `WebRewardTokens.redeem` 으로 한 번 쓰는 1회용 토큰(저장은 해시). 지급기 · DB 오류는 전부 되돌려 503 `REWARD_UNAVAILABLE`(세션은 열린 채, 카운터는 그대로). 계정 삭제 시 그 계정의 세션과 계정 카운터를 지운다. `ads-admob` 의 상한과는 따로 센다.
+- platform: `DayWindow.containing(now, zone)` — 하루 경계 한 곳(`ads-admob` 이 이것을 쓴다. `AdmobProperties.dayWindow` 의 반환형이 `Pair` 에서 `DayWindow`(`from` · `to`)로 바뀌었다 — 구조 분해 호출자는 그대로).
+
 ### point · point-jdbc · ads-admob - 기간 안 적립 상한 · 광고 하루 상한 (2026-11-18)
 
 - `PointWallet.earnWithin`(기간 상한 `PointEarnLimit(max, from, to)` — 같은 계정 · 같은 `sourceType` 적립 합이 넘으면 409 `POINT.EARN_LIMIT`, 아무것도 안 바뀜) · `earnedIn`, `PointStore.earn(limit=)` · `earnedIn`. 합계는 계정 잠금 안에서 세어 동시 적립도 못 넘기며, 그래서 활성 트랜잭션 안에서 부르면 `IllegalStateException`. 기존 `earn` 은 그대로. **직접 구현한 앱은** `PointWallet`(`earnWithin` · `earnedIn`)과 `PointStore`(`earnedIn`)에 메서드를 채운다.

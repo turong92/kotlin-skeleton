@@ -247,6 +247,40 @@
       }
     },
     {
+      "id": "ads-web-rewarded",
+      "kind": "module",
+      "module": "ads-web-rewarded",
+      "path": "modules/ads-web-rewarded",
+      "status": "experimental",
+      "summary": "웹 보상형 광고(Google Ad Manager GPT) 세션 — POST /api/v1/ads/web-rewarded/sessions 로 세션을 열고 .../{id}/grant 로 한 번만 보상을 받는다. 서버가 시청을 증명할 수 없어서 1회용 세션 · 최소 경과 시간 · 계정/IP 하루 상한으로 남용을 막는다. 보상은 platform 의 RewardIssuer(예: point 적립) 또는 앱이 쓰는 1회용 토큰. 기본 꺼짐.",
+      "starter": false,
+      "newProjectFlag": "--modules ads-web-rewarded",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.ads-web-rewarded"],
+        "snippet": "docs/config/modules/ads-web-rewarded.yml"
+      },
+      "basePaths": ["/api/v1/ads/web-rewarded/sessions"],
+      "secrets": [],
+      "docs": ["docs/modules/ads-web-rewarded.md"],
+      "frontend": null,
+      "notFor": [
+        "저장소가 없다 — ads-web-rewarded-jdbc 를 같이 고른다",
+        "서버가 시청을 증명하지 못한다 — 보상의 근거는 브라우저 신호이고 남용은 한도로 막는다",
+        "배너 · 전면 광고는 이 모듈과 무관하다 — 보상형만 다룬다",
+        "앱(AdMob)의 보상형 광고는 ads-admob 이다 — 두 모듈의 하루 상한은 따로 센다"
+      ],
+      "keywords": {
+        "ko": ["웹 보상형 광고", "광고 보고 보상", "웹 리워드 광고", "광고 세션", "GPT 보상형"],
+        "en": ["web rewarded ads", "gpt rewarded", "rewarded ad session", "ad reward token", "rewarded web"]
+      }
+    },
+    {
       "id": "alert",
       "kind": "module",
       "module": "alert",
@@ -4930,6 +4964,7 @@
       "newProjectFlag": "--with-workbench",
       "autoIncludes": [
         "ads-admob",
+        "ads-web-rewarded",
         "alert-jdbc",
         "api-key",
         "api-key-jdbc",
