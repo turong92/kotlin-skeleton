@@ -88,6 +88,7 @@ dependencies {
     implementation(project(":modules:point-jdbc"))          // + point — 포인트 원장(적립 · FIFO 차감 · 소멸). 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험), 운영 API 는 꺼져 있다
     implementation(project(":modules:ads-admob"))           // AdMob 보상형 광고 SSV 수신 (꺼진 채 시작한다) — 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험)
     implementation(project(":modules:ads-web-rewarded"))     // 웹 보상형 광고 세션 (꺼진 채 시작한다) — 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험)
+    implementation(project(":modules:ads-web-rewarded-jdbc")) // + 웹 보상형 광고 저장소 — 세션 · 하루 카운터 표
     implementation(project(":modules:dashboard-cloudflare")) // + dashboard 의 Cloudflare 카드 — 키가 없어 카드는 비어 있다
     implementation(project(":modules:dashboard-ga"))        // + dashboard 의 GA 카드 · 현재 방문자 — 키가 없어 카드는 비어 있다
     implementation(project(":modules:db-postgresql"))

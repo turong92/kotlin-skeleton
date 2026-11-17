@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### ads-web-rewarded - 웹 보상형 광고(GPT) 세션 (2026-11-18)
 
 - 새 모듈 `ads-web-rewarded`(기본 꺼짐, `skeleton.ads-web-rewarded.enabled=true` + 저장소 `WebRewardStore`): `POST /api/v1/ads/web-rewarded/sessions`(열기 — 상한이 찼으면 409 `ADS_WEB_REWARDED.DAILY_LIMIT`)와 `…/{sessionId}/grant`(한 번만 보상). 서버가 웹 광고 시청을 증명할 수 없어서 1회용 세션 · 최소 경과 시간(`min-elapsed` 7s) · 계정/IP 하루 상한(`account-daily-limit` · `ip-daily-limit`, 기본 없음, 단위는 보상 횟수)으로 남용을 막는다. 보상은 platform `RewardIssuer`(`reward-type: point` 등 — 종류를 정했는데 지급기가 없거나 params 가 틀리면 기동 실패)이거나, 정하지 않으면 앱이 `WebRewardTokens.redeem` 으로 한 번 쓰는 1회용 토큰(저장은 해시). 지급기 · DB 오류는 전부 되돌려 503 `REWARD_UNAVAILABLE`(세션은 열린 채, 카운터는 그대로). 계정 삭제 시 그 계정의 세션과 계정 카운터를 지운다. `ads-admob` 의 상한과는 따로 센다.
+- 새 모듈 `ads-web-rewarded-jdbc`(PostgreSQL · MySQL, 새 마이그레이션 `V20261118120000__ads_web_rewarded` — 표 `ads_web_rewarded_sessions` · `ads_web_rewarded_daily_counts`, `migrations.lock` 에 잠금): 세션 줄 잠금으로 같은 세션의 동시 보상은 한 번만, 하루 상한은 조건부 `+1`(insert ignore 뒤 `granted < max` 일 때만)이라 동시 요청이 상한을 못 넘기고, 토큰은 조건부 갱신 한 문장으로 한 번만 쓰인다. 지급기와 이 표가 같은 DB 라는 전제는 `reward` 모듈과 같다.
 - platform: `DayWindow.containing(now, zone)` — 하루 경계 한 곳(`ads-admob` 이 이것을 쓴다. `AdmobProperties.dayWindow` 의 반환형이 `Pair` 에서 `DayWindow`(`from` · `to`)로 바뀌었다 — 구조 분해 호출자는 그대로).
 
 ### point · point-jdbc · ads-admob - 기간 안 적립 상한 · 광고 하루 상한 (2026-11-18)

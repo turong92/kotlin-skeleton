@@ -60,6 +60,7 @@
 | `dashboard-ga` | 대시보드에 유입 채널 · 캠페인 · 첫 페이지 · 페이지 이동 · 새/재방문 (GA4, 어제까지 새벽 적재)와 현재 방문자(실시간, 60초 캐시) — 키가 없으면 그 카드만 비어 있다 | [dashboard-ga](dashboard-ga.md) |
 | `ads-admob` | AdMob 보상형 광고 서버 측 확인(SSV) 콜백 수신: 구글 서명 확인 · 허용 광고 단위 · 같은 거래 번호는 한 번만 포인트 적립 (기본 꺼짐) | [ads-admob](ads-admob.md) |
 | `ads-web-rewarded` | 웹 보상형 광고(GPT) 세션: 1회용 세션 · 최소 경과 · 계정/IP 하루 상한 · 보상은 RewardIssuer 또는 1회용 토큰 (기본 꺼짐) | [ads-web-rewarded](ads-web-rewarded.md) |
+| `ads-web-rewarded-jdbc` | 웹 보상형 광고 저장소 (PostgreSQL · MySQL): 세션 줄 잠금 · 조건부 하루 카운터 · 토큰 1회 | [ads-web-rewarded-jdbc](ads-web-rewarded-jdbc.md) |
 | `point` | 포인트 원장: 적립(유효기간 선택) · 소멸 임박 순 차감 · 하루 한 번 소멸 · 운영자 조정, 보상 지급기 `point` (사용은 서버 API 뿐, 운영 경로 기본 꺼짐) | [point](point.md) |
 | `point-jdbc` | 포인트 원장 저장소 (PostgreSQL · MySQL): 잔액 줄 잠금 · 지급 건 멱등 · 음수 잔액 금지 | [point-jdbc](point-jdbc.md) |
 | `payment` | 결제 계약 · 제공자 라우팅 | [payment](payment.md) |
