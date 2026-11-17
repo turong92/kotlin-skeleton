@@ -25,6 +25,8 @@ data class WebRewardedProperties(
     val rewardParams: Map<String, String> = emptyMap(),
     /** 토큰 모드에서 토큰을 쓸 수 있는 시간. */
     val tokenTtl: Duration = Duration.ofMinutes(10),
+    /** 세션 · 하루 카운터 줄의 보관 기한 — 이보다 오래된 줄을 매일 지운다. 없으면(기본) 아무것도 지우지 않는다. 2일 이상(오늘의 카운터를 지우면 상한이 샌다). */
+    val retention: Duration? = null,
 ) {
     init {
         require(sessionTtl.isPositive) { "skeleton.ads-web-rewarded.session-ttl must be positive" }
@@ -33,6 +35,7 @@ data class WebRewardedProperties(
         require(minElapsed < sessionTtl) { "skeleton.ads-web-rewarded.min-elapsed must be shorter than session-ttl" }
         require(accountDailyLimit == null || accountDailyLimit >= 0) { "skeleton.ads-web-rewarded.account-daily-limit must not be negative" }
         require(ipDailyLimit == null || ipDailyLimit >= 0) { "skeleton.ads-web-rewarded.ip-daily-limit must not be negative" }
+        require(retention == null || retention >= Duration.ofDays(2)) { "skeleton.ads-web-rewarded.retention must be at least 2 days (a counter of today's day window must never be deleted)" }
         require(runCatching { ZoneId.of(dayZone) }.isSuccess) { "skeleton.ads-web-rewarded.day-zone must be a zone id ZoneId.of accepts" }
     }
 }

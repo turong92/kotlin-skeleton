@@ -72,6 +72,26 @@ class JdbcWebRewardStore(
         if (claimed != 1) null else jdbc.query("$SELECT where token_hash = :h", mapOf("h" to tokenHash), mapper).firstOrNull()
     }
 
+    override fun purgeBefore(cutoff: Instant, limit: Int): Int {
+        val c = dialect.instantParam(cutoff)
+        val sessionIds = jdbc.queryForList(
+            "select id from ads_web_rewarded_sessions where opened_at < :cutoff and (token_expires_at is null or token_expires_at < :cutoff) order by opened_at limit :limit",
+            mapOf("cutoff" to c, "limit" to limit), String::class.java,
+        )
+        val sessions = if (sessionIds.isEmpty()) 0 else jdbc.update("delete from ads_web_rewarded_sessions where id in (:ids)", mapOf("ids" to sessionIds))
+        val days = jdbc.query(
+            "select scope, subject, day_start from ads_web_rewarded_daily_counts where day_start < :cutoff limit :limit",
+            mapOf("cutoff" to c, "limit" to limit),
+        ) { rs, _ -> Triple(rs.getString("scope"), rs.getString("subject"), dialect.readInstant(rs, "day_start")) }
+        val counts = days.sumOf { (scope, subject, day) ->
+            jdbc.update(
+                "delete from ads_web_rewarded_daily_counts where scope = :s and subject = :sub and day_start = :d and day_start < :cutoff",
+                mapOf("s" to scope, "sub" to subject, "d" to dialect.instantParam(day), "cutoff" to c),
+            )
+        }
+        return sessions + counts
+    }
+
     override fun eraseAccount(accountId: String) {
         jdbc.update("delete from ads_web_rewarded_sessions where account_id = :a", mapOf("a" to accountId))
         jdbc.update("delete from ads_web_rewarded_daily_counts where scope = 'ACCOUNT' and subject = :a", mapOf("a" to accountId))

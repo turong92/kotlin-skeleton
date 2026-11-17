@@ -10,3 +10,4 @@ skeleton:
     # reward-type: point        # 보상 즉시 이 종류의 RewardIssuer 를 부른다. 비우면(기본) 1회용 토큰을 돌려준다
     reward-params: {}           # 지급기에 넘길 params - point 면 amount(필수) · expiresInDays(선택)
     token-ttl: 10m              # 토큰 모드에서 토큰을 쓸 수 있는 시간
+    # retention: 90d           # 세션 · 하루 카운터 줄의 보관 기한 - 이보다 오래된 줄을 매일 지운다(아직 쓸 수 있는 토큰이 있는 세션은 남긴다). 적지 않으면(기본) 지우지 않는다. 2일 미만이면 기동 실패. scheduler 모듈이나 요청 구동 모드(skeleton.job-queue.mode=on-request)가 없으면 기동 실패

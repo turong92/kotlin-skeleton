@@ -1,4 +1,6 @@
 dependencies {
+    // scheduler: 보관 기한 지우기의 @SkeletonScheduled 표시만 쓴다 — 없으면 표시가 무시되고 요청 구동 모드(OnRequestTask)가 부른다
+    compileOnly(project(":modules:scheduler"))
     api(project(":modules:platform"))   // RewardIssuer · TimeProvider · DayWindow 가 이 모듈의 공개 API 에 나온다
 
     implementation("org.springframework.boot:spring-boot-starter")

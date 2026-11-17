@@ -255,11 +255,11 @@
       "summary": "웹 보상형 광고(Google Ad Manager GPT) 세션 — POST /api/v1/ads/web-rewarded/sessions 로 세션을 열고 .../{id}/grant 로 한 번만 보상을 받는다. 서버가 시청을 증명할 수 없어서 1회용 세션 · 최소 경과 시간 · 계정/IP 하루 상한으로 남용을 막는다. 보상은 platform 의 RewardIssuer(예: point 적립) 또는 앱이 쓰는 1회용 토큰. 기본 꺼짐.",
       "starter": false,
       "newProjectFlag": "--modules ads-web-rewarded",
-      "autoIncludes": [],
+      "autoIncludes": ["scheduler"],
       "needs": {
         "requires": [],
         "oneOf": [],
-        "optional": []
+        "optional": ["scheduler"]
       },
       "config": {
         "prefixes": ["skeleton.ads-web-rewarded"],
@@ -293,7 +293,7 @@
       "summary": "웹 보상형 광고 저장소 — PostgreSQL · MySQL 로 ads-web-rewarded 의 저장 포트를 구현한다: 광고 세션 표(1회용 · 토큰은 해시만)와 하루 보상 카운터 표. 같은 세션의 동시 보상은 세션 줄 잠금으로 한 번만, 상한 직전 동시 보상은 조건부 +1 로 하나만 통과한다.",
       "starter": false,
       "newProjectFlag": "--modules ads-web-rewarded-jdbc",
-      "autoIncludes": ["ads-web-rewarded"],
+      "autoIncludes": ["ads-web-rewarded", "scheduler"],
       "needs": {
         "requires": [],
         "oneOf": [],

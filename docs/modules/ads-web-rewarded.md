@@ -11,13 +11,15 @@
 
 보상 처리는 platform 의 `RewardIssuer` 계약을 그대로 쓴다(`point` 가 이미 `type = "point"` 를 낸다). `reward-type` 을 정했는데 그 종류의 `RewardIssuer` 빈이 없거나 `reward-params` 를 지급기가 거절하면 **기동이 실패한다**. 토큰 모드의 토큰은 앱이 자기 엔드포인트에서 `WebRewardTokens.redeem(token, accountId, purpose)` 로 쓴다(HTTP 경로는 없다) — 없음 · 남의 것 · 다른 목적 · 이미 씀 · 만료면 null, 같은 토큰은 한 번만 성공한다. `grant` · `redeem` 은 호출자 트랜잭션 밖에서 부른다(안에서 부르면 세션 잠금 · 상한 되돌림이 호출자 트랜잭션에 섞인다). 계정이 지워지면 그 계정의 세션 줄과 계정 카운터를 지운다 — 이 고리는 저장소가 있으면 모듈이 꺼져 있어도 선다.
 
+**보관 기한(선택)**: 세션 · 하루 카운터 줄은 쌓이기만 하므로 `retention`(기본 없음 = 지우지 않는다, 2일 이상)을 정하면 매일 그보다 오래된 줄을 멱등하게 지운다(여러 인스턴스가 겹쳐도 안전; `scheduler` 모듈이나 요청 구동 모드가 없으면 기동 실패). 아직 쓸 수 있는 토큰이 있는 세션은 남긴다. 저장소가 있으면 모듈이 꺼져 있어도 돈다.
+
 **IP 상한은 `skeleton.web.client-ip.mode` 를 정해야 믿을 수 있다** — 정하지 않으면 전달 헤더를 호출자가 고를 수 있다. 정책 체크(구글의 보상 광고 정책 · 동의 창)와 브라우저 쪽 흐름은 react-skeleton 의 `packages/ads/README.md` 에 있다.
 
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:ads-web-rewarded"))` |
 | 함께 오는 모듈 | `platform` |
-| 컴파일 전용 | 없음 (Spring Security 는 이 모듈의 호출자라 필수 의존이다) |
+| 컴파일 전용 | `scheduler` (보관 기한 지우기의 표시만 — 없으면 요청 구동 모드가 부른다. Spring Security 는 이 모듈의 호출자라 필수 의존이다) |
 | 설정 접두사 | `skeleton.ads-web-rewarded` — [docs/config/modules/ads-web-rewarded.yml](../config/modules/ads-web-rewarded.yml) |
 | 기본 동작 | 꺼짐. `enabled=true` 이고 저장소(`ads-web-rewarded-jdbc`)가 있어야 일한다. 상한 없음, 보상 종류 없음(= 토큰 모드). |
 | 부팅에 필요한 것 | `reward-type` 을 정했으면 그 종류의 `RewardIssuer` 빈(포인트면 `point` + `point-jdbc`). |

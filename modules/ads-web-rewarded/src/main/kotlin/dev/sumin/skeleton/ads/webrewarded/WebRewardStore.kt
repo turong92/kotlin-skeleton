@@ -24,6 +24,12 @@ interface WebRewardStore {
     /** 토큰을 한 번만 쓴다 — 해시 · 계정 · 목적이 맞고 아직 안 쓰였고 만료 전일 때만 세션을 돌려준다(원자적 1회) */
     fun redeem(tokenHash: String, accountId: String, purpose: String, now: Instant): WebRewardSession?
 
+    /**
+     * [cutoff] 보다 오래된 줄을 세션 · 카운터 합쳐 지운다(각각 최대 [limit] 줄) — 지운 줄 수. 세션은 `opened_at < cutoff` 이고 **아직 쓸 수 있는 토큰이 없는** 줄만
+     * (`token_expires_at` 이 없거나 `< cutoff`), 카운터는 `day_start < cutoff` 이다. 멱등이라 여러 인스턴스가 겹쳐도 안전하다
+     */
+    fun purgeBefore(cutoff: Instant, limit: Int): Int
+
     /** 계정의 세션 줄과 계정 카운터를 지운다(IP 카운터는 남는다) */
     fun eraseAccount(accountId: String)
 }

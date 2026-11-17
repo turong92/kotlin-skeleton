@@ -104,6 +104,14 @@ class FakeWebRewardStore : WebRewardStore {
         return s.copy(redeemedAt = now).also { sessions[s.id] = it }
     }
 
+    override fun purgeBefore(cutoff: Instant, limit: Int): Int {
+        val ids = sessions.values.filter { it.openedAt.isBefore(cutoff) && (it.tokenExpiresAt == null || it.tokenExpiresAt.isBefore(cutoff)) }.take(limit).map { it.id }
+        ids.forEach { sessions.remove(it) }
+        val keys = counts.keys.filter { it.third.isBefore(cutoff) }.take(limit)
+        keys.forEach { counts.remove(it) }
+        return ids.size + keys.size
+    }
+
     override fun eraseAccount(accountId: String) {
         sessions.values.removeIf { it.accountId == accountId }
         counts.keys.removeIf { it.first == WebRewardScope.ACCOUNT && it.second == accountId }

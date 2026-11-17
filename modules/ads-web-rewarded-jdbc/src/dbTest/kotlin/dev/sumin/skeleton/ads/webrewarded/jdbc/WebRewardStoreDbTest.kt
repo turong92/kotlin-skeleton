@@ -171,6 +171,49 @@ class WebRewardStoreDbTest {
         assertEquals(1, results.count { it.getOrNull() != null }, results.toString())
     }
 
+    private fun sessionCount() = jdbc.queryForObject("select count(*) from ads_web_rewarded_sessions", emptyMap<String, Any>(), Long::class.java)
+
+    private fun openAt(account: String, at: Instant): String {
+        WebRewardDb.now = at
+        return service().open(account, "unlock", "ip1").id
+    }
+
+    @Test
+    fun `purge deletes sessions and counters strictly older than the cutoff - the boundary line stays`() {
+        val cutoff = Instant.parse("2026-11-10T00:00:00Z")
+        openAt("old", cutoff.minusNanos(1_000))
+        openAt("edge", cutoff)
+        openAt("new", cutoff.plusSeconds(1))
+        store.inTransaction {
+            store.incrementWithin(WebRewardScope.ACCOUNT, "a1", Instant.parse("2026-11-09T00:00:00Z"), 5)
+            store.incrementWithin(WebRewardScope.IP, "ip1", cutoff, 5)
+        }
+
+        val deleted = store.purgeBefore(cutoff, 100)
+
+        assertEquals(2, deleted)
+        assertEquals(2, sessionCount())
+        assertEquals(0, store.grantedOn(WebRewardScope.ACCOUNT, "a1", Instant.parse("2026-11-09T00:00:00Z")))
+        assertEquals(1, store.grantedOn(WebRewardScope.IP, "ip1", cutoff))
+        assertEquals(0, store.purgeBefore(cutoff, 100), "멱등 — 다시 돌려도 더 지우지 않는다")
+    }
+
+    @Test
+    fun `purge keeps an old session whose unused token is still valid, and drops it once the token expired too`() {
+        val cutoff = Instant.parse("2026-11-10T00:00:00Z")
+        val keep = openAt("a1", cutoff.minusSeconds(3600))
+        val drop = openAt("a2", cutoff.minusSeconds(3600))
+        store.inTransaction {
+            store.markGranted(keep, cutoff.minusSeconds(3000), null, null, "hash-keep", cutoff.plusSeconds(60))
+            store.markGranted(drop, cutoff.minusSeconds(3000), null, null, "hash-drop", cutoff.minusSeconds(60))
+        }
+
+        store.purgeBefore(cutoff, 100)
+
+        assertEquals(1, sessionCount())
+        assertNotNull(store.redeem("hash-keep", "a1", "unlock", cutoff.minusSeconds(100)), "아직 쓸 수 있는 토큰은 지워지지 않았다")
+    }
+
     @Test
     fun `erasing an account removes its sessions and account counters but keeps the ip counters`() {
         val s = service(WebRewardedProperties(rewardType = "point", rewardParams = mapOf("amount" to "1"), accountDailyLimit = 5, ipDailyLimit = 5))
