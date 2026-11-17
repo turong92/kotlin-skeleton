@@ -4,7 +4,7 @@
 create table if not exists ads_web_rewarded_sessions (
     id               varchar(40)  /* [jooq ignore start] */ character set utf8mb4 collate utf8mb4_bin /* [jooq ignore stop] */ primary key,
     account_id       varchar(128) /* [jooq ignore start] */ character set utf8mb4 collate utf8mb4_bin /* [jooq ignore stop] */ not null,
-    purpose          varchar(64)  not null,
+    purpose          varchar(64)  /* [jooq ignore start] */ character set utf8mb4 collate utf8mb4_bin /* [jooq ignore stop] */ not null,
     client_key       varchar(64)  /* [jooq ignore start] */ character set utf8mb4 collate utf8mb4_bin /* [jooq ignore stop] */ not null,
     opened_at        datetime(6)  not null,
     expires_at       datetime(6)  not null,

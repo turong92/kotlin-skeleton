@@ -15,7 +15,7 @@ import org.springframework.boot.test.context.runner.WebApplicationContextRunner
 /** 스위치 · 기동 가드 — 꺼짐이면 빈이 없고(= 404), 보상 종류를 정했는데 지급기가 없거나 params 가 틀리면 기동이 실패한다 */
 class WebRewardedSwitchTest {
     private val runner = WebApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(WebRewardedAutoConfiguration::class.java))
+        .withConfiguration(AutoConfigurations.of(WebRewardedAutoConfiguration::class.java, WebRewardedErasureAutoConfiguration::class.java))
         .withBean(FakeWebRewardStore::class.java)
         .withBean(TimeProvider::class.java, { MutableClock() })
 
@@ -26,6 +26,15 @@ class WebRewardedSwitchTest {
             assertNotNull(it.getBean(WebRewardedController::class.java))
             assertNotNull(it.getBean(WebRewardTokens::class.java))
         }
+    }
+
+    @Test
+    fun `account erasure is registered whenever a store exists - even with the module off or outside a web app`() {
+        runner.run { assertNotNull(it.getBean("webRewardErasure")) }
+        org.springframework.boot.test.context.runner.ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(WebRewardedErasureAutoConfiguration::class.java))
+            .withBean(FakeWebRewardStore::class.java)
+            .run { assertNotNull(it.getBean("webRewardErasure")) }
     }
 
     @Test

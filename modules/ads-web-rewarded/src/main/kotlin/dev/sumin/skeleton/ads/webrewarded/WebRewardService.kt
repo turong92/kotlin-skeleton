@@ -49,11 +49,7 @@ class WebRewardService(
             id = ids.newId("wrs_"), accountId = accountId, purpose = purpose, clientKey = clientKey, openedAt = now, expiresAt = now.plus(properties.sessionTtl),
             grantedAt = null, rewardType = null, rewardRef = null, tokenExpiresAt = null, redeemedAt = null,
         )
-        try {
-            store.inTransaction { store.insert(session) }
-        } catch (e: DataAccessException) {
-            throw WebRewardedException(WebRewardedErrorCode.REWARD_UNAVAILABLE, e)
-        }
+        store.inTransaction { store.insert(session) }   // DB 오류는 계약 표에 없는 코드로 바꾸지 않고 기본 500
         return session
     }
 
@@ -76,7 +72,7 @@ class WebRewardService(
     }
 
     override fun redeem(token: String, accountId: String, purpose: String): WebRewardSession? =
-        store.inTransaction { store.redeem(hash(token), accountId, purpose, time.now()) }
+        store.redeem(hash(token), accountId, purpose, time.now())   // 원자성은 저장소의 한 문장이 맡는다(트랜잭션을 여기서 또 열지 않는다)
 
     /** 결과 값(에러 코드 또는 [WebRewardGranted])을 돌려준다. 상한만 롤백이 필요해 [LimitReached] 로 던진다 */
     private fun grantInTransaction(accountId: String, sessionId: String): Any {

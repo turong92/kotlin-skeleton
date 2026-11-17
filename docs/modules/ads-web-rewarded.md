@@ -9,7 +9,7 @@
 
 보상 요청은 한 트랜잭션 안에서 세션을 주인 조건으로 잠그고 → 이미 보상했는지 → 만료 → 최소 경과(`min-elapsed`) → 상한(원자적으로 「max 미만일 때만 +1」) → 세션을 보상됨으로 → 지급기(또는 토큰) 순서로 본다. 같은 세션의 동시 요청은 한 번만 지급되고, 상한 직전의 동시 요청은 하나만 통과한다. **상한 단위는 보상 횟수**(포인트 합이 아니다)이고 「하루」는 `day-zone` 의 자정이다(`platform` 의 `DayWindow`). 앱(AdMob)의 상한과 합산하지 않는다 — 따로 센다.
 
-보상 처리는 platform 의 `RewardIssuer` 계약을 그대로 쓴다(`point` 가 이미 `type = "point"` 를 낸다). `reward-type` 을 정했는데 그 종류의 `RewardIssuer` 빈이 없거나 `reward-params` 를 지급기가 거절하면 **기동이 실패한다**. 토큰 모드의 토큰은 앱이 자기 엔드포인트에서 `WebRewardTokens.redeem(token, accountId, purpose)` 로 쓴다(HTTP 경로는 없다) — 없음 · 남의 것 · 다른 목적 · 이미 씀 · 만료면 null, 같은 토큰은 한 번만 성공한다. 계정이 지워지면 그 계정의 세션 줄과 계정 카운터를 지운다.
+보상 처리는 platform 의 `RewardIssuer` 계약을 그대로 쓴다(`point` 가 이미 `type = "point"` 를 낸다). `reward-type` 을 정했는데 그 종류의 `RewardIssuer` 빈이 없거나 `reward-params` 를 지급기가 거절하면 **기동이 실패한다**. 토큰 모드의 토큰은 앱이 자기 엔드포인트에서 `WebRewardTokens.redeem(token, accountId, purpose)` 로 쓴다(HTTP 경로는 없다) — 없음 · 남의 것 · 다른 목적 · 이미 씀 · 만료면 null, 같은 토큰은 한 번만 성공한다. `grant` · `redeem` 은 호출자 트랜잭션 밖에서 부른다(안에서 부르면 세션 잠금 · 상한 되돌림이 호출자 트랜잭션에 섞인다). 계정이 지워지면 그 계정의 세션 줄과 계정 카운터를 지운다 — 이 고리는 저장소가 있으면 모듈이 꺼져 있어도 선다.
 
 **IP 상한은 `skeleton.web.client-ip.mode` 를 정해야 믿을 수 있다** — 정하지 않으면 전달 헤더를 호출자가 고를 수 있다. 정책 체크(구글의 보상 광고 정책 · 동의 창)와 브라우저 쪽 흐름은 react-skeleton 의 `packages/ads/README.md` 에 있다.
 

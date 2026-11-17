@@ -1,6 +1,5 @@
 package dev.sumin.skeleton.ads.webrewarded
 
-import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.reward.RewardIssuer
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
@@ -34,8 +33,4 @@ class WebRewardedAutoConfiguration {
     @ConditionalOnMissingBean
     fun webRewardedController(service: WebRewardService, clientIps: ObjectProvider<ClientIps>): WebRewardedController =
         WebRewardedController(service, clientIps.getIfAvailable { ClientIps() })
-
-    @Bean
-    @ConditionalOnMissingBean(name = ["webRewardErasure"])
-    fun webRewardErasure(store: WebRewardStore): AccountErasureListener = WebRewardErasure(store)
 }
