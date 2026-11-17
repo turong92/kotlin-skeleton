@@ -75,7 +75,7 @@ class JdbcWebRewardStore(
     override fun purgeBefore(cutoff: Instant, limit: Int): Int {
         val c = dialect.instantParam(cutoff)
         val sessionIds = jdbc.queryForList(
-            "select id from ads_web_rewarded_sessions where opened_at < :cutoff and (token_expires_at is null or token_expires_at < :cutoff) order by opened_at limit :limit",
+            "select id from ads_web_rewarded_sessions where opened_at < :cutoff and expires_at < :cutoff and (token_expires_at is null or token_expires_at < :cutoff) order by opened_at limit :limit",
             mapOf("cutoff" to c, "limit" to limit), String::class.java,
         )
         val sessions = if (sessionIds.isEmpty()) 0 else jdbc.update("delete from ads_web_rewarded_sessions where id in (:ids)", mapOf("ids" to sessionIds))

@@ -25,7 +25,7 @@ interface WebRewardStore {
     fun redeem(tokenHash: String, accountId: String, purpose: String, now: Instant): WebRewardSession?
 
     /**
-     * [cutoff] 보다 오래된 줄을 세션 · 카운터 합쳐 지운다(각각 최대 [limit] 줄) — 지운 줄 수. 세션은 `opened_at < cutoff` 이고 **아직 쓸 수 있는 토큰이 없는** 줄만
+     * [cutoff] 보다 오래된 줄을 세션 · 카운터 합쳐 지운다(각각 최대 [limit] 줄) — 지운 줄 수. 세션은 `opened_at < cutoff` · `expires_at < cutoff`(아직 보상받을 수 있는 열린 세션은 남긴다) 이고 **아직 쓸 수 있는 토큰이 없는** 줄만
      * (`token_expires_at` 이 없거나 `< cutoff`), 카운터는 `day_start < cutoff` 이다. 멱등이라 여러 인스턴스가 겹쳐도 안전하다
      */
     fun purgeBefore(cutoff: Instant, limit: Int): Int

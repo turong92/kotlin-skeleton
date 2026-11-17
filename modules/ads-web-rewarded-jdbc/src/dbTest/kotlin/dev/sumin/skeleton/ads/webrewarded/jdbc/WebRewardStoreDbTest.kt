@@ -173,16 +173,17 @@ class WebRewardStoreDbTest {
 
     private fun sessionCount() = jdbc.queryForObject("select count(*) from ads_web_rewarded_sessions", emptyMap<String, Any>(), Long::class.java)
 
-    private fun openAt(account: String, at: Instant): String {
+    private fun openAt(account: String, at: Instant, ttl: Duration = Duration.ofMinutes(15)): String {
         WebRewardDb.now = at
-        return service().open(account, "unlock", "ip1").id
+        return service(WebRewardedProperties(sessionTtl = ttl)).open(account, "unlock", "ip1").id
     }
 
     @Test
     fun `purge deletes sessions and counters strictly older than the cutoff - the boundary line stays`() {
         val cutoff = Instant.parse("2026-11-10T00:00:00Z")
-        openAt("old", cutoff.minusNanos(1_000))
-        openAt("edge", cutoff)
+        openAt("old", cutoff.minusSeconds(3600))                                   // 만료가 cutoff 전 → 지운다
+        openAt("edge", cutoff.minusSeconds(900))                                   // 만료가 정확히 cutoff → 남는다(경계)
+        openAt("open", cutoff.minusSeconds(3600), ttl = Duration.ofHours(2))        // 오래 열렸지만 아직 안 만료 → 남는다(보상받을 수 있다)
         openAt("new", cutoff.plusSeconds(1))
         store.inTransaction {
             store.incrementWithin(WebRewardScope.ACCOUNT, "a1", Instant.parse("2026-11-09T00:00:00Z"), 5)
@@ -192,7 +193,8 @@ class WebRewardStoreDbTest {
         val deleted = store.purgeBefore(cutoff, 100)
 
         assertEquals(2, deleted)
-        assertEquals(2, sessionCount())
+        assertEquals(3, sessionCount())
+        assertEquals(setOf("edge", "open", "new"), jdbc.queryForList("select account_id from ads_web_rewarded_sessions", emptyMap<String, Any>(), String::class.java).toSet())
         assertEquals(0, store.grantedOn(WebRewardScope.ACCOUNT, "a1", Instant.parse("2026-11-09T00:00:00Z")))
         assertEquals(1, store.grantedOn(WebRewardScope.IP, "ip1", cutoff))
         assertEquals(0, store.purgeBefore(cutoff, 100), "멱등 — 다시 돌려도 더 지우지 않는다")
