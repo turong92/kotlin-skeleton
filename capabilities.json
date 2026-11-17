@@ -268,7 +268,11 @@
       "basePaths": ["/api/v1/ads/web-rewarded/sessions"],
       "secrets": [],
       "docs": ["docs/modules/ads-web-rewarded.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["ads"],
+        "newProjectFlag": "--packages ads",
+        "packages": ["@skeleton/ads"]
+      },
       "notFor": [
         "저장소가 없다 — ads-web-rewarded-jdbc 를 같이 고른다",
         "서버가 시청을 증명하지 못한다 — 보상의 근거는 브라우저 신호이고 남용은 한도로 막는다",
@@ -299,7 +303,11 @@
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/ads-web-rewarded-jdbc.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["ads"],
+        "newProjectFlag": "--packages ads",
+        "packages": ["@skeleton/ads"]
+      },
       "notFor": [
         "ads-web-rewarded 없이는 쓰지 않는다(따라온다)",
         "다른 DB(JPA · jOOQ)로 저장하려면 ads-web-rewarded 의 저장 포트(WebRewardStore)를 앱이 구현한다",

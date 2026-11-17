@@ -14,7 +14,7 @@
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마 (`spring.flyway.locations: classpath:db/migration/{vendor}`) |
 | 교체 지점 | `WebRewardStore` |
 | 마이그레이션 | `modules/ads-web-rewarded-jdbc/src/main/resources/db/migration/postgresql`, `modules/ads-web-rewarded-jdbc/src/main/resources/db/migration/mysql` |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/ads` |
 | 테스트 | `modules/ads-web-rewarded-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`) — 같은 세션 동시 보상은 한 번 · 상한 직전 동시 보상은 하나만 · 지급기 실패 되돌림 · 토큰 1회 · 다른 계정 · 목적 · 만료 거절 · 계정 삭제) |
 
 자세히: [스키마 관리](../schema-management.md)

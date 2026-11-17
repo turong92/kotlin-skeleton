@@ -23,7 +23,7 @@
 | 부팅에 필요한 것 | `reward-type` 을 정했으면 그 종류의 `RewardIssuer` 빈(포인트면 `point` + `point-jdbc`). |
 | 교체 지점 | `WebRewardStore`, `RewardIssuer`, `WebRewardService`, `WebRewardedController`, `webRewardErasure` |
 | 마이그레이션 | 없음 (저장소 모듈 `ads-web-rewarded-jdbc` 가 가진다) |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/ads` |
 | 테스트 | `modules/ads-web-rewarded/src/test` (메모리 저장소 — 1회용 · 최소 경과 · 만료 · 상한 · 토큰 · 기동 가드; 동시성은 `-jdbc` 의 dbTest) |
 
 ## 앱이 바꾸는 곳
