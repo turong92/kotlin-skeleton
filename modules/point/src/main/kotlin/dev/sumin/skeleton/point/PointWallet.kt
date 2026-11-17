@@ -15,6 +15,12 @@ interface PointWallet {
     /** 같은 `(sourceType, sourceRef)` 가 이미 있으면 null(같은 금액일 때만 - 금액이 다르거나 차감이 쓴 키면 [PointSourceConflictException]) */
     fun earn(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String): PointEntry?
 
+    /** [earn] 인데 [limit] 을 같은 잠금 안에서 지킨다 — 넘기면 [PointEarnLimitException](아무것도 안 바뀜). 이미 있는 키의 되풀이는 상한과 무관하게 null */
+    fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limit: PointEarnLimit): PointEntry?
+
+    /** `[from, to)` 에 쌓은 [sourceType] 적립의 합 — 상한의 남은 양을 화면에 보일 때 */
+    fun earnedIn(accountId: String, sourceType: String, from: Instant, to: Instant): Long
+
     /** 잔액보다 크면 [PointInsufficientException]. 같은 `(sourceType, sourceRef)` 를 같은 금액으로 다시 부르면 처음 줄을 돌려주고 또 빼지 않는다 - 금액이 다르거나 적립이 쓴 키면 [PointSourceConflictException] */
     fun spend(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointEntry
 
@@ -77,6 +83,15 @@ class StorePointWallet(
         require(expiresAt == null || expiresAt.isAfter(now)) { "expiresAt must be in the future" }
         return store.earn(accountId, amount, expiresAt, PointEntryKind.EARN, sourceType, sourceRef, null, now)
     }
+
+    override fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limit: PointEarnLimit): PointEntry? {
+        requireAmount(amount)
+        val now = time.now()
+        require(expiresAt == null || expiresAt.isAfter(now)) { "expiresAt must be in the future" }
+        return store.earn(accountId, amount, expiresAt, PointEntryKind.EARN, sourceType, sourceRef, null, now, limit)
+    }
+
+    override fun earnedIn(accountId: String, sourceType: String, from: Instant, to: Instant): Long = store.earnedIn(accountId, sourceType, from, to)
 
     override fun spend(accountId: String, amount: Long, sourceType: String, sourceRef: String): PointEntry {
         requireAmount(amount)

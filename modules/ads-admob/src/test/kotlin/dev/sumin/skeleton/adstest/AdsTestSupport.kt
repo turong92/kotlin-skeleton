@@ -4,6 +4,8 @@ import dev.sumin.skeleton.ads.admob.AdmobKeySource
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.point.PointBalance
 import dev.sumin.skeleton.point.PointCursor
+import dev.sumin.skeleton.point.PointEarnLimit
+import dev.sumin.skeleton.point.PointEarnLimitException
 import dev.sumin.skeleton.point.PointEntry
 import dev.sumin.skeleton.point.PointEntryKind
 import dev.sumin.skeleton.point.PointReservation
@@ -72,6 +74,15 @@ class RecordingWallet : PointWallet {
         if (entryOf(sourceType, sourceRef) != null) return null
         return PointEntry("pt_${entries.size + 1}", accountId, amount, PointEntryKind.EARN, amount, expiresAt, sourceType, sourceRef, null, Instant.parse("2026-11-09T00:00:00Z")).also { entries += it }
     }
+
+    override fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limit: PointEarnLimit): PointEntry? {
+        if (entryOf(sourceType, sourceRef) != null) return null
+        if (earnedIn(accountId, sourceType, limit.from, limit.to) + amount > limit.max) throw PointEarnLimitException()
+        return earn(accountId, amount, expiresAt, sourceType, sourceRef)
+    }
+
+    override fun earnedIn(accountId: String, sourceType: String, from: Instant, to: Instant): Long =
+        entries.filter { it.accountId == accountId && it.sourceType == sourceType && !it.createdAt.isBefore(from) && it.createdAt.isBefore(to) }.sumOf { it.delta }
 
     override fun entryOf(sourceType: String, sourceRef: String) = entries.firstOrNull { it.sourceType == sourceType && it.sourceRef == sourceRef }
 

@@ -11,6 +11,7 @@ interface PointStore {
     /**
      * 적립 묶음 하나를 더한다([kind] 는 `EARN` 또는 `ADJUST`). 같은 `(sourceType, sourceRef)` 가 이미 있으면 아무것도 하지 않고 null - 단 **같은 요청일 때만**(종류와 금액이 같다, 유효기간 차이는 보지 않는다). 종류나 금액이 다르면 [PointSourceConflictException] 이고 아무것도 바뀌지 않는다.
      * 이미 있는 줄이 다른 계정의 것이면 [IllegalStateException].
+     * [limit] 이 있으면 같은 잠금 안에서 기간 합을 세고, 이 적립이 넘기면 [PointEarnLimitException] 이고 아무것도 바뀌지 않는다(트랜잭션 밖에서 던진다). 이미 있는 키의 되풀이는 상한과 무관하게 null.
      */
     fun earn(
         accountId: String,
@@ -21,7 +22,11 @@ interface PointStore {
         sourceRef: String,
         reason: String?,
         now: Instant,
+        limit: PointEarnLimit? = null,
     ): PointEntry?
+
+    /** `[from, to)` 에 쌓은 이 종류(`sourceType`)의 적립(`EARN`) 합 */
+    fun earnedIn(accountId: String, sourceType: String, from: Instant, to: Instant): Long
 
     /**
      * [amount] 를 소멸이 가까운 묶음부터(유효기간 없는 것은 맨 뒤) 뺀다([kind] 는 `SPEND` 또는 `ADJUST`).

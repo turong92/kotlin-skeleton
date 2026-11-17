@@ -31,6 +31,17 @@ data class PointExpiring(val amount: Long, val before: Instant)
 /** 쓸 수 있는 잔액 — 유효기간이 지났는데 소멸 작업이 아직 못 지운 묶음과 [held](잡혀 있는 양, 확정되거나 풀리기 전)는 뺀 값이다 */
 data class PointBalance(val balance: Long, val expiringSoon: PointExpiring?, val held: Long = 0)
 
+/**
+ * 기간 안 적립 상한 — 같은 계정 · 같은 `sourceType` 의 적립(`EARN`) 합이 `[from, to)` 에서 [max] 를 넘게 되는 적립은 거절한다(넘기는 양은 쪼개지 않고 통째로).
+ * 광고 보상의 하루 상한처럼 「기간마다 몇 번까지」를 원장 한 곳에서 지키는 장치다 — 기간 경계(시간대)는 부르는 쪽이 정한다.
+ */
+data class PointEarnLimit(val max: Long, val from: Instant, val to: Instant) {
+    init {
+        require(max >= 0) { "max must not be negative" }
+        require(from.isBefore(to)) { "from must be before to" }
+    }
+}
+
 /** 내역 목록의 자리 표시 — 최신순에서 이 줄 다음부터 */
 data class PointCursor(val createdAt: Instant, val id: String)
 

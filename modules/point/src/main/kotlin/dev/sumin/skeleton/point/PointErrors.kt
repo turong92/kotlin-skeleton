@@ -14,10 +14,14 @@ enum class PointErrorCode(
     SPEND_NOT_FOUND("POINT.SPEND_NOT_FOUND", HttpStatus.NOT_FOUND, "No such deduction to cancel"),
     CANCEL_EXCEEDED("POINT.CANCEL_EXCEEDED", HttpStatus.CONFLICT, "Cancellation exceeds the deduction"),
     SOURCE_CONFLICT("POINT.SOURCE_CONFLICT", HttpStatus.CONFLICT, "Source key already used for a different request"),
+    EARN_LIMIT("POINT.EARN_LIMIT", HttpStatus.CONFLICT, "Earn limit for the period reached"),
     RESERVATION_NOT_FOUND("POINT.RESERVATION_NOT_FOUND", HttpStatus.NOT_FOUND, "No such reservation"),
     RESERVATION_NOT_HELD("POINT.RESERVATION_NOT_HELD", HttpStatus.CONFLICT, "Reservation is not held any more"),
     RESERVATION_EXCEEDED("POINT.RESERVATION_EXCEEDED", HttpStatus.CONFLICT, "Capture exceeds the held amount"),
 }
+
+/** [PointEarnLimit] 에 걸린 적립 — 아무것도 바뀌지 않는다. 트랜잭션 밖에서 던진다(호출자 트랜잭션을 롤백 전용으로 만들지 않는다) */
+class PointEarnLimitException : ApplicationException("Earn limit for the period reached", PointErrorCode.EARN_LIMIT)
 
 /** 잔액보다 큰 차감(운영자 조정 포함) — 아무것도 바뀌지 않는다 */
 class PointInsufficientException(needed: Long, available: Long) :

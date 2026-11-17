@@ -4,6 +4,8 @@ import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import dev.sumin.skeleton.point.PointBalance
 import dev.sumin.skeleton.point.PointCursor
+import dev.sumin.skeleton.point.PointEarnLimit
+import dev.sumin.skeleton.point.PointEarnLimitException
 import dev.sumin.skeleton.point.PointEntry
 import dev.sumin.skeleton.point.PointEntryKind
 import dev.sumin.skeleton.point.PointExpiring
@@ -55,11 +57,13 @@ class JdbcPointStore(
         sourceRef: String,
         reason: String?,
         now: Instant,
+        limit: PointEarnLimit?,
     ): PointEntry? {
         require(kind == PointEntryKind.EARN || kind == PointEntryKind.ADJUST) { "an addition is EARN or ADJUST" }
         val outcome = tx.execute {
             lockBalance(accountId, now)
             existing(accountId, sourceType, sourceRef)?.let { return@execute if (sameRequest(it, kind, amount)) Repeat else Conflict }
+            if (limit != null && earnedIn(accountId, sourceType, limit.from, limit.to) + amount > limit.max) return@execute LimitReached
             val entry = PointEntry(ids.newId("pt_"), accountId, amount, kind, amount, expiresAt, sourceType, sourceRef, reason, now)
             insert(entry)
             changeBalance(accountId, amount, now)
@@ -69,8 +73,16 @@ class JdbcPointStore(
             is Earned -> outcome.entry
             Repeat, null -> null
             Conflict -> throw PointSourceConflictException()   // 트랜잭션 밖에서 - 호출자 트랜잭션을 롤백 전용으로 만들지 않는다
+            LimitReached -> throw PointEarnLimitException()
         }
     }
+
+    override fun earnedIn(accountId: String, sourceType: String, from: Instant, to: Instant): Long =
+        jdbc.queryForObject(
+            "select coalesce(sum(delta), 0) from point_entries where account_id = :a and kind = 'EARN' and source_type = :s and created_at >= :from and created_at < :to",
+            mapOf("a" to accountId, "s" to sourceType, "from" to dialect.instantParam(from), "to" to dialect.instantParam(to)),
+            Long::class.java,
+        ) ?: 0L
 
     override fun spend(
         accountId: String,
@@ -337,6 +349,7 @@ class JdbcPointStore(
     private sealed interface CancelOutcome
     private class Earned(val entry: PointEntry) : EarnOutcome
     private data object Repeat : EarnOutcome
+    private data object LimitReached : EarnOutcome
     private class Spent(val entry: PointEntry) : SpendOutcome
     private class Short(val available: Long) : SpendOutcome
 

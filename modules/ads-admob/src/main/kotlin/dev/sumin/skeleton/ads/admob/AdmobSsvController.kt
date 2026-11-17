@@ -4,6 +4,7 @@ import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.BasicResponse
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.point.PointEarnLimitException
 import dev.sumin.skeleton.point.PointWallet
 import io.swagger.v3.oas.annotations.Hidden
 import jakarta.servlet.http.HttpServletRequest
@@ -36,9 +37,15 @@ class AdmobSsvController(
             log.warn("AdMob SSV callback rejected: {}", e.reason)
             throw e
         }
-        val expiresAt = properties.expiresInDays?.let { time.now().plus(it, ChronoUnit.DAYS) }
+        val now = time.now()
+        val expiresAt = properties.expiresInDays?.let { now.plus(it, ChronoUnit.DAYS) }
         try {
-            wallet.earn(reward.userId, reward.amount, expiresAt, SOURCE_TYPE, reward.transactionId)   // 이미 있으면 null — 그대로 200
+            val limit = properties.limitAt(now)
+            // 이미 있으면 null — 그대로 200. 상한은 원장이 같은 잠금 안에서 지킨다(동시 콜백도 못 넘긴다)
+            if (limit == null) wallet.earn(reward.userId, reward.amount, expiresAt, SOURCE_TYPE, reward.transactionId)
+            else wallet.earnWithin(reward.userId, reward.amount, expiresAt, SOURCE_TYPE, reward.transactionId, limit)
+        } catch (e: PointEarnLimitException) {
+            log.info("AdMob SSV callback not credited: daily limit reached")   // 200 — 보내도 소용없는 콜백을 구글이 다시 보내지 않게
         } catch (e: ApplicationException) {
             throw e
         } catch (e: DataAccessException) {

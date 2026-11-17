@@ -481,6 +481,56 @@ class PointWalletDbTest {
         assertEquals(1, jdbc.queryForObject("select count(*) from point_spend_allocations", emptyMap<String, Any>(), Long::class.java))
     }
 
+    // ---- 기간 안 적립 상한(earnWithin) — 광고 하루 상한이 쓴다
+
+    private val dayFrom = Instant.parse("2026-10-28T00:00:00Z")
+    private val dayTo = Instant.parse("2026-10-29T00:00:00Z")
+    private fun cap(max: Long) = dev.sumin.skeleton.point.PointEarnLimit(max, dayFrom, dayTo)
+
+    @Test
+    fun `earnWithin stops at the cap without writing anything, and counts only the same source type in the window`() {
+        wallet.earn("a1", 5, null, "OTHER", "o1")   // 다른 종류는 안 센다
+        PointDb.now = Instant.parse("2026-10-27T23:59:59Z")
+        wallet.earn("a1", 1, null, "AD", "yesterday")   // 창 밖
+        PointDb.now = Instant.parse("2026-10-28T03:00:00Z")
+
+        assertNotNull(wallet.earnWithin("a1", 1, null, "AD", "t1", cap(2)))
+        assertNotNull(wallet.earnWithin("a1", 1, null, "AD", "t2", cap(2)))
+        assertFailsWith<dev.sumin.skeleton.point.PointEarnLimitException> { wallet.earnWithin("a1", 1, null, "AD", "t3", cap(2)) }
+
+        assertNull(wallet.entryOf("AD", "t3"))
+        assertEquals(2, wallet.earnedIn("a1", "AD", dayFrom, dayTo))
+        assertEquals(2 + 5 + 1, wallet.balance("a1").balance)
+        assertNotNull(wallet.earnWithin("a2", 1, null, "AD", "t3", cap(2)), "다른 계정은 따로 센다")
+    }
+
+    @Test
+    fun `a transaction already credited stays a repeat even at the cap, a different amount under the same key conflicts`() {
+        wallet.earnWithin("a1", 1, null, "AD", "t1", cap(1))
+
+        assertNull(wallet.earnWithin("a1", 1, null, "AD", "t1", cap(1)))
+        assertFailsWith<PointSourceConflictException> { wallet.earnWithin("a1", 2, null, "AD", "t1", cap(1)) }
+    }
+
+    @Test
+    fun `an amount that would cross the cap is refused whole`() {
+        wallet.earnWithin("a1", 2, null, "AD", "t1", cap(3))
+
+        assertFailsWith<dev.sumin.skeleton.point.PointEarnLimitException> { wallet.earnWithin("a1", 2, null, "AD", "t2", cap(3)) }
+        assertEquals(2, wallet.earnedIn("a1", "AD", dayFrom, dayTo))
+    }
+
+    @Test
+    fun `concurrent earns never cross the cap`() {
+        val outcomes = race(10) { i ->
+            try { wallet.earnWithin("a1", 1, null, "AD", "t$i", cap(3)) != null } catch (e: dev.sumin.skeleton.point.PointEarnLimitException) { false }
+        }
+
+        assertEquals(3, outcomes.count { it })
+        assertEquals(3, wallet.earnedIn("a1", "AD", dayFrom, dayTo))
+        assertEquals(3, wallet.balance("a1").balance)
+    }
+
     @Test
     fun `the table itself refuses a negative balance`() {
         wallet.earn("a1", 10, null, "GRANT", "g1")
