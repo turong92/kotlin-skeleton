@@ -74,7 +74,7 @@ class AdmobDailyLimitWebTest {
         val (from, to) = props.dayWindow(Instant.parse("2026-11-09T14:59:59Z"))
         assertEquals(Instant.parse("2026-11-08T15:00:00Z"), from)
         assertEquals(Instant.parse("2026-11-09T15:00:00Z"), to)
-        assertEquals(Instant.parse("2026-11-09T15:00:00Z"), props.dayWindow(Instant.parse("2026-11-09T15:00:00Z")).first)
+        assertEquals(Instant.parse("2026-11-09T15:00:00Z"), props.dayWindow(Instant.parse("2026-11-09T15:00:00Z")).from)
     }
 
     @Test

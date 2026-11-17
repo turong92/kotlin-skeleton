@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.ads.admob
 
+import dev.sumin.skeleton.common.time.DayWindow
 import dev.sumin.skeleton.point.PointEarnLimit
 import java.time.Duration
 import java.time.Instant
@@ -34,11 +35,7 @@ data class AdmobProperties(
     }
 
     /** [now] 가 든 「하루」 — [dayZone] 의 자정부터 다음 자정 전까지 `[from, to)` */
-    fun dayWindow(now: Instant): Pair<Instant, Instant> {
-        val zone = ZoneId.of(dayZone)
-        val start = now.atZone(zone).toLocalDate().atStartOfDay(zone)
-        return start.toInstant() to start.plusDays(1).toInstant()
-    }
+    fun dayWindow(now: Instant): DayWindow = DayWindow.containing(now, ZoneId.of(dayZone))
 
     /** 상한 — [dailyLimit] 이 없으면 null. 「하루」는 지갑이 적립에 쓰는 시각([dev.sumin.skeleton.point.PointWallet.earnWithin] 의 now)으로 정한다(자정을 걸쳐도 같은 시각을 쓴다) */
     fun limitAt(): ((Instant) -> PointEarnLimit)? = dailyLimit?.let { max -> { now -> dayWindow(now).let { (from, to) -> PointEarnLimit(max, from, to) } } }
