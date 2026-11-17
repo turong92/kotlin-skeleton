@@ -35,7 +35,7 @@ class FakeWallet : PointWallet {
     override fun earn(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String): PointEntry? =
         if (entryOf(sourceType, sourceRef) != null) null else add(accountId, amount, PointEntryKind.EARN, null, expiresAt, sourceType, sourceRef)
 
-    override fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limit: dev.sumin.skeleton.point.PointEarnLimit): PointEntry? = error("not used")
+    override fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limit: (Instant) -> dev.sumin.skeleton.point.PointEarnLimit): PointEntry? = error("not used")
 
     override fun earnedIn(accountId: String, sourceType: String, from: Instant, to: Instant): Long = error("not used")
 

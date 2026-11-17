@@ -485,7 +485,15 @@ class PointWalletDbTest {
 
     private val dayFrom = Instant.parse("2026-10-28T00:00:00Z")
     private val dayTo = Instant.parse("2026-10-29T00:00:00Z")
-    private fun cap(max: Long) = dev.sumin.skeleton.point.PointEarnLimit(max, dayFrom, dayTo)
+    private fun cap(max: Long) = { _: Instant -> dev.sumin.skeleton.point.PointEarnLimit(max, dayFrom, dayTo) }
+
+    @Test
+    fun `earnWithin refuses to run inside an active transaction - its sum would read a stale snapshot - and writes nothing`() {
+        PointDb.tx.executeWithoutResult {
+            assertFailsWith<IllegalStateException> { wallet.earnWithin("a1", 1, null, "AD", "t-in-tx", cap(5)) }
+        }
+        assertNull(wallet.entryOf("AD", "t-in-tx"))
+    }
 
     @Test
     fun `earnWithin stops at the cap without writing anything, and counts only the same source type in the window`() {

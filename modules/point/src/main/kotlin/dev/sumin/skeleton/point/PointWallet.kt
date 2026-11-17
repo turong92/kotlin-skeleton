@@ -15,8 +15,11 @@ interface PointWallet {
     /** 같은 `(sourceType, sourceRef)` 가 이미 있으면 null(같은 금액일 때만 - 금액이 다르거나 차감이 쓴 키면 [PointSourceConflictException]) */
     fun earn(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String): PointEntry?
 
-    /** [earn] 인데 [limit] 을 같은 잠금 안에서 지킨다 — 넘기면 [PointEarnLimitException](아무것도 안 바뀜). 이미 있는 키의 되풀이는 상한과 무관하게 null */
-    fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limit: PointEarnLimit): PointEntry?
+    /**
+     * [earn] 인데 [limit] 을 같은 잠금 안에서 지킨다 — 넘기면 [PointEarnLimitException](아무것도 안 바뀜). 이미 있는 키의 되풀이는 상한과 무관하게 null.
+     * [limit] 은 이 적립이 쓰는 시각(지갑의 now)을 받아 기간을 정한다. **활성 트랜잭션 안에서 부르면 [IllegalStateException]** — 합류하면 합계가 낡은 스냅샷을 읽어 동시 적립이 상한을 넘길 수 있다
+     */
+    fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limit: (Instant) -> PointEarnLimit): PointEntry?
 
     /** `[from, to)` 에 쌓은 [sourceType] 적립의 합 — 상한의 남은 양을 화면에 보일 때 */
     fun earnedIn(accountId: String, sourceType: String, from: Instant, to: Instant): Long
@@ -84,11 +87,11 @@ class StorePointWallet(
         return store.earn(accountId, amount, expiresAt, PointEntryKind.EARN, sourceType, sourceRef, null, now)
     }
 
-    override fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limit: PointEarnLimit): PointEntry? {
+    override fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limit: (Instant) -> PointEarnLimit): PointEntry? {
         requireAmount(amount)
         val now = time.now()
         require(expiresAt == null || expiresAt.isAfter(now)) { "expiresAt must be in the future" }
-        return store.earn(accountId, amount, expiresAt, PointEntryKind.EARN, sourceType, sourceRef, null, now, limit)
+        return store.earn(accountId, amount, expiresAt, PointEntryKind.EARN, sourceType, sourceRef, null, now, limit(now))
     }
 
     override fun earnedIn(accountId: String, sourceType: String, from: Instant, to: Instant): Long = store.earnedIn(accountId, sourceType, from, to)

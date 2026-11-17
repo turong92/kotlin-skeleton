@@ -17,7 +17,7 @@ data class AdmobProperties(
     val expiresInDays: Long? = null,
     /** 계정 하루 적립 상한(포인트 합). 없으면(기본) 상한 없음. 넘는 콜백은 적립하지 않고 200 으로 답한다 — 400 · 503 이면 구글이 같은 콜백을 다시 보낸다. */
     val dailyLimit: Long? = null,
-    /** 「하루」의 기준 시간대(IANA 이름, 기본 UTC) — 이 시간대의 자정에 상한이 리셋된다. */
+    /** 「하루」의 기준 시간대(`ZoneId.of` 가 받는 이름 — IANA 이름 · 오프셋, 기본 UTC) — 이 시간대의 자정에 상한이 리셋된다. */
     val dayZone: String = "UTC",
     /** 구글의 서명 공개키 목록 주소. */
     val keysUrl: String = "https://www.gstatic.com/admob/reward/verifier-keys.json",
@@ -30,7 +30,7 @@ data class AdmobProperties(
         require(!keyCacheTtl.isNegative && !keyCacheTtl.isZero && keyCacheTtl <= Duration.ofHours(24)) { "skeleton.ads-admob.key-cache-ttl must be positive and at most 24h" }
         require(expiresInDays == null || expiresInDays in 1..36_500) { "skeleton.ads-admob.expires-in-days must be 1..36500" }
         require(dailyLimit == null || dailyLimit >= 0) { "skeleton.ads-admob.daily-limit must not be negative" }
-        require(runCatching { ZoneId.of(dayZone) }.isSuccess) { "skeleton.ads-admob.day-zone must be an IANA time zone name" }
+        require(runCatching { ZoneId.of(dayZone) }.isSuccess) { "skeleton.ads-admob.day-zone must be a zone id ZoneId.of accepts" }
     }
 
     /** [now] 가 든 「하루」 — [dayZone] 의 자정부터 다음 자정 전까지 `[from, to)` */
@@ -40,6 +40,6 @@ data class AdmobProperties(
         return start.toInstant() to start.plusDays(1).toInstant()
     }
 
-    /** 오늘의 상한 — [dailyLimit] 이 없으면 null */
-    fun limitAt(now: Instant): PointEarnLimit? = dailyLimit?.let { dayWindow(now).let { (from, to) -> PointEarnLimit(it, from, to) } }
+    /** 상한 — [dailyLimit] 이 없으면 null. 「하루」는 지갑이 적립에 쓰는 시각([dev.sumin.skeleton.point.PointWallet.earnWithin] 의 now)으로 정한다(자정을 걸쳐도 같은 시각을 쓴다) */
+    fun limitAt(): ((Instant) -> PointEarnLimit)? = dailyLimit?.let { max -> { now -> dayWindow(now).let { (from, to) -> PointEarnLimit(max, from, to) } } }
 }

@@ -40,7 +40,7 @@ class AdmobSsvController(
         val now = time.now()
         val expiresAt = properties.expiresInDays?.let { now.plus(it, ChronoUnit.DAYS) }
         try {
-            val limit = properties.limitAt(now)
+            val limit = properties.limitAt()
             // 이미 있으면 null — 그대로 200. 상한은 원장이 같은 잠금 안에서 지킨다(동시 콜백도 못 넘긴다)
             if (limit == null) wallet.earn(reward.userId, reward.amount, expiresAt, SOURCE_TYPE, reward.transactionId)
             else wallet.earnWithin(reward.userId, reward.amount, expiresAt, SOURCE_TYPE, reward.transactionId, limit)

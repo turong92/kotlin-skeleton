@@ -18,6 +18,7 @@ import java.sql.ResultSet
 import java.time.Instant
 import org.springframework.jdbc.core.RowMapper
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 
 /**
@@ -60,6 +61,8 @@ class JdbcPointStore(
         limit: PointEarnLimit?,
     ): PointEntry? {
         require(kind == PointEntryKind.EARN || kind == PointEntryKind.ADJUST) { "an addition is EARN or ADJUST" }
+        // 합류하면 MySQL RR 에서 호출자가 먼저 읽은 낡은 스냅샷으로 합계를 세어 상한을 넘길 수 있다(잔액 줄 잠금은 최신이지만 합계는 일반 SELECT)
+        if (limit != null) check(!TransactionSynchronizationManager.isActualTransactionActive()) { "an earn with a limit must not be called inside a transaction (the period sum would read a stale snapshot)" }
         val outcome = tx.execute {
             lockBalance(accountId, now)
             existing(accountId, sourceType, sourceRef)?.let { return@execute if (sameRequest(it, kind, amount)) Repeat else Conflict }

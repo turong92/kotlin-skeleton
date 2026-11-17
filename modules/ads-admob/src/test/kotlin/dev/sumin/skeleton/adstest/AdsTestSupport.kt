@@ -75,8 +75,9 @@ class RecordingWallet : PointWallet {
         return PointEntry("pt_${entries.size + 1}", accountId, amount, PointEntryKind.EARN, amount, expiresAt, sourceType, sourceRef, null, Instant.parse("2026-11-09T00:00:00Z")).also { entries += it }
     }
 
-    override fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limit: PointEarnLimit): PointEntry? {
+    override fun earnWithin(accountId: String, amount: Long, expiresAt: Instant?, sourceType: String, sourceRef: String, limitAt: (Instant) -> PointEarnLimit): PointEntry? {
         if (entryOf(sourceType, sourceRef) != null) return null
+        val limit = limitAt(Instant.parse("2026-11-09T00:00:00Z"))
         if (earnedIn(accountId, sourceType, limit.from, limit.to) + amount > limit.max) throw PointEarnLimitException()
         return earn(accountId, amount, expiresAt, sourceType, sourceRef)
     }

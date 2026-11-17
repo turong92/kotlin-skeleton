@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### point · point-jdbc · ads-admob - 기간 안 적립 상한 · 광고 하루 상한 (2026-11-18)
+
+- `PointWallet.earnWithin`(기간 상한 `PointEarnLimit(max, from, to)` — 같은 계정 · 같은 `sourceType` 적립 합이 넘으면 409 `POINT.EARN_LIMIT`, 아무것도 안 바뀜) · `earnedIn`, `PointStore.earn(limit=)` · `earnedIn`. 합계는 계정 잠금 안에서 세어 동시 적립도 못 넘기며, 그래서 활성 트랜잭션 안에서 부르면 `IllegalStateException`. 기존 `earn` 은 그대로. **직접 구현한 앱은** `PointWallet`(`earnWithin` · `earnedIn`)과 `PointStore`(`earnedIn`)에 메서드를 채운다.
+- ads-admob: `skeleton.ads-admob.daily-limit`(기본 없음 = 상한 없음) · `day-zone`(기본 `UTC`, `ZoneId.of` 가 받는 이름). 상한을 넘는 콜백은 적립 없이 200(구글이 다시 보내지 않게).
+
 ### apps/video-worker - 로컬 모드 마스터 재생 목록 · 코덱 문자열 (2026-11-16)
 
 - `local --compat` 이 원본 판 + 호환 판을 묶은 `master.m3u8`(실측 `BANDWIDTH` · `AVERAGE-BANDWIDTH` · `RESOLUTION` · `CODECS`, 낮은 단 먼저)을 출력 폴더에 쓰고 manifest 에 `master.path` 를 더한다. manifest 의 각 판에 RFC 6381 `codec`(예 `avc1.640028,mp4a.40.2`)이 더해진다 — 모르는 코덱이면 null 이고 마스터는 만들지 않는다. 소리 판은 마스터에 넣지 않는다. 마스터는 짧은 변 1080 이하 원본 + 그보다 작고 가벼운 같은 코덱 계열 호환 판일 때만 만든다(BANDWIDTH 는 목표 길이 절반 이상으로 묶어 잰 피크).
