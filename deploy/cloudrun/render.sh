@@ -55,8 +55,9 @@ jq --argjson penv "$PLATFORM_ENV_JSON" '
 jq -r --argjson psec "$PLATFORM_SECRETS_JSON" \
   '(((.secrets // []) | map(tostring)) + ($psec | map(tostring))) | map("\(.)=\(.):latest") | join(",")' <<<"$DJ" > "$OUT/secrets.txt"
 
-# build-env — 선언 env 를 셸이 그대로 읽을 수 있게(작은따옴표). 줄바꿈이 든 값은 여러 줄에 걸친다
-jq -r '(.env // {}) | to_entries[] | "\(.key)=\((if .value == null then "" else (.value | tostring) end) | @sh)"' <<<"$DJ" > "$OUT/build-env"
+# build-env — 선언 env + 플랫폼 env(비밀 아님)를 셸이 그대로 읽을 수 있게(작은따옴표). 줄바꿈이 든 값은 여러 줄에 걸친다.
+# 플랫폼 env 도 넣는 이유: 네이티브는 빌드 때 굳는 스위치(<P>_REDIS_LOCK_ENABLED · <P>_CLIENT_IP_MODE)를 빌드 환경에서 읽는다
+jq -r --argjson penv "$PLATFORM_ENV_JSON" '((.env // {}) + $penv) | to_entries[] | "\(.key)=\((if .value == null then "" else (.value | tostring) end) | @sh)"' <<<"$DJ" > "$OUT/build-env"
 
 # build-args.txt — 줄마다 `--build-arg K=V`
 {
