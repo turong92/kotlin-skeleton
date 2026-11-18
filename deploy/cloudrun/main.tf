@@ -2,7 +2,7 @@
 terraform {
   required_version = ">= 1.7"
 
-  # 부분 설정 — 버킷은 init 때 `-backend-config="bucket=<project_id>-tfstate"` 로 준다
+  # 부분 설정 — 버킷(`<project_id>-tfstate`)은 래퍼(cloud prod terraform)가 init 때 넣는다
   backend "gcs" {}
 
   required_providers {

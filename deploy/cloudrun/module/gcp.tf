@@ -5,6 +5,7 @@ locals {
     "secretmanager.googleapis.com",
     "cloudscheduler.googleapis.com",
     "cloudtasks.googleapis.com",
+    "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "sts.googleapis.com",
   ]
@@ -29,6 +30,14 @@ resource "google_artifact_registry_repository" "this" {
   }
 
   cleanup_policy_dry_run = false
+  # 지우는 정책이 있어야 KEEP 밖의 이미지가 지워진다 (KEEP 만 있으면 아무것도 지우지 않는다)
+  cleanup_policies {
+    id     = "delete-old"
+    action = "DELETE"
+    condition {
+      tag_state = "ANY"
+    }
+  }
   cleanup_policies {
     id     = "keep-recent-10"
     action = "KEEP"
@@ -44,12 +53,16 @@ resource "google_service_account" "run" {
   project      = var.project_id
   account_id   = "${local.name}-run"
   display_name = "${local.name} Cloud Run runtime"
+
+  depends_on = [google_project_service.this]
 }
 
 resource "google_service_account" "deploy" {
   project      = var.project_id
   account_id   = "${local.name}-deploy"
   display_name = "${local.name} deploy (WIF only)"
+
+  depends_on = [google_project_service.this]
 }
 
 # GitHub OIDC — 이 앱 레포의 워크플로만 배포 계정을 쓴다

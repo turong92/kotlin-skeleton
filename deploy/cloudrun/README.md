@@ -17,10 +17,11 @@
 ## 실행
 
 ```
-cloud prod terraform -chdir=deploy/cloudrun init -backend-config="bucket=<project_id>-tfstate"
+cloud prod terraform -chdir=deploy/cloudrun init
 cloud prod terraform -chdir=deploy/cloudrun plan
 ```
 
+- state 버킷(`<project_id>-tfstate`)은 래퍼가 `init` 에 넣는다 — 직접 `-backend-config` 를 주지 않는다.
 - 래퍼가 `TF_VAR_project_id` · `TF_VAR_cloudflare_account_id` 를 넣는다. `github_repository` · `cloudflare_zone_id` 는 `terraform.tfvars`(git 밖, 예: `terraform.tfvars.example`).
 - Cloudflare 토큰은 환경변수 `CLOUDFLARE_API_TOKEN`.
 - 처음 한 번 사람이 하는 일: 프로젝트 · 결제 연결, `serviceusage` · `cloudresourcemanager` API 켜기, state 버킷 만들기.

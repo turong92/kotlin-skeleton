@@ -75,6 +75,28 @@ run "edge_secret_sha_is_sha256_of_origin_secret" {
   }
 }
 
+run "registry_deletes_old_images_and_keeps_ten" {
+  command = plan
+
+  assert {
+    condition     = length([for p in google_artifact_registry_repository.this.cleanup_policies : p if p.action == "DELETE"]) == 1
+    error_message = "KEEP 만 있으면 아무것도 지워지지 않는다 — DELETE 정책이 있어야 한다"
+  }
+  assert {
+    condition     = one([for p in google_artifact_registry_repository.this.cleanup_policies : p.most_recent_versions[0].keep_count if p.action == "KEEP"]) == 10
+    error_message = "최근 10개는 남긴다"
+  }
+}
+
+run "iam_api_is_enabled_before_service_accounts" {
+  command = plan
+
+  assert {
+    condition     = contains(keys(google_project_service.this), "iam.googleapis.com")
+    error_message = "서비스 계정 · WIF 풀에는 iam API 가 필요하다"
+  }
+}
+
 run "github_variables_has_all_ten_keys" {
   command = plan
 
