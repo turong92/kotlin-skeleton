@@ -1,0 +1,6 @@
+# cloudrun: 칸이 없는 선언(홈서버 전용).
+name: acme
+port: 8080
+env_prefix: ACME
+env:
+  ACME_ENV: prod

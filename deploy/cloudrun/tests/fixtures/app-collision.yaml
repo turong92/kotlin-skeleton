@@ -1,0 +1,14 @@
+# env 에 플랫폼이 넣는 이름(ACME_CLIENT_IP_MODE)을 썼다 — render.sh 가 거부한다.
+name: acme
+port: 8080
+env_prefix: ACME
+env:
+  ACME_CLIENT_IP_MODE: proxy
+cloudrun:
+  dockerfile: Dockerfile.native
+  cpu: 1
+  memory: 512Mi
+  min_instances: 0
+  max_instances: 1
+  concurrency: 20
+  timeout: 300s

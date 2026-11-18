@@ -1,0 +1,2 @@
+ACME_ENV='prod'
+SPRING_PROFILES_ACTIVE='prod'

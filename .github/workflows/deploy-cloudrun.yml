@@ -1,0 +1,140 @@
+name: deploy-cloudrun
+# Cloud Run 배포 (deploy/cloudrun/README.md) — `v*` 태그를 밀거나 손으로(태그 입력) 돌린다.
+# 선언(deploy/app.yaml)의 cloudrun: 칸을 deploy/cloudrun/render.sh 가 플래그 · 환경 파일로 바꾼다.
+# 인증은 WIF 뿐이다(키 파일 · GitHub 비밀 없음). 값은 terraform 출력(github_variables)을 이 레포의 변수로 옮겨 둔 것이다.
+# 템플릿 레포나 변수(GCP_PROJECT_ID)가 없는 레포에서는 돌지 않는다.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '배포할 태그 (예: v1.2.3)'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-cloudrun
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.repository.is_template != true && vars.GCP_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      SERVICE: ${{ vars.CLOUDRUN_SERVICE }}
+      IMAGE_REPO: ${{ vars.CLOUDRUN_IMAGE_REPO }}
+      RUNTIME_SA: ${{ vars.GCP_RUNTIME_SA }}
+      PLATFORM_ENV_JSON: ${{ vars.CLOUDRUN_PLATFORM_ENV }}
+      PLATFORM_SECRETS_JSON: ${{ vars.CLOUDRUN_PLATFORM_SECRETS }}
+    steps:
+      - name: 태그 모양 검사
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "태그 모양이 틀리다 (v1.2.3 또는 v1.2.3-rc.1)" >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: 선언을 배포 입력으로
+        env:
+          IMAGE_TAG: ${{ env.TAG }}
+        run: bash deploy/cloudrun/render.sh deploy/app.yaml "$RUNNER_TEMP/render"
+
+      - name: 이미지 저장소 인증
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 이미지 빌드 · 푸시
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r line; do
+            [ -n "$line" ] && args+=(--build-arg "${line#--build-arg }")
+          done < "$RUNNER_TEMP/render/build-args.txt"
+          docker buildx build --platform linux/amd64 \
+            -f "$(cat "$RUNNER_TEMP/render/dockerfile")" \
+            "${args[@]}" \
+            -t "$(cat "$RUNNER_TEMP/render/image")" \
+            --metadata-file "$RUNNER_TEMP/build-meta.json" \
+            --push .
+          digest="$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/build-meta.json")"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "다이제스트를 읽지 못했다" >&2; exit 1; }
+          echo "DIGEST=$digest" >> "$GITHUB_ENV"
+
+      - name: 후보 리비전 배포
+        run: |
+          set -euo pipefail
+          mapfile -t flags < "$RUNNER_TEMP/render/deploy-flags.txt"
+          extra=()
+          if gcloud run services describe "$SERVICE" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" >/dev/null 2>&1; then
+            extra=(--no-traffic --tag candidate)
+            echo "FIRST_DEPLOY=false" >> "$GITHUB_ENV"
+          else
+            # 첫 배포는 새 서비스라 --no-traffic 을 쓸 수 없다 — 바로 100% 로 간다
+            echo "FIRST_DEPLOY=true" >> "$GITHUB_ENV"
+          fi
+          gcloud run deploy "$SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --image "${IMAGE_REPO}@${DIGEST}" \
+            --env-vars-file "$RUNNER_TEMP/render/env.yaml" \
+            --set-secrets "$(cat "$RUNNER_TEMP/render/secrets.txt")" \
+            "${flags[@]}" \
+            ${extra[@]+"${extra[@]}"}
+
+      - name: 후보 주소
+        run: |
+          set -euo pipefail
+          json="$(gcloud run services describe "$SERVICE" --project "$GCP_PROJECT_ID" --region "$GCP_REGION" --format=json)"
+          if [ "$FIRST_DEPLOY" = true ]; then
+            url="$(jq -r '.status.url' <<<"$json")"
+          else
+            url="$(jq -r '.status.traffic[] | select(.tag == "candidate") | .url' <<<"$json")"
+          fi
+          [[ "$url" =~ ^https:// ]] || { echo "후보 주소를 찾지 못했다" >&2; exit 1; }
+          echo "CANDIDATE_URL=$url" >> "$GITHUB_ENV"
+
+      - name: 배포 뒤 확인
+        run: |
+          set -euo pipefail
+          umask 077
+          read_secret() {
+            local v
+            v="$(gcloud secrets versions access latest --secret="$1" --project "$GCP_PROJECT_ID")"
+            echo "::add-mask::$v"
+            printf '%s' "$v"
+          }
+          SMOKE_EMAIL="$(read_secret SMOKE_EMAIL)"
+          SMOKE_PASSWORD="$(read_secret SMOKE_PASSWORD)"
+          origin_secret="$(read_secret ORIGIN_AUTH_SECRET)"
+          headers="$RUNNER_TEMP/smoke-headers"
+          printf 'X-Origin-Auth: %s\n' "$origin_secret" > "$headers"
+          export SMOKE_EMAIL SMOKE_PASSWORD
+          SMOKE_HEADERS_FILE="$headers" scripts/post-deploy-check.sh "$CANDIDATE_URL" --wait 90
+          rm -f "$headers"
+
+      - name: 트래픽 전환
+        if: env.FIRST_DEPLOY != 'true'
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project "$GCP_PROJECT_ID" --region "$GCP_REGION" \
+            --to-tags candidate=100

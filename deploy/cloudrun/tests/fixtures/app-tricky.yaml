@@ -1,0 +1,20 @@
+# 특수 문자가 든 env 값 — env 파일과 빌드 환경이 원래 값 그대로여야 한다.
+name: acme
+port: 8080
+env_prefix: ACME
+env:
+  K_SPACE: "a b"
+  K_QUOTE: 'x="y"'
+  K_EQ: "k=v"
+  K_COLON: "p:q"
+  K_HASH: "# not comment"
+  K_SHELL: '$(echo hi) `id` $HOME it''s'
+  K_NL: "line1\nline2"
+cloudrun:
+  dockerfile: Dockerfile.native
+  cpu: 1
+  memory: 512Mi
+  min_instances: 0
+  max_instances: 1
+  concurrency: 20
+  timeout: 300s

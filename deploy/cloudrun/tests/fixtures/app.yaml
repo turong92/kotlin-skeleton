@@ -1,0 +1,21 @@
+# render.sh 시험용 선언 — 예시 값만 쓴다.
+name: acme
+port: 8080
+env_prefix: ACME
+secrets:
+  - JWT_SECRET
+  - SPRING_DATASOURCE_URL
+env:
+  ACME_ENV: prod
+  SPRING_PROFILES_ACTIVE: prod
+cloudrun:
+  dockerfile: Dockerfile.native
+  build_args: { APP: api }
+  cpu: 1
+  memory: 512Mi
+  min_instances: 0
+  max_instances: 1
+  concurrency: 20
+  timeout: 300s
+  wake:
+    schedule: "*/5 * * * *"

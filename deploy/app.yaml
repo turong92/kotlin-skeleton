@@ -101,6 +101,20 @@ secrets:
 #   [config-aws-ssm] AWS_PROFILE · AWS 자격 증명   홈서버에는 AWS 가 없다 — 이 모듈은 고르지 않는다 (paths 를 정하면 부팅에서 자격 증명을 찾는다)
 #   [redis-core] 플랫폼이 <ENV_PREFIX>_REDIS_* 를 넣는다 (redis: true) — 직접 정하지 않는다 (_REDIS_SSL_ENABLED · _REDIS_LOCK_ENABLED 도 예약 이름)
 
+# Cloud Run + Cloudflare 로 올릴 때만(deploy/cloudrun/README.md) — 홈서버 플랫폼은 이 칸을 읽지 않는다. 값은 앱이 적는다.
+#   이 칸을 쓰는 앱은 위의 domain · api_prefix 를 켜고, db 는 external | none, redis 는 false 로 바꾼다 (deploy/cloudrun 의 plan 이 거부한다).
+# cloudrun:
+#   dockerfile: Dockerfile.native   # 계약(0.0.0.0:8080 · health · 환경변수 · stdout)을 지키는 이미지
+#   build_args: { APP: api }        # docker 빌드 인자 그대로 — ffmpeg 를 쓰는 앱은 FFMPEG: "1"
+#   cpu: 1
+#   memory: 512Mi                   # ffmpeg 를 쓰는 앱은 1Gi 이상 (/tmp 가 메모리 디스크다)
+#   min_instances: 0
+#   max_instances: 1
+#   concurrency: 20
+#   timeout: 300s                   # drain 요청 한 번의 상한 — 가장 긴 일감 하나 + 여유
+#   wake:                           # 있으면 Cloud Tasks 큐 + Scheduler 가 생기고 작업 큐가 요청 구동이 된다
+#     schedule: "*/5 * * * *"       # 주기 일과 그물
+
 env:
   SKELETON_ENV: prod             # 배포 가드 스위치 (local | stage | prod). 가드가 stage|prod 규칙을 켠다 — docs/deploy.md
   # SKELETON_LEGAL_ACKNOWLEDGE_TEMPLATE: "true"   # 시험 배포만: 모듈의 예시(TEMPLATE) 약관을 일부러 허락한다. 실사용자 전에 src/main/resources/legal/ 의 자기 문서로 바꾸고 이 줄을 지운다 — 없으면 prod 가 legal 가드로 기동을 거부한다 (docs/legal.md)

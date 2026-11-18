@@ -1,0 +1,11 @@
+--port=8080
+--cpu=1
+--memory=512Mi
+--min-instances=0
+--max-instances=1
+--concurrency=20
+--timeout=300s
+--cpu-boost
+--service-account=acme-run@acme-proj.iam.gserviceaccount.com
+--allow-unauthenticated
+--region=asia-northeast3
