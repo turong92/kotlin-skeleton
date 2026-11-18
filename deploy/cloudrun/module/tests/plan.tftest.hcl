@@ -88,6 +88,19 @@ run "registry_deletes_old_images_and_keeps_ten" {
   }
 }
 
+run "deploy_account_can_list_smoke_versions_only_on_smoke_secrets" {
+  command = plan
+
+  assert {
+    condition     = toset(keys(google_secret_manager_secret_iam_member.deploy_smoke_viewer)) == toset(["SMOKE_EMAIL", "SMOKE_PASSWORD"])
+    error_message = "배포 확인 단계가 판 목록을 조회하려면 SMOKE 비밀 둘에 viewer 가 있어야 한다(다른 비밀에는 없다)"
+  }
+  assert {
+    condition     = alltrue([for m in values(google_secret_manager_secret_iam_member.deploy_smoke_viewer) : m.role == "roles/secretmanager.viewer"])
+    error_message = "secretmanager.versions.list 를 주는 최소 역할은 viewer"
+  }
+}
+
 run "iam_api_is_enabled_before_service_accounts" {
   command = plan
 

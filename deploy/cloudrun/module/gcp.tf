@@ -124,6 +124,15 @@ resource "google_secret_manager_secret_iam_member" "deploy" {
   member    = "serviceAccount:${google_service_account.deploy.email}"
 }
 
+# 배포 워크플로가 SMOKE 판이 있는지 `versions list` 로 조회한다 — accessor 에는 그 권한이 없어 viewer 를 SMOKE 비밀 둘에만 준다
+resource "google_secret_manager_secret_iam_member" "deploy_smoke_viewer" {
+  for_each  = toset(local.smoke_secrets)
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.this[each.key].secret_id
+  role      = "roles/secretmanager.viewer"
+  member    = "serviceAccount:${google_service_account.deploy.email}"
+}
+
 # 실행 계정: 서비스에 넣는 비밀마다 accessor
 resource "google_secret_manager_secret_iam_member" "run" {
   for_each  = local.run_secrets
