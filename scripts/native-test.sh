@@ -65,14 +65,15 @@ trap cleanup EXIT
 
 PLATFORM=(); [ -z "${NATIVE_PLATFORM:-}" ] || PLATFORM=(--platform "$NATIVE_PLATFORM")
 EXTRA=(); for kv in ${NATIVE_TEST_ENV:-}; do EXTRA+=(-e "$kv"); done
-NETWORK=(-p "$PORT:8080")
+NET="${COMPOSE_PROJECT_NAME}_default"   # 앱 컨테이너를 compose 네트워크에 붙여 서비스 이름(postgres · mail · s3)으로 접속한다 — 맥 Docker Desktop · 리눅스 호스트 · CI 러너에서 같다(compose 포트는 127.0.0.1 에만 열려 host.docker.internal 로는 리눅스에서 안 닿는다)
+NETWORK=(--network "$NET" -p "$PORT:8080")
 if [ "$CHECKED" = 1 ]; then
-  EXTRA+=(-e "NATIVE_MAIL_HOST=host.docker.internal" -e "NATIVE_MAIL_PORT=$MAIL_SMTP_PORT" -e "NATIVE_S3_URL=http://host.docker.internal:$S3_PORT" -e "NATIVE_FAKE_URL=http://localhost:$FAKE_PORT")
+  EXTRA+=(-e "NATIVE_MAIL_HOST=mail" -e "NATIVE_MAIL_PORT=1025" -e "NATIVE_S3_URL=http://s3:8333" -e "NATIVE_FAKE_URL=http://localhost:$FAKE_PORT")
 fi
 if [ "$FULL" = 1 ]; then
   # 가짜 상대 서버는 앱과 **같은 네트워크 이름공간**에서 띄운다: OIDC 모듈은 http 엔드포인트를 localhost 에만 허용한다 — 앱이 가짜를 localhost 로 보게. (python 이미지 하나가 필요하다)
   FAKE_NAME="native-fakes-$$"
-  docker run -d --name "$FAKE_NAME" --add-host host.docker.internal:host-gateway -p "$PORT:8080" -p "$FAKE_PORT:$FAKE_PORT" \
+  docker run -d --name "$FAKE_NAME" --network "$NET" -p "$PORT:8080" -p "$FAKE_PORT:$FAKE_PORT" \
     -v "$PWD/scripts/native-fakes.py:/native-fakes.py:ro" "${FAKE_IMAGE:-python:3-slim}" python /native-fakes.py --port "$FAKE_PORT" --base "http://localhost:$FAKE_PORT" --app-base http://localhost:8080 >/dev/null
   FAKE_PID="$FAKE_NAME"
   NETWORK=(--network "container:$FAKE_NAME")
@@ -82,8 +83,8 @@ if [ "$FFMPEG" = 1 ]; then   # 기본 실행 이미지(GraalVM 빌더)에는 ffm
   RUN_IMAGE="kotlin-skeleton-native-runtime-ffmpeg:test"
   docker build -q -f Dockerfile.native --target runtime-base --build-arg FFMPEG=1 ${PLATFORM[@]+"${PLATFORM[@]}"} -t "$RUN_IMAGE" . >/dev/null
 fi
-docker run -d --name "$NAME" "${PLATFORM[@]}" $( [ "$FULL" = 1 ] || echo --add-host host.docker.internal:host-gateway ) --cpus 1 --memory 512m "${NETWORK[@]}" -v "$BIN_DIR:/app:ro" \
-  -e "SPRING_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:$DB_PORT/$DB" -e "SPRING_DATASOURCE_USERNAME=$DB_USER" -e "SPRING_DATASOURCE_PASSWORD=$DB_PASSWORD" \
+docker run -d --name "$NAME" "${PLATFORM[@]}" --cpus 1 --memory 512m "${NETWORK[@]}" -v "$BIN_DIR:/app:ro" \
+  -e "SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/$DB" -e "SPRING_DATASOURCE_USERNAME=$DB_USER" -e "SPRING_DATASOURCE_PASSWORD=$DB_PASSWORD" \
   ${EXTRA[@]+"${EXTRA[@]}"} --entrypoint /app/app "$RUN_IMAGE" >/dev/null
 
 URL="http://localhost:$PORT"; rc=0
