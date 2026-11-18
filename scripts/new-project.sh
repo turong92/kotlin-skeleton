@@ -262,7 +262,7 @@ rm -f apps/api/src/test/kotlin/dev/sumin/skeleton/app/api/MultiProject*.kt apps/
 # 네이티브 이미지(docs/native-image.md): 스켈레톤 자신의 시험용 조립(tools/native-check)과 그 흐름 시험(scripts/native-smoke.sh)은 새 프로젝트에 가지 않는다.
 # 빌드 · 시험 도구(scripts/native-build.sh · scripts/native-test.sh · Dockerfile.native)는 남는다 — 앱(apps/api)을 대상으로 쓰고, 프로젝트가 자기 핵심 흐름 시험을 `--smoke` 로 붙인다.
 # 워크플로는 손으로 돌리는 것(workflow_dispatch)만 남긴다: 프로젝트가 네이티브로 가기로 하면 릴리스 태그 · 의존성 파일 PR 트리거를 켠다(스켈레톤의 .github/workflows/native.yml 이 틀).
-rm -rf tools scripts/native-smoke.sh scripts/native-smoke-full.sh scripts/native-fakes.py
+rm -rf tools scripts/native-smoke.sh scripts/native-smoke-full.sh scripts/native-smoke-extra.sh scripts/native-fixtures scripts/native-fakes.py
 cat > .github/workflows/native.yml <<'YML'
 name: native
 # 네이티브 이미지 시험 (docs/native-image.md) — 지금은 손으로만 돈다. 네이티브로 배포하기로 하면 아래 on: 에 릴리스 태그 · 의존성 파일 PR 트리거를 더한다:
@@ -285,7 +285,7 @@ jobs:
           restore-keys: native-gradle-
       - run: NATIVE_CPUS="$(nproc)" scripts/native-test.sh
 YML
-perl -ni -e 'print unless /^include\(":tools:native-check"\)\s*$/' settings.gradle.kts
+perl -ni -e 'print unless /^include\(":tools:native-check(-extra)?"\)\s*$/' settings.gradle.kts
 # 샘플 앱은 기본으로 빠진다 — 앱 · 그 문서 · 실행 스크립트 · 안내 문서의 샘플 구역(<!-- sample:start --> … <!-- sample:end -->)까지. --with-sample 이면 표식 줄만 지운다
 if [ "$WITH_SAMPLE" = 1 ]; then
   for f in AGENTS.md apps/AGENTS.md README.md; do [ ! -f "$f" ] || perl -ni -e 'print unless /^<!-- sample:(start|end) -->\s*$/' "$f"; done

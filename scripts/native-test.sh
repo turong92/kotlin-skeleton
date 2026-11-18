@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # 네이티브 시험 — 앱을 네이티브로 빌드하고(scripts/native-build.sh), 새 데이터베이스와 함께 컨테이너에서 띄워, 흐름 시험 스크립트를 돌린다 (docs/native-image.md).
-#   scripts/native-test.sh [--app <앱 디렉토리 이름>] [--smoke <시험 스크립트>] [--full] [--skip-build]
+#   scripts/native-test.sh [--app <앱 디렉토리 이름>] [--smoke <시험 스크립트>] [--full] [--ffmpeg] [--skip-build]
 #     --app    기본: 이 레포(스켈레톤)에는 tools/native-check, 새 프로젝트에는 api. 앱은 apps/<이름> 또는 tools/<이름>
 #     --smoke  띄운 서버 주소를 `--url <주소>` 로 받는 스크립트 (종료 코드 0 = 통과). 기본: scripts/native-smoke.sh 가 있으면 그것(스켈레톤의 핵심 흐름),
 #              없으면 내장 최소 확인(/health 200 + OpenAPI 문서 200). **프로젝트는 자기 핵심 흐름(가입 · 결제 …)을 이 틀로 직접 쓴다** —
 #              scripts/native-smoke.sh 의 함수 틀(ok · bad · expect · call)을 복사해 쓰면 된다 (스켈레톤 레포에 있다)
 #     --full   (이 레포의 tools/native-check 전용) 기본 흐름에 더해 scripts/native-smoke-full.sh 를 돌린다 — 메일(비밀번호 재설정) · 파일 저장(로컬 S3) · 소셜 로그인 5종 · 토스 · Paddle · SSE.
 #              가짜 상대(scripts/native-fakes.py)와 로컬 S3(SeaweedFS)를 함께 띄운다. **릴리스 전**에 돌린다 (평소 기본 시험은 --full 없이)
+#     --app native-check-extra: native-check 에 없는 모듈(이미지 처리 · point · 웹 보상형 광고 · AdMob)을 scripts/native-smoke-extra.sh 로 돈다 (메일 · S3 를 함께 띄운다)
+#     --ffmpeg (native-check-extra 전용) 실행 이미지에 ffmpeg 를 넣어(Dockerfile.native 의 runtime-base 단계, FFMPEG=1) 움직이는 GIF → MP4 변환까지 확인한다.
+#              없으면 ffmpeg 없는 이미지에서 변환 없이 사본이 쓰이는 것을 확인한다
 # 기본 흐름도 메일은 실제 SMTP 로 나가 mailpit 이 받는다(compose 의 mail 프로필) — 가입 확인 코드를 거기서 읽는다.
 # 필요한 것: docker · curl · python3. 호스트 Postgres 는 compose 의 postgres 를 전용 프로젝트로 올린다.
 # 자기 개발 컨테이너(kotlin-skeleton)와 섞이지 않게 전용 compose 프로젝트(kotlin-skeleton-native-test)의 Postgres 를 따로 올리고 끝나면 지운다 — 개발 DB 는 건드리지 않는다.
@@ -15,10 +18,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SKIP=0; APP=""; SMOKE=""; FULL=0
+SKIP=0; APP=""; SMOKE=""; FULL=0; FFMPEG=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-build) SKIP=1; shift ;;
+    --ffmpeg) FFMPEG=1; shift ;;
     --app) APP="$2"; shift 2 ;;
     --smoke) SMOKE="$2"; shift 2 ;;
     --full) FULL=1; shift ;;
@@ -28,7 +32,10 @@ done
 if [ -z "$APP" ]; then if [ -d tools/native-check ]; then APP=native-check; else APP=api; fi; fi
 DIR="apps/$APP"; [ -d "$DIR" ] || DIR="tools/$APP"
 [ -d "$DIR" ] || { echo "앱 디렉토리가 없다: apps/$APP · tools/$APP" >&2; exit 2; }
-if [ -z "$SMOKE" ] && [ -x scripts/native-smoke.sh ]; then SMOKE=scripts/native-smoke.sh; fi
+if [ -z "$SMOKE" ] && [ "$APP" = native-check-extra ]; then SMOKE=scripts/native-smoke-extra.sh
+elif [ -z "$SMOKE" ] && [ -x scripts/native-smoke.sh ]; then SMOKE=scripts/native-smoke.sh; fi
+CHECKED=0; [ "$APP" = native-check ] || [ "$APP" = native-check-extra ] && CHECKED=1   # 이 레포의 시험용 조립(메일 · S3 가 필요하다)
+NEEDS_S3=0; [ "$FULL" = 1 ] || [ "$APP" = native-check-extra ] && NEEDS_S3=1
 
 IMAGE="${NATIVE_IMAGE_BUILDER:-ghcr.io/graalvm/native-image-community:25}"
 DB=native_smoke; PORT="${NATIVE_TEST_PORT:-18110}"; NAME="native-test-$$"
@@ -40,10 +47,10 @@ FAKE_PORT="${NATIVE_FAKE_PORT:-19000}"; FAKE_PID=""
 [ "$SKIP" = 1 ] || scripts/native-build.sh --app "$APP"
 [ -x "$BIN_DIR/app" ] || { echo "✗ $BIN_DIR/app 이 없다 — --skip-build 를 빼고 다시" >&2; exit 1; }
 
-if [ "$APP" = native-check ]; then
-  PROFILES=(--profile mail); [ "$FULL" = 0 ] || PROFILES+=(--profile s3)
+if [ "$CHECKED" = 1 ]; then
+  PROFILES=(--profile mail); [ "$NEEDS_S3" = 0 ] || PROFILES+=(--profile s3)
   docker compose "${PROFILES[@]}" up -d --wait postgres mail
-  [ "$FULL" = 0 ] || { docker compose --profile s3 up -d s3; docker compose --profile s3 run --rm s3-init >/dev/null; }
+  [ "$NEEDS_S3" = 0 ] || { docker compose --profile s3 up -d s3; docker compose --profile s3 run --rm s3-init >/dev/null; }
 else
   docker compose up -d --wait postgres
 fi
@@ -59,7 +66,7 @@ trap cleanup EXIT
 PLATFORM=(); [ -z "${NATIVE_PLATFORM:-}" ] || PLATFORM=(--platform "$NATIVE_PLATFORM")
 EXTRA=(); for kv in ${NATIVE_TEST_ENV:-}; do EXTRA+=(-e "$kv"); done
 NETWORK=(-p "$PORT:8080")
-if [ "$APP" = native-check ]; then
+if [ "$CHECKED" = 1 ]; then
   EXTRA+=(-e "NATIVE_MAIL_HOST=host.docker.internal" -e "NATIVE_MAIL_PORT=$MAIL_SMTP_PORT" -e "NATIVE_S3_URL=http://host.docker.internal:$S3_PORT" -e "NATIVE_FAKE_URL=http://localhost:$FAKE_PORT")
 fi
 if [ "$FULL" = 1 ]; then
@@ -70,13 +77,20 @@ if [ "$FULL" = 1 ]; then
   FAKE_PID="$FAKE_NAME"
   NETWORK=(--network "container:$FAKE_NAME")
 fi
+RUN_IMAGE="$IMAGE"
+if [ "$FFMPEG" = 1 ]; then   # 기본 실행 이미지(GraalVM 빌더)에는 ffmpeg 가 없다 — 배포 이미지(Dockerfile.native --build-arg FFMPEG=1)와 같은 runtime-base 단계를 쓴다
+  RUN_IMAGE="kotlin-skeleton-native-runtime-ffmpeg:test"
+  docker build -q -f Dockerfile.native --target runtime-base --build-arg FFMPEG=1 ${PLATFORM[@]+"${PLATFORM[@]}"} -t "$RUN_IMAGE" . >/dev/null
+fi
 docker run -d --name "$NAME" "${PLATFORM[@]}" $( [ "$FULL" = 1 ] || echo --add-host host.docker.internal:host-gateway ) --cpus 1 --memory 512m "${NETWORK[@]}" -v "$BIN_DIR:/app:ro" \
   -e "SPRING_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:$DB_PORT/$DB" -e "SPRING_DATASOURCE_USERNAME=$DB_USER" -e "SPRING_DATASOURCE_PASSWORD=$DB_PASSWORD" \
-  ${EXTRA[@]+"${EXTRA[@]}"} --entrypoint /app/app "$IMAGE" >/dev/null
+  ${EXTRA[@]+"${EXTRA[@]}"} --entrypoint /app/app "$RUN_IMAGE" >/dev/null
 
 URL="http://localhost:$PORT"; rc=0
 if [ -n "$SMOKE" ]; then
-  if [ "$APP" = native-check ]; then "$SMOKE" --url "$URL" --mail "http://localhost:$MAIL_HTTP_PORT" || rc=$?; else "$SMOKE" --url "$URL" || rc=$?; fi
+  if [ "$APP" = native-check ]; then "$SMOKE" --url "$URL" --mail "http://localhost:$MAIL_HTTP_PORT" || rc=$?
+  elif [ "$APP" = native-check-extra ]; then "$SMOKE" --url "$URL" --mail "http://localhost:$MAIL_HTTP_PORT" --s3-host-port "localhost:$S3_PORT" --ffmpeg "$([ "$FFMPEG" = 1 ] && echo yes || echo no)" || rc=$?
+  else "$SMOKE" --url "$URL" || rc=$?; fi
   if [ "$rc" = 0 ] && [ "$FULL" = 1 ]; then
     scripts/native-smoke-full.sh --url "$URL" --mail "http://localhost:$MAIL_HTTP_PORT" --fakes "http://localhost:$FAKE_PORT" --s3-host-port "localhost:$S3_PORT" || rc=$?
   fi

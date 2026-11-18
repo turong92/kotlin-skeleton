@@ -1,0 +1,86 @@
+# 네이티브 시험용 두 번째 조립의 설정 — 시험이 필요한 만큼만. 비밀 값은 시험 전용 고정 값이다(이 앱은 배포 대상이 아니다).
+spring:
+  application:
+    name: native-check-extra
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/app}
+    username: ${SPRING_DATASOURCE_USERNAME:app}
+    password: ${SPRING_DATASOURCE_PASSWORD:dev}
+  mail:
+    host: ${NATIVE_MAIL_HOST:localhost}
+    port: ${NATIVE_MAIL_PORT:1025}
+  flyway:
+    locations: classpath:db/migration/{vendor}
+    out-of-order: true
+    validate-migration-naming: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  health:
+    mail:
+      enabled: false
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health, info
+
+springdoc:
+  api-docs:
+    path: /api/v1/docs
+
+skeleton:
+  web:
+    client-ip:
+      mode: direct
+  notification-mail:
+    enabled: true
+    from: "Native Check <no-reply@native-check.invalid>"
+  storage-s3:
+    bucket: app
+    region: us-east-1
+    endpoint-override: ${NATIVE_S3_URL:http://localhost:18333}
+    path-style-access-enabled: true
+    credentials:
+      access-key-id: dev
+      secret-access-key: dev-secret
+  storage:
+    web:
+      key-secret: native-check-only-storage-key-secret-0123456789
+    image:
+      enabled: true                  # ImageIO + TwelveMonkeys(JPEG · WebP) 엔진과 상태 저장소(storage-image-jdbc) — 빌드 때 굳는다
+      ffmpeg:
+        enabled: true                # 앱 안 ffmpeg(움직이는 GIF → MP4). 실행 이미지에 ffmpeg 가 있어야 변환이 된다(없으면 사본이 쓰이고 시험이 그것을 알린다)
+        path: ${NATIVE_FFMPEG_PATH:ffmpeg}
+  legal:
+    reconsent:
+      enabled: false
+  account:
+    password:
+      bcrypt-strength: 4
+    mail:
+      link-base-url: https://native-check.invalid
+  auth:
+    jwt:
+      secret: native-check-only-jwt-secret-0123456789abcdef
+  auth-session:
+    reuse-grace: 0s
+  job-queue:
+    mode: on-request       # 폴링 스레드 없이 깨우기 주소가 부를 때만 처리한다 (빌드 때 굳는다)
+    wake:
+      secret: native-check-wake-secret-0123456789-abcdefgh
+  ads-web-rewarded:
+    enabled: true
+    min-elapsed: 1s
+    reward-type: point
+    reward-params:
+      amount: "7"
+  ads-admob:
+    enabled: true
+    ad-units: ["ca-app-pub-0000000000000000/42"]
+    keys-url: http://localhost:${SERVER_PORT:8080}/api/v1/native-check/admob-keys   # 이 앱이 자기 공개키 목록을 낸다(AdmobProbe) — 구글 대역
+  persistence-jdbc:
+    startup-wait:
+      enabled: false
