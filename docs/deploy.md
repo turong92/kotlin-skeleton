@@ -9,6 +9,8 @@
 | 이 레포 | 계약을 지키는 `Dockerfile` · `deploy/app.yaml`(선언) · 배포 가드 · 계약 증명 스크립트 (GHCR 워크플로는 보류 — §6) |
 | 플랫폼(홈서버 레포 `infra/modules/app-docker`) | 선언을 읽어 컨테이너 · DB · Redis · 비밀 · Caddy · 터널을 만든다 |
 
+GCP Cloud Run(+ Cloudflare)에 올릴 때는 `docs/deploy-cloudrun.md` 를 따른다.
+
 ## 1. 배포 흐름 — 로컬 빌드, tag 를 올리는 것이 배포다
 
 **GHCR 는 쓰지 않는다.** 홈서버 앱은 홈서버에서 로컬로 빌드하고, 선언은 `image_local: true` 로 그 이미지를 쓴다.
@@ -88,6 +90,7 @@ Caddy 가 `X-Forwarded-For` 를 덧붙이고 `CF-Connecting-IP` 를 넘기므로
 (`mode: ${SKELETON_CLIENT_IP_MODE:}` · `trusted-proxies: ${SKELETON_CLIENT_IP_TRUSTED_PROXIES:}`; `scripts/new-project.sh` 의 이름 바꾸기가 `SKELETON_` → `<PREFIX>_` 로 같이 바꾼다). 긴 이름(`…_WEB_CLIENT_IP_*`)도 느슨한 바인딩으로 그대로 먹는다.
 증거: 앱의 `ClientIpPlatformEnvTest`(플랫폼 이름 · 값 모양으로 바인딩 + 홈서버 체크아웃이 이 레포 위에 있으면 `app.tf` 를 읽어 이름이 같은지 맞춰 본다 — 없으면 건너뜀)와 `test-deploy-contract.sh` 의 D 단계(그 두 변수를 줘서 실제 컨테이너로 `SKELETON_ENV=prod` 가 뜨는지).
 규칙 자체와 플랫폼 쪽 남은 문제(도커 대역 전체 신뢰 · 터널 밖 `CF-Connecting-IP`)는 `docs/client-ip.md`.
+Cloud Run 틀은 `<ENV_PREFIX>_CLIENT_IP_MODE=edge-secret` 과 `<ENV_PREFIX>_WEB_CLIENT_IP_EDGE_SECRET_SHA256`(원점 비밀의 SHA-256)을 넣는다 — 같은 예약 이름 규칙이고, 원점 비밀 헤더가 맞는 요청만 `CF-Connecting-IP` 를 믿는다(`docs/client-ip.md`, `docs/deploy-cloudrun.md` §2).
 
 ### 헬스체크 — 정직한 `/health`
 

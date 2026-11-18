@@ -76,6 +76,7 @@ gcloud scheduler jobs create http drain-jobs \
 - **주기**: 일감 지연이 허용하는 만큼 — 1분이 흔하다(`* * * * *`). 안 쓸 때는 `*/10 * * * *` 처럼 늘려도 된다. 깨울 때마다 인스턴스가 한 번 뜨므로 간격이 짧을수록 비용 · 콜드스타트가 는다. 일감이 없으면 호출은 DB 한 번 보고 바로 끝난다.
 - `--attempt-deadline` 은 `time-budget` 보다 크게(여유 2배). 실패하면 Scheduler 가 재시도한다(응답이 200 이 아니면).
 - 비밀값은 Secret Manager 에서 가져와 Scheduler 헤더 · 서비스 환경변수 양쪽에 같은 값으로 넣는다. **저장소에 값을 커밋하지 않는다.**
+- 이 설정을 선언 한 장에서 만들어 주는 틀은 `docs/deploy-cloudrun.md` 다 — Tasks 가 일을 넣은 직후 깨운다.
 
 ### 대기열: 오픈 전 줄 시작 시각에 미리 깨우기
 
