@@ -139,8 +139,22 @@ class CloudTasksJobWakeTest {
     }
 
     @Test
-    fun `scheduleTime is RFC3339 in UTC`() {
+    fun `scheduleTime is RFC3339 in UTC rounded up to the second so it never fires early`() {
         jobWake().request(Instant.parse("2026-11-18T09:30:15.987Z"))
-        assertEquals("2026-11-18T09:30:15Z", scheduleOf())
+        assertEquals("2026-11-18T09:30:16Z", scheduleOf())
+    }
+
+    @Test
+    fun `does not hold a lock while calling the network`() {
+        val wake = jobWake()
+        google.taskDelayMillis = 1000
+        val first = Thread { wake.request(time.now.plusSeconds(60)) }.apply { start() }
+        Thread.sleep(200)   // 첫 요청이 Tasks 응답을 기다리는 중
+        val started = System.nanoTime()
+        wake.request(time.now.plusSeconds(30))   // 락을 안 잡으니 기다리지 않고 자기 호출을 한다(겹쳐 둘이 생겨도 무해)
+        val tookMillis = (System.nanoTime() - started) / 1_000_000
+        first.join()
+        assertTrue(tookMillis < 1500, "다른 요청이 끝나길 기다리지 않는다")
+        assertEquals(2, google.taskRequests.size)
     }
 }

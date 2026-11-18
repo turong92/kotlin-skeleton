@@ -27,10 +27,12 @@ class FakeGoogle : AutoCloseable {
     @Volatile var taskStatus = 200
     @Volatile var tokenStatus = 200
     @Volatile var tokenExpiresIn = 3600
+    @Volatile var taskDelayMillis = 0L
 
     private val server = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0).apply {
         createContext("/computeMetadata/") { ex -> handle(ex, tokenRequests, tokenStatus) { """{"access_token":"fake-access-token-${tokenRequests.size}","expires_in":$tokenExpiresIn,"token_type":"Bearer"}""" } }
-        createContext("/v2/") { ex -> handle(ex, taskRequests, taskStatus) { """{"name":"projects/acme-proj/locations/asia-northeast3/queues/acme-drain/tasks/t1"}""" } }
+        executor = java.util.concurrent.Executors.newCachedThreadPool()   // 겹친 요청을 동시에 받는다
+        createContext("/v2/") { ex -> if (taskDelayMillis > 0) Thread.sleep(taskDelayMillis); handle(ex, taskRequests, taskStatus) {"""{"name":"projects/acme-proj/locations/asia-northeast3/queues/acme-drain/tasks/t1"}""" } }
         start()
     }
 

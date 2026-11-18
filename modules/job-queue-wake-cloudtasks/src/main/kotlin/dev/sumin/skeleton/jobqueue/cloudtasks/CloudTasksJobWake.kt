@@ -3,6 +3,7 @@ package dev.sumin.skeleton.jobqueue.cloudtasks
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.wake.JobWake
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueProperties
+import dev.sumin.skeleton.jobqueue.jdbc.JobWakeController
 import java.io.IOException
 import java.net.URI
 import java.net.http.HttpClient
@@ -34,17 +35,19 @@ class CloudTasksJobWake(
         URI.create("${props.apiBaseUrl.trimEnd('/')}/v2/projects/${props.project}/locations/${props.region}/queues/${props.queue}/tasks")
     }
 
+    private val lock = Any()
     private var armedAt: Instant? = null
 
-    @Synchronized
     override fun request(at: Instant) {
         if (!props.configured) return
         val now = time.now()
-        armedAt?.let { if (now.isBefore(it) && !it.isAfter(at)) return }
-        val schedule = at.coerceIn(now, now.plus(MAX_AHEAD)).truncatedTo(ChronoUnit.SECONDS)
+        // 락은 합치기 판정 · 갱신에만 — 토큰 · 태스크 만들기(HTTP)는 락 밖에서 한다(겹쳐 둘이 생겨도 무해: drain 은 한 번에 하나)
+        synchronized(lock) { armedAt?.let { if (now.isBefore(it) && !it.isAfter(at)) return } }
+        // 올림 — 내림이면 요청 시각보다 1초까지 일찍 울린다
+        val schedule = at.coerceIn(now, now.plus(MAX_AHEAD)).let { if (it.nano == 0) it else it.truncatedTo(ChronoUnit.SECONDS).plusSeconds(1) }
         try {
             create(schedule)
-            armedAt = schedule
+            synchronized(lock) { armedAt?.takeIf { now.isBefore(it) && it.isBefore(schedule) } ?: run { armedAt = schedule } }   // 겹친 요청이 더 이른 예약을 늦추지 않는다
         } catch (e: IOException) {
             log.warn("Cloud Tasks wake request failed: {}", e.message)
         } catch (e: RuntimeException) {
@@ -61,7 +64,7 @@ class CloudTasksJobWake(
                 "httpRequest" to mapOf(
                     "url" to props.targetUrl,
                     "httpMethod" to "POST",
-                    "headers" to mapOf("X-Wake-Secret" to wake.secret),
+                    "headers" to mapOf(JobWakeController.SECRET_HEADER to wake.secret),
                 ),
             ),
         )
