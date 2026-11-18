@@ -1,6 +1,6 @@
 # storage-image-imageio
 
-`storage-image` 의 기본 변환 엔진(`ImageRenderer`) - 앱 안 순수 자바(JDK ImageIO + TwelveMonkeys JPEG · WebP). 추가 서버가 없다. JPEG · PNG · GIF · WebP 를 읽고 JPEG(투명이면 PNG)로 쓴다. HEIC · AVIF 원본은 읽지 못한다(`UNSUPPORTED`). JVM 전용(네이티브 이미지에서는 뺀다).
+`storage-image` 의 기본 변환 엔진(`ImageRenderer`) - 앱 안 순수 자바(JDK ImageIO + TwelveMonkeys JPEG · WebP). 추가 서버가 없다. JPEG · PNG · GIF · WebP 를 읽고 JPEG(투명이면 PNG)로 쓴다. HEIC · AVIF 원본은 읽지 못한다(`UNSUPPORTED`). 네이티브: 힌트 내장, 실행 파일 곁 공유 라이브러리(`libawt*.so` 등) 복사 필요(`Dockerfile.native` 가 한다, docs/native-image.md).
 
 - **머리만 읽어 크기를 안다** 디코드 전에 폭 · 높이 · EXIF 방향 · 움직임을 읽으므로 픽셀 폭탄(작은 파일, 머리에 3만 x 3만)은 크기로 걸려 디코드되지 않는다.
 - **메모리를 묶는다** 디코드는 부분 표본 추출(`setSourceSubsampling`)로 하고, 표본 간격은 **올림**이라 디코드한 한 변이 가장 큰 변환본의 두 배 **이하**다(변환본과 같은 크기로 읽으면 점 표본의 무아레가 생긴다). 방향(EXIF 회전)은 줄인 뒤에 반영한다. 원본 바이트는 메모리가 아니라 임시 파일에 캐시한다. 한 장의 힙 최악 = 디코드 래스터 `(2·W)×(2·H)×(3~4)` + 가장 큰 변환본 `W×H×4` + 인코드 버퍼(W×H 는 가장 큰 변환본의 가로 x 세로). 기본 1600 x 1600: 디코드 `3200×3200×4` = 약 41MB + 변환본 10MB + 버퍼 = **한 장 약 55MB** (JPEG 3바이트면 약 45MB) - 동시 변환은 `max-concurrent`(기본 1)가 묶으므로 **앱 힙에 약 60MB 를 더 잡으면 된다**. 변환본 크기를 키우면 면적에 비례한다(2400 x 2400 이면 약 2.3배).

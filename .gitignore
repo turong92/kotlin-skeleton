@@ -52,3 +52,6 @@ application-*.secret.properties
 *ssm*dump*
 *ssm*export*
 __pycache__/
+
+# CRaC 체크포인트(scripts/crac-build.sh) — 비밀이 든 core.img 가 들어 있다
+.crac/

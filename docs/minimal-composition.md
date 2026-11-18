@@ -288,7 +288,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `storage-s3` | yes — no bucket, no `PresignedStorage` bean | nothing | bucket (+ endpoint / keys for R2 · MinIO) |
 | `storage-image` | off until `skeleton.storage.image.enabled=true` | `storage-image-jdbc` + an engine (`storage-image-imageio`) — enabling without them fails boot with a message naming the missing module | — |
 | `storage-image-jdbc` | yes (stays idle until `storage-image` is enabled) | a `DataSource` + one `db-*` module (+ its migration) | — |
-| `storage-image-imageio` | yes (the default engine once `storage-image` is enabled) | nothing | headless AWT in a JVM image (not native-image) |
+| `storage-image-imageio` | yes (the default engine once `storage-image` is enabled) | nothing | headless AWT; native-image: hints built in, copy the shared libraries next to the executable (docs/native-image.md) |
 | `storage-image-imgproxy` | off until enabled | an imgproxy container + its address / signing key | the imgproxy server |
 | `storage-image-pdfbox` | off until enabled | nothing | — |
 | `storage-image-ffmpeg` | off until enabled | `storage-image` enabled + `storage-s3` + `job-queue-jdbc` — enabling without them fails boot naming the missing bean | the `ffmpeg` executable in the image (8.0+ for animated WebP input) |

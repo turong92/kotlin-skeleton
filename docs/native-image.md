@@ -16,7 +16,7 @@ scripts/native-test.sh                       # 앱을 네이티브로 빌드해 
 - 실행 파일은 **빌드한 쪽과 같은 아키텍처의 glibc 리눅스**에서만 돈다 (맥에서 만들면 arm64). **Cloud Run 은 amd64** — 배포용은 amd64 에서(CI · `NATIVE_PLATFORM=linux/amd64`, 맥에서는 에뮬레이션이라 느리다 — 그래도 끝까지 돌아 `--full` 시험 73항목이 통과했다) 만든다. 같은 출력 폴더를 다른 플랫폼으로 다시 만들면 `scripts/native-build.sh` 가 이전 결과를 지우고 새로 만든다.
 - 빌드 자원: 시험용 조립(모듈을 모두 얹은 `tools/native-check`)으로 **arm64: 약 3분 20초(캐시가 따뜻할 때), 빌드 중 최대 메모리 6GB 안팎**(native-image 자체 보고), 바이너리 약 220MB.
   **amd64**(맥 Docker Desktop 의 에뮬레이션 — Rosetta): native-image 약 6분, Gradle 전체 약 8분, **최대 메모리 12.9GB**(에뮬레이션이 부풀린 값 — 아래 진짜 x86 값을 쓴다), 바이너리 약 229MB.
-  **진짜 amd64**(윈도우 박스 WSL, x86_64 12코어, 이미지 처리 · 포인트 · 광고 조립 `tools/native-check-extra`, 2026-11-18): native-image **1분 53초**, Gradle 전체 **2분 19초**(캐시가 따뜻할 때, 컨테이너 메모리 한도 9GB), native-image 보고 **최대 메모리 8.77GB**, 바이너리 **182MB**(+ 공유 라이브러리 약 4MB).
+  **진짜 amd64**(WSL2 x86_64 12코어, 이미지 처리 · 포인트 · 광고 조립 `tools/native-check-extra`, 2026-11-18): native-image **1분 53초**, Gradle 전체 **2분 19초**(캐시가 따뜻할 때, 컨테이너 메모리 한도 9GB), native-image 보고 **최대 메모리 8.77GB**, 바이너리 **182MB**(+ 공유 라이브러리 약 4MB).
   한도를 **5GB** 로 낮춰도 끝났다(보고 최대 5.42GB, native-image 4분 3초 · 전체 4분 32초 — GC 가 늘어 느려진다). 반면 모듈을 모두 얹은 `tools/native-check` 는 이 박스에서 한도 **9GB · 10GB 모두 메모리 부족으로 끝내지 못했다**(cgroup OOM, 종료 137 — 더 키워 보지 않았다: 박스가 다른 작업과 공유라 15GB 중 여유가 그만큼 없다). 모듈을 많이 얹을수록 빌드 메모리가 는다. 컨테이너/러너에 메모리를 넉넉히 준다 (`NATIVE_MEMORY`; GitHub 공개 러너는 16GB 라 amd64 빌드가 빠듯할 수 있다 — 첫 CI 실행에서 확인한다).
 - Gradle 캐시는 `~/.gradle-native` 에 둔다 (`NATIVE_GRADLE_HOME`) — 안 그러면 매번 의존성을 다시 받는다.
 - **네이티브 플러그인은 `-Pnative` 일 때만 앱에 걸린다.** 안 주면 기본 빌드는 그대로이고(플러그인 선언만 루트에 있다), 안 쓰는 팀이 신경 쓸 것은 없다.
@@ -67,7 +67,7 @@ Spring AOT 는 `@ConditionalOnProperty` · `@ConditionalOnBean` 같은 **조건�
 | `notification-sse` (`NotificationSseNativeHints`) | `NotificationSseConnectedEvent` · `NotificationEvent` | `SseEmitter.send(객체)` 로 흘리는 이벤트 본문 |
 | `persistence-jooq` (`JooqRecordAotProcessor`) | 앱 패키지의 jOOQ 레코드 클래스(`XxxRecord`)의 생성자 | jOOQ 가 `getDeclaredConstructor()` 로 레코드를 만든다 — 없으면 `Could not construct new record` 로 쓰기 · 읽기가 500 |
 | `persistence-jooq` (`JooqNativeHints`) | `SQLDataType` 상수들의 자바 타입의 **배열형**(`String[]` · `Long[]` …) | jOOQ 의 `SQLDataType` 정적 초기화가 자료형마다 `Array.newInstance(타입, 0).getClass()` 로 배열형을 만든다. 네이티브에서 배열 클래스를 미리 알리지 않으면 null 이 나와 `ConcurrentHashMap.putIfAbsent` NPE 로 `DSLContext` 가 서지 못한다 |
-| `storage-image-imageio` (`META-INF/native-image/dev.sumin.skeleton/storage-image-imageio/reachability-metadata.json`) | `java.awt` · `sun.java2d` · `sun.awt` 의 JNI 접근 목록, JPEG 리더/라이터(`jniAccessible`), TwelveMonkeys SPI 클래스, `META-INF/services/javax.imageio.spi.*` · ICC 프로필 리소스, `sun.awt.resources.awt` | `ImageIO` 를 처음 쓰면 AWT 네이티브 라이브러리가 JNI 로 `java.awt.GraphicsEnvironment` 등을 찾는다 — 등록이 없으면 기동 중 `NoClassDefFoundError`(그 다음은 `NoSuchMethodError: System.load`). JVM 추적 에이전트(`-agentlib:native-image-agent`)로 WebP · CMYK JPEG · GIF 를 돌려 모은 것에서 이 모듈이 쓰는 패키지만 추렸다. **`RuntimeHintsRegistrar` 가 JNI 를 표현하지 못해** GraalVM 의 metadata 파일을 모듈 jar 에 둔다 |
+| `storage-image-imageio` (`META-INF/native-image/skeleton-storage-image-imageio/reachability-metadata.json`) | `java.awt` · `sun.java2d` · `sun.awt` 의 JNI 접근 목록, JPEG 리더/라이터(`jniAccessible`), TwelveMonkeys SPI 클래스, `META-INF/services/javax.imageio.spi.*` · ICC 프로필 리소스, `sun.awt.resources.awt` | `ImageIO` 를 처음 쓰면 AWT 네이티브 라이브러리가 JNI 로 `java.awt.GraphicsEnvironment` 등을 찾는다 — 등록이 없으면 기동 중 `NoClassDefFoundError`(그 다음은 `NoSuchMethodError: System.load`). JVM 추적 에이전트(`-agentlib:native-image-agent`)로 WebP · CMYK JPEG · GIF 를 돌려 모은 것에서 이 모듈이 쓰는 패키지만 추렸다. **`RuntimeHintsRegistrar` 가 JNI 를 표현하지 못해** GraalVM 의 metadata 파일을 모듈 jar 에 둔다 |
 | `platform` (`ConfigurationPropertiesBindingAotProcessor`) | 모든 `@ConfigurationProperties` 클래스와 그 중첩 타입 · 맵 값 타입 | 코틀린 기본 인자 data class 의 중첩 설정(`StorageWebProperties` …)을 kotlin-reflect 가 못 찾는다 |
 | `platform` (`ApiResponseEnvelopeAotProcessor`) | `@ApiResponseEnvelope(value = X::class)` 의 `X` | 컨트롤러가 `Any` 를 돌려줘도(저장소 presign) 응답 타입이 이 어노테이션에 있다 |
 
@@ -137,7 +137,7 @@ S3 는 compose 의 SeaweedFS(`s3` 프로필 — MinIO 를 쓰지 않는다: 이�
 `point` · 웹 보상형 광고(`ads-web-rewarded` + jdbc: 세션 → 너무 빠른 요청 거절 → 보상 → `point` 잔액 · 두 번째 보상 거절) · `ads-admob`(ECDSA 서명 콜백 수락 · 같은 `transaction_id` 한 번만 적립 · 위조 거절 — 구글 대역은 이 앱의 `AdmobProbe`) · PostgreSQL 18.
 찾아 고친 것: `storage-image-imageio` 의 AWT JNI 힌트(위 표). **`Dockerfile.native` 는 실행 파일 곁의 공유 라이브러리(`libawt*.so` · `libjavajpeg.so` …)까지 복사해야 한다** — 이미지 처리 앱의 네이티브 빌드는 이것들을 실행 파일 옆에 만든다(없으면 기동 실패). 이 레포의 시험은 폴더째 마운트하고 `Dockerfile.native` 는 폴더째 복사하도록 고쳤다.
 **ffmpeg**: `Dockerfile.native` 의 빌드 인자 `FFMPEG=1`(기본 꺼짐)이 실행 이미지(Debian bookworm)에 ffmpeg 를 넣는다 — `scripts/native-test.sh --ffmpeg` 가 같은 `runtime-base` 단계로 시험한다. 모듈이 쓰는 `-fps_mode` 는 ffmpeg 5.1 이상이 필요하다(bookworm 은 5.1, Ubuntu 22.04 의 4.4 는 `Unrecognized option 'fps_mode'` 로 변환을 건너뛴다).
-ffmpeg 가 없는 이미지에서는 사본이 쓰인다(시험이 그것을 확인한다). MySQL 8.4(`db-mysql`)는 이번에 확인하지 않았다(쓰는 쪽이 PostgreSQL 로 옮겼다).
+ffmpeg 가 없는 이미지에서는 사본이 쓰인다(시험이 그것을 확인한다). MySQL 8.4(`db-mysql`)는 이번에 확인하지 않았다(이 시험은 PostgreSQL 18 로 했다).
 **못 본 것**: `payment-stripe`(시험용 조립에 없다) · `crypto` 의 불투명 URL 토큰 경로(`OpaqueUrlTokenPayload`, 저장소 공개 URL 을 `OPAQUE` 로 쓸 때) · 부하. (샘플 앱 전체 — 이메일 변경 · 로그인 아이디 · 매직 링크 · 게시판 · 작성자 프로필 · 노트 · 첨부 · 응원하기 — 는 프런트 e2e 로 확인했다, 위.) 이런 기능을 쓰는 앱은 처음 네이티브로 빌드할 때 같은 종류의 규칙 위반이 몇 개 더 나올 수 있다.
 Flyway 는 기동 때 `Unable to scan location: /db/migration/postgresql (unsupported protocol: resource)` 경고를 여러 번 찍지만 마이그레이션은 적용된다.
 
@@ -163,7 +163,7 @@ Flyway 는 기동 때 `Unable to scan location: /db/migration/postgresql (unsupp
 |---|---|---|---|---|
 | 기동 (/health 200) | 12.0s | 7.6s | **0.79s** | **0.64s** |
 | RSS 기동 직후 → 흐름 뒤 | 334 → 409MB | 303 → 332MB | 266 → 338MB | 260 → 282MB |
-| 이미지 | JDK + jar | 같음 | **1.96GB** (체크포인트 272MB 포함) | 약 0.95GB |
+| 이미지(`FFMPEG=1`) | JDK + jar | 같음 | **1.96GB** (체크포인트 272MB 포함) | 약 0.95GB (런타임 764MB + 실행 파일 182MB) |
 | 흐름 시험 29항목 | ffmpeg 항목만 빠짐² | 같음 | **통과**(ffmpeg 포함) | **통과** |
 | 이미지 만들 때 필요한 것 | — | — | **살아 있는 DB**(체크포인트 때 앱이 뜬다) | 메모리 5~9GB |
 | 추가 권한 | — | — | 없음 — `--cap-drop ALL`(privileged 아님) 컨테이너에서 복원 | — |
@@ -178,8 +178,12 @@ Flyway 는 기동 때 `Unable to scan location: /db/migration/postgresql (unsupp
    **비밀(JWT · DB 비밀번호 · S3 키)이 `core.img` 에 문자열로 들어간다**(grep 으로 확인) → 이미지는 환경마다 따로, 접근 통제가 된 레지스트리에만 둔다. 같은 이미지를 환경변수로 바꿔 쓰는 배포 계약(홈서버 `docs/deploy.md`)과 맞지 않는다.
 3. **복원 때 마이그레이션이 다시 돌지 않는다.** 빈 DB 에 복원하면 첫 요청이 `BadSqlGrammarException`. 체크포인트 DB 와 같은 스키마 버전이 이미 적용된 DB 에 붙어야 한다(배포 순서: 마이그레이션 먼저 → 이미지 복원).
 4. 복원한 JVM 은 jar 경로 · 내용이 체크포인트 때와 같아야 한다(`/app/app.jar` 고정), CPU 세대가 다르면 `-XX:CPUFeatures` 로 맞춘다. 체크포인트 프로세스는 SIGKILL 로 끝난다(종료 코드 137 이 정상).
-5. 이 JDK 이미지는 Ubuntu 22.04 라 apt ffmpeg 가 4.4 다 — `Dockerfile.crac` 는 `FFMPEG=1` 일 때 정적 ffmpeg 7.1 을 넣는다.
+5. **비root 로 돈다**: `Dockerfile.crac` 의 기본은 `useradd` 한 사용자 `app`(uid 10001)이고 체크포인트도 그 사용자로 만든다. WSL2 에서 `--cap-drop ALL` + uid 10001 로 복원해 흐름 29항목이 통과했다(root 가 아니어도 된다).
+6. **설정 안 한 값을 기동 때 난수로 만든 키**(예: 대기실 서명 키)도 체크포인트에 굳어 **모든 인스턴스가 같은 값**을 쓴다 — 인스턴스마다 달라야 하는 키는 CRaC 와 맞지 않는다.
+7. 체크포인트 파일(`.crac/core.img`)에는 비밀이 들어 있다 — `.gitignore` 에 있고 `scripts/crac-build.sh` 가 이미지를 굳힌 뒤 비운다. 체크포인트 때의 환경은 `CRAC_ENV_FILE`(`--env-file` 형식)로 준다(명령줄에 비밀을 적지 않는다). 베이스 이미지(`azul/zulu-openjdk` CRaC, `mwader/static-ffmpeg`)는 다이제스트로 고정했다(2026-11-18).
+8. 이 JDK 이미지는 Ubuntu 22.04 라 apt ffmpeg 가 4.4 다 — `Dockerfile.crac` 는 `FFMPEG=1` 일 때 정적 ffmpeg 7.1 을 넣는다.
 
+**CRaC 는 비교용이다 — 비밀이 이미지에 굳으므로 배포 추천안이 아니다.** 그래서 `Dockerfile.crac` · `scripts/crac-build.sh` 는 새 프로젝트에 복사되지 않는다(스켈레톤 레포에만 남긴다).
 **고르는 기준**: 콜드스타트가 0.8s 급이어야 하고 **무거운 라이브러리를 손대지 않고 쓰고 싶으면** CRaC, 이미지 크기 · 메모리 · 비밀을 이미지에 넣지 않는 계약이 중요하면 네이티브. 둘 다 환경(모듈 조합)마다 이미지를 따로 만든다. Cloud Run 에서의 실제 복원(gVisor 샌드박스에서 Warp 가 도는지)은 **시험하지 않았다**.
 
 ## 무거운 라이브러리를 쓰는 앱을 위한 안내

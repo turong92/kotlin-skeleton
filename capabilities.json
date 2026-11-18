@@ -4352,7 +4352,7 @@
       "module": "storage-image-imageio",
       "path": "modules/storage-image-imageio",
       "status": "experimental",
-      "summary": "storage-image 의 기본 변환 엔진 — 앱 안 순수 자바(ImageIO + TwelveMonkeys), 추가 서버 없음. 출력은 JPEG(투명이면 PNG), JVM 전용.",
+      "summary": "storage-image 의 기본 변환 엔진 — 앱 안 순수 자바(ImageIO + TwelveMonkeys), 추가 서버 없음. 출력은 JPEG(투명이면 PNG). 네이티브: 힌트 내장, 실행 파일 곁 공유 라이브러리 복사 필요.",
       "starter": false,
       "newProjectFlag": "--modules storage-image-imageio",
       "autoIncludes": ["storage", "storage-image"],
@@ -4369,7 +4369,7 @@
       "notFor": [
         "storage-image 없이는 쓰지 않는다(따라온다)",
         "HEIC · AVIF 원본은 읽지 못한다 — 그런 입력이 필요하면 storage-image-imgproxy",
-        "네이티브 이미지(AWT)에서는 쓰지 않는다"
+        "네이티브 이미지에서는 실행 파일 곁의 공유 라이브러리(libawt*.so 등)를 함께 복사해야 한다 — docs/native-image.md"
       ],
       "keywords": {
         "ko": ["이미지 변환 엔진", "순수 자바 이미지 리사이즈"],

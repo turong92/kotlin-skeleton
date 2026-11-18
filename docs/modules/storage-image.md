@@ -20,7 +20,7 @@
 **형식 협상** 엔진이 WebP 도 만들면(imgproxy) `POST /api/v1/storage/images` 와 리뷰 사진 302 는 요청 `Accept` 에 `image/webp` 가 명시돼 있을 때 WebP 주소를 내고 `Vary: Accept` 를 단다. 게시판 공개 영역은 정적 CDN 이라 협상이 안 되어 WebP 사본을 **따로 복사**하고(`<공개 키>.alt.webp` · `.thumb.alt.webp`; `publicKeysOf` · `unpublish` · 전체 대조가 사본까지 센다) 응답 `attachmentImages[키].alternates["image/webp"] = { thumb, display }` 로 알린다. 변환 중인 이미지는 `attachmentUrls` 에서 빠지고 `attachmentsPending` 에 실린다.
 **PDF** 공개 영역은 PDF 를 **원본 그대로** 복사한다(문서 자체가 공개 대상이고 EXIF 같은 이미지 메타데이터 문제가 아니다) - `storage-image-pdfbox` 를 켜도 공개 영역에 PDF 썸네일 사본을 더하지 않는다(`attachmentImages` 에도 PDF 는 빠진다). 변환본(`thumb` · `display`)은 `POST /api/v1/storage/images` 로 편집 화면이 미리보기에 쓴다.
 
-**한계** `ImageIoRenderer` 는 JVM 의 headless AWT 를 쓴다(네이티브 이미지에서는 뺀다). 상태 줄이 있는 키는 완료 호출이 저장소를 다시 읽지 않는다. 프로젝트 여럿에서도 설정은 공통이고 줄 · 저장소는 프로젝트마다다.
+**한계** `ImageIoRenderer` 는 JVM 의 headless AWT 를 쓴다(네이티브: 힌트 내장, 실행 파일 곁 공유 라이브러리(`libawt*.so` 등) 복사 필요(`Dockerfile.native` 가 한다, docs/native-image.md)). 상태 줄이 있는 키는 완료 호출이 저장소를 다시 읽지 않는다. 프로젝트 여럿에서도 설정은 공통이고 줄 · 저장소는 프로젝트마다다.
 
 | 항목 | 내용 |
 |---|---|

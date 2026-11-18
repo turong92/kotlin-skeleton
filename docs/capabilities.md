@@ -183,7 +183,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `storage` | 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트 · 올림 완료 검사 /complete) · 매직 바이트 판정 · 검사기(UploadInspector) 확장 지점 · 버려진 회원 업로드 정리(기본 꺼짐, UploadedKeyUsage 로 쓰이는 파일 보호). | `--modules storage,storage-s3` | 파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증 / file upload, image upload, attachment, presigned url, multipart upload | `@skeleton/storage` |
 | `storage-image` | 업로드한 이미지의 변환본(썸네일 thumb · 표시본 display, EXIF 없음)을 작업 큐로 만들고 남에게는 원본 대신 변환본만 준다 — 이미지 크기(픽셀 폭탄) 상한 · 지연 등록. 움직이는 GIF · WebP 의 표시본은 메타데이터를 걷어낸 사본이고, 변환 확장 지점(AnimatedDisplayConverter)을 채우면(video 가 채운다) 소리 없는 반복 MP4 / 투명이면 움직이는 WebP 로 바뀐다 — 응답의 contentType 으로 알린다. 기본 꺼짐. | `--modules storage-image,storage-image-jdbc,storage-image-imageio` | 이미지 썸네일, 이미지 리사이즈, 표시본, EXIF 제거 / image thumbnail, image resize, strip exif, image variants | `@skeleton/storage` |
 | `storage-image-ffmpeg` | 움직이는 GIF · WebP 표시본을 앱 안 ffmpeg 로 소리 없는 반복 MP4(투명이면 움직이는 WebP)로 — storage-image 의 변환 확장 지점을 job-queue-jdbc 작업으로 채운다(별도 일꾼 없음, 시간 · 크기 상한, 기본 꺼짐). | `--modules storage-image-ffmpeg` | GIF MP4 변환, 움직이는 이미지, ffmpeg / gif to mp4, animated image conversion, ffmpeg | — |
-| `storage-image-imageio` | storage-image 의 기본 변환 엔진 — 앱 안 순수 자바(ImageIO + TwelveMonkeys), 추가 서버 없음. 출력은 JPEG(투명이면 PNG), JVM 전용. | `--modules storage-image-imageio` | 이미지 변환 엔진, 순수 자바 이미지 리사이즈 / image renderer, java imageio, image resize engine | — |
+| `storage-image-imageio` | storage-image 의 기본 변환 엔진 — 앱 안 순수 자바(ImageIO + TwelveMonkeys), 추가 서버 없음. 출력은 JPEG(투명이면 PNG). 네이티브: 힌트 내장, 실행 파일 곁 공유 라이브러리 복사 필요. | `--modules storage-image-imageio` | 이미지 변환 엔진, 순수 자바 이미지 리사이즈 / image renderer, java imageio, image resize engine | — |
 | `storage-image-imgproxy` | storage-image 의 선택 변환 엔진 — imgproxy 컨테이너(libvips)로 HEIC · AVIF 입력 · WebP 출력, 메모리가 적다. 서버(컨테이너) 하나가 더 필요하다. | `--modules storage-image-imgproxy` | imgproxy, HEIC 변환, WebP 변환 / imgproxy, heic conversion, webp output | — |
 | `storage-image-jdbc` | 이미지 상태 저장소 — PostgreSQL · MySQL 로 storage-image 의 상태 포트를 구현한다(이미지 원본 하나당 한 줄). | `--modules storage-image-jdbc` | 이미지 상태 저장소, 썸네일 상태 DB / image status storage, thumbnail status database | `@skeleton/storage` |
 | `storage-image-pdfbox` | PDF 첫 쪽 썸네일 — storage-image 의 변환 작업에서 PDFBox 로 1쪽을 그린다(쪽 수 · 크기 · 렌더 시간 상한, 기본 꺼짐). | `--modules storage-image-pdfbox` | PDF 썸네일, PDF 미리보기 / pdf thumbnail, pdf preview | — |
@@ -1914,7 +1914,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 컨테이너 이미지에 ffmpeg 가 있어야 한다 — 움직이는 WebP 입력은 8.0 이상. 별도 영상 일꾼 서버를 쓰는 쪽이면 video 모듈
 - 키워드: GIF MP4 변환, 움직이는 이미지, ffmpeg / gif to mp4, animated image conversion, ffmpeg
 
-### `storage-image-imageio` — storage-image 의 기본 변환 엔진 — 앱 안 순수 자바(ImageIO + TwelveMonkeys), 추가 서버 없음. 출력은 JPEG(투명이면 PNG), JVM 전용.
+### `storage-image-imageio` — storage-image 의 기본 변환 엔진 — 앱 안 순수 자바(ImageIO + TwelveMonkeys), 추가 서버 없음. 출력은 JPEG(투명이면 PNG). 네이티브: 힌트 내장, 실행 파일 곁 공유 라이브러리 복사 필요.
 
 - 종류 · 상태: module · experimental — 위치 `modules/storage-image-imageio`
 - 켜는 법: `--modules storage-image-imageio`
@@ -1924,7 +1924,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 쓰지 않는 경우:
   - storage-image 없이는 쓰지 않는다(따라온다)
   - HEIC · AVIF 원본은 읽지 못한다 — 그런 입력이 필요하면 storage-image-imgproxy
-  - 네이티브 이미지(AWT)에서는 쓰지 않는다
+  - 네이티브 이미지에서는 실행 파일 곁의 공유 라이브러리(libawt*.so 등)를 함께 복사해야 한다 — docs/native-image.md
 - 키워드: 이미지 변환 엔진, 순수 자바 이미지 리사이즈 / image renderer, java imageio, image resize engine
 
 ### `storage-image-imgproxy` — storage-image 의 선택 변환 엔진 — imgproxy 컨테이너(libvips)로 HEIC · AVIF 입력 · WebP 출력, 메모리가 적다. 서버(컨테이너) 하나가 더 필요하다.

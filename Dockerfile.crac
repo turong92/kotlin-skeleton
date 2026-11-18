@@ -9,27 +9,34 @@
 # 주의 (직접 확인한 것 — docs/native-image.md):
 #  - **체크포인트 때의 환경(DB 주소 · 비밀번호 · 비밀 값)이 이미지 메모리에 굳는다.** 복원 때 환경변수로 바꿔도 이미 읽은 설정은 바뀌지 않는다 — 이미지가 환경(비밀)마다 따로다.
 #  - 체크포인트 시점에 **열린 소켓이 없어야 한다**: DB 풀은 `org.crac.Resource` 로 비웠다 다시 연다(tools/native-check-extra 의 CracPool.kt 가 틀).
+#  - 기본 베이스는 `useradd` 한 비root 사용자(app, uid 10001)로 체크포인트 · 복원한다.
+#  - 설정 안 한 값을 기동 때 난수로 만든 키(대기실 서명 키 등)도 체크포인트에 굳어 **모든 인스턴스가 같은 값**을 쓴다 — 인스턴스마다 달라야 하는 키는 CRaC 와 맞지 않는다.
+#  - 비교용이다: 비밀이 이미지에 굳으므로 배포 추천안이 아니다(그래서 새 프로젝트에는 복사되지 않는다).
 #  - 복원은 추가 권한이 필요 없다(Warp): `--cap-drop ALL` 컨테이너에서 돈다. CPU 가 체크포인트 때와 같은 세대여야 한다(`-XX:CPUFeatures` 로 맞춘다).
 #  - 이 레포의 시험 범위: WSL(amd64) Docker. Cloud Run 에서의 복원은 시험하지 않았다.
 
+# 베이스 이미지는 다이제스트로 고정했다(2026-11-18 확인: azul/zulu-openjdk:25-jdk-crac-latest = Zulu 25.0.5 CRaC, mwader/static-ffmpeg:7.1.1) — 올릴 때는 태그로 받아 다시 시험하고 다이제스트를 바꾼다.
 # FFMPEG=1 이면 정적 ffmpeg(7.x)를 넣는다 — 이 JDK 이미지의 Ubuntu 22.04 apt ffmpeg(4.4)는 모듈이 쓰는 `-fps_mode`(5.1 이상)를 몰라 변환이 건너뛰어진다(직접 확인)
 ARG FFMPEG=0
-FROM mwader/static-ffmpeg:7.1.1 AS ffmpeg-1
+FROM mwader/static-ffmpeg@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c AS ffmpeg-1
 FROM scratch AS ffmpeg-0
 FROM ffmpeg-${FFMPEG} AS ffmpeg
 
-FROM azul/zulu-openjdk:25-jdk-crac-latest AS builder
+FROM azul/zulu-openjdk@sha256:927a15ac6478c12b859d17d57566dc9e80d4367fea0dbdbd8563c2868f503232 AS builder
 ARG APP_DIR=apps/api
 WORKDIR /src
 COPY . .
 RUN ./gradlew :$(echo ${APP_DIR} | tr / :):bootJar -Pcrac -PjavaToolchain=25 -x test --no-daemon --console=plain \
     && cp $(ls ${APP_DIR}/build/libs/*.jar | grep -v -- '-plain' | head -1) /app.jar
 
-FROM azul/zulu-openjdk:25-jdk-crac-latest AS base
+FROM azul/zulu-openjdk@sha256:927a15ac6478c12b859d17d57566dc9e80d4367fea0dbdbd8563c2868f503232 AS base
 RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=ffmpeg / /opt/ffmpeg/
 RUN if [ -x /opt/ffmpeg/ffmpeg ]; then ln -s /opt/ffmpeg/ffmpeg /usr/local/bin/ffmpeg; fi
 COPY --from=builder /app.jar /app/app.jar
+# 비root 로 체크포인트 · 복원한다 (복원 이미지도 이 USER 를 물려받는다)
+RUN useradd --system --uid 10001 --create-home app
+USER app
 EXPOSE 8080
 # 체크포인트 만들 때: java -XX:CRaCEngine=warp -XX:CRaCCheckpointTo=/crac -Dspring.context.checkpoint=onRefresh -jar /app/app.jar   (jar 경로는 복원 때도 같아야 한다)
 CMD ["java", "-jar", "/app/app.jar"]

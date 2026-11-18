@@ -99,7 +99,7 @@ fetch_signed() {
   local host="${1#*://}"; host="${host%%/*}"
   curl -sS -m 30 --connect-to "${host%%:*}:${host##*:}:${S3_HOST_PORT}" -o "$2" -w '%{http_code}' "$1"
 }
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+TMP=$(mktemp -d); trap 'rm -rf "${TMP:?}"' EXIT
 
 echo "== 이미지 처리 (storage-image + ImageIO/TwelveMonkeys)"
 for spec in "photo.webp:image/webp:WebP" "cmyk.jpg:image/jpeg:CMYK JPEG"; do
@@ -149,7 +149,7 @@ R=$(call POST "/api/v1/ads/web-rewarded/sessions/$SESSION/grant" "$ACCESS" ""); 
 
 echo "== AdMob 보상 콜백 (ads-admob, ECDSA 서명)"
 TX="tx-$RANDOM$$"
-Q=$(curl -sS "$URL/api/v1/native-check/admob-signed?user=$ACCOUNT&tx=$TX&amount=5" | json query)
+Q=$(curl -sS -m 30 "$URL/api/v1/native-check/admob-signed?user=$ACCOUNT&tx=$TX&amount=5" | json query)
 CODE=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' "$URL/api/v1/ads/admob/ssv?$Q"); [ "$CODE" = 200 ] && ok "서명한 콜백 수락 (200)" || bad "서명한 콜백이 $CODE"
 BAL2=$(call GET /api/v1/points "$ACCESS" | body | json value.balance)
 [ "$BAL2" = "$((BAL1 + 5))" ] && ok "포인트 잔액 +5 ($BAL1 → $BAL2)" || bad "AdMob 적립이 맞지 않는다($BAL1 → $BAL2)"

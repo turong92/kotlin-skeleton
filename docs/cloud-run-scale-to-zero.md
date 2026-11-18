@@ -20,14 +20,14 @@
 
 ### 진짜 amd64 에서 잰 값 (이미지 처리 · 포인트 · 광고 조립, 2026-11-18)
 
-윈도우 박스 WSL(Ubuntu, x86_64 · 12코어)의 Docker 에서 `tools/native-check-extra`(스타터 줄기 + `storage-image`(ImageIO · WebP · CMYK JPEG · 앱 안 ffmpeg) + `point` + 웹 보상형 광고 + AdMob)를 같은 조건(CPU 1 · 메모리 512MB, PostgreSQL 18 은 컨테이너 밖, **5회 중앙값**)으로 잰 값이다.
+WSL2(Ubuntu, x86_64 · 12코어)의 Docker 에서 `tools/native-check-extra`(스타터 줄기 + `storage-image`(ImageIO · WebP · CMYK JPEG · 앱 안 ffmpeg) + `point` + 웹 보상형 광고 + AdMob)를 같은 조건(CPU 1 · 메모리 512MB, PostgreSQL 18 은 컨테이너 밖, **5회 중앙값**)으로 잰 값이다.
 흐름 시험(`scripts/native-smoke-extra.sh`, 29항목)은 넷 다 같은 것을 돌렸고 JVM 두 줄은 컨테이너에 ffmpeg 가 없어 그 한 항목(GIF → MP4)만 빠진다.
 
 | | JVM 그대로 | JVM 다듬기¹ | CRaC (Zulu 25 · Warp) | 네이티브 |
 |---|---|---|---|---|
 | 기동 (/health 200, `docker run` 부터) | 12.0s | 7.6s | **0.79s** (복원) | **0.64s** |
 | RSS 기동 직후 → 흐름 뒤 | 334 → 409MB | 303 → 332MB | 266 → 338MB | **260 → 282MB** |
-| 배포 이미지 크기 | 재지 않았다 | 재지 않았다 | 1.96GB(체크포인트 272MB 포함) | 약 0.95GB(런타임 764MB + 실행 파일 182MB + 공유 라이브러리) |
+| 배포 이미지 크기 (`FFMPEG=1`) | 재지 않았다 | 재지 않았다 | 1.96GB(체크포인트 272MB 포함) | 약 0.95GB(런타임 764MB + 실행 파일 182MB + 공유 라이브러리) |
 | 이미지 만드는 시간 | 1분 미만 | 1분 미만 | 약 3분(체크포인트 포함, 캐시 따뜻) | native-image **1분 53초** · Gradle 전체 2분 19초(메모리 9GB 한도) |
 | 추가 권한 | 없음 | 없음 | 없음(`--cap-drop ALL` 에서 복원) | 없음 |
 
