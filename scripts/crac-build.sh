@@ -22,7 +22,9 @@ TAG="${TAG:-kotlin-skeleton-crac-$APP:latest}"
 
 docker build -q -f Dockerfile.crac --target base --build-arg "APP_DIR=$DIR" --build-arg "FFMPEG=$FFMPEG" -t "$TAG-base" .
 # 이전 체크포인트(다른 사용자 소유일 수 있다)를 root 컨테이너로 비우고 비root(app)가 쓸 수 있게 연다
-mkdir -p .crac && docker run --rm --user root -v "$PWD/.crac:/c" --entrypoint sh "$TAG-base" -c 'rm -rf /c/* /c/.[a-z]*; chmod 777 /c'
+mkdir -p .crac && docker run --rm --user root -v "$PWD/.crac:/c" --entrypoint sh "$TAG-base" -c 'rm -rf /c/* /c/.[a-z]*; chown 10001:10001 /c; chmod 700 /c'
+# 비밀이 든 체크포인트 파일은 성공 · 실패와 상관없이 끝날 때 지운다 (이미지에는 남는다)
+trap 'docker run --rm --user root -v "$PWD/.crac:/c" --entrypoint sh "$TAG-base" -c "rm -rf /c/* /c/.[a-z]*" >/dev/null 2>&1 || true' EXIT
 ENVARGS=(); [ -z "${CRAC_ENV_FILE:-}" ] || ENVARGS+=(--env-file "$CRAC_ENV_FILE")
 set +e
 # 체크포인트가 끝나면 Warp 가 프로세스를 SIGKILL 한다 — 종료 코드 137 이 정상이다
@@ -35,5 +37,4 @@ CKSIZE=$(du -sh .crac | cut -f1)
 docker run --rm --user root -v "$PWD/.crac:/c" --entrypoint sh "$TAG-base" -c "chown -R $(id -u):$(id -g) /c"   # root 가 만든 파일을 docker build 컨텍스트로 읽게
 # 체크포인트는 jar 를 다시 빌드하지 않도록 `.crac` 만 컨텍스트로 하는 작은 빌드로 얹는다 (jar 경로 · 내용은 체크포인트 때와 같아야 복원된다)
 printf 'FROM %s\nCOPY --chown=app:app . /opt/crac/\nENTRYPOINT ["java", "-XX:CRaCEngine=warp", "-XX:CRaCRestoreFrom=/opt/crac"]\n' "$TAG-base" | docker build -q -f - -t "$TAG" .crac >/dev/null
-docker run --rm --user root -v "$PWD/.crac:/c" --entrypoint sh "$TAG-base" -c 'rm -rf /c/* /c/.[a-z]*'   # 비밀이 든 체크포인트 파일은 이미지에만 남긴다
 echo "OK $TAG (체크포인트 $CKSIZE) — 실행: docker run --cap-drop ALL <옵션> $TAG   (기동 = 복원)"
