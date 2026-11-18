@@ -17,8 +17,8 @@ scripts/native-test.sh                       # 앱을 네이티브로 빌드해 
 - 빌드 자원: 시험용 조립(모듈을 모두 얹은 `tools/native-check`)으로 **arm64: 약 3분 20초(캐시가 따뜻할 때), 빌드 중 최대 메모리 6GB 안팎**(native-image 자체 보고), 바이너리 약 220MB.
   **amd64**(맥 Docker Desktop 의 에뮬레이션 — Rosetta): native-image 약 6분, Gradle 전체 약 8분, **최대 메모리 12.9GB**(에뮬레이션이 부풀린 값 — 아래 진짜 x86 값을 쓴다), 바이너리 약 229MB.
   **진짜 amd64**(WSL2 x86_64 12코어, 이미지 처리 · 포인트 · 광고 조립 `tools/native-check-extra`, 2026-11-18): native-image **1분 53초**, Gradle 전체 **2분 19초**(캐시가 따뜻할 때, 컨테이너 메모리 한도 9GB), native-image 보고 **최대 메모리 8.77GB**, 바이너리 **182MB**(+ 공유 라이브러리 약 4MB).
-  한도를 **5GB** 로 낮춰도 끝났다(보고 최대 5.42GB, native-image 4분 3초 · 전체 4분 32초 — GC 가 늘어 느려진다). 반면 **GitHub `ubuntu-latest`(16GB) 러너에서 모듈을 모두 얹은 `tools/native-check`**(`native` 워크플로 첫 실행, 2026-11-18): native-image **6분 23초**, Gradle 전체 **9분 9초**, native-image 보고 최대 메모리 **11.61GB** — 16GB 러너에 들어간다(한도 12.66GB 로 잡힘).
-  모듈을 모두 얹은 `tools/native-check` 는 이 박스에서 한도 **9GB · 10GB 모두 메모리 부족으로 끝내지 못했다**(cgroup OOM, 종료 137 — 더 키워 보지 않았다: 박스가 다른 작업과 공유라 15GB 중 여유가 그만큼 없다). 모듈을 많이 얹을수록 빌드 메모리가 는다. 컨테이너/러너에 메모리를 넉넉히 준다 (`NATIVE_MEMORY`; GitHub 공개 러너는 16GB 라 amd64 빌드가 빠듯할 수 있다 — 첫 CI 실행에서 확인한다).
+  한도를 **5GB** 로 낮춰도 끝났다(보고 최대 5.42GB, native-image 4분 3초 · 전체 4분 32초 — GC 가 늘어 느려진다). **GitHub `ubuntu-latest`(16GB) 러너에서 모듈을 모두 얹은 `tools/native-check`**(`native` 워크플로 첫 실행, 2026-11-18): native-image **6분 23초**, Gradle 전체 **9분 9초**, native-image 보고 최대 메모리 **11.61GB** — 16GB 러너에 들어간다(한도 12.66GB 로 잡힘).
+  같은 `tools/native-check` 가 WSL 박스(15GB 를 다른 작업과 공유)에서는 한도 **9GB · 10GB 모두 메모리 부족으로 끝내지 못했다**(cgroup OOM, 종료 137 — 더 키워 보지 않았다: 박스가 다른 작업과 공유라 15GB 중 여유가 그만큼 없다). 모듈을 많이 얹을수록 빌드 메모리가 는다. 컨테이너/러너에 메모리를 넉넉히 준다 (`NATIVE_MEMORY`; GitHub 공개 러너는 16GB 인데 모든 모듈 조립도 최대 11.61GB 로 들어갔다 — 위 실측).
 - Gradle 캐시는 `~/.gradle-native` 에 둔다 (`NATIVE_GRADLE_HOME`) — 안 그러면 매번 의존성을 다시 받는다.
 - **네이티브 플러그인은 `-Pnative` 일 때만 앱에 걸린다.** 안 주면 기본 빌드는 그대로이고(플러그인 선언만 루트에 있다), 안 쓰는 팀이 신경 쓸 것은 없다.
 
