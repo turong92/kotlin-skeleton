@@ -163,5 +163,15 @@ kill "$SSE_PID" 2>/dev/null; wait "$SSE_PID" 2>/dev/null
 grep -q "$NOTE" "$SSE_OUT" && ok "구독 중인 SSE 연결로 알림이 도착했다" || bad "SSE 로 알림이 오지 않았다: $(head -c 200 "$SSE_OUT")"
 rm -f "$SSE_OUT"
 
+echo "== (g) Cloud Tasks 예약 (job-queue-wake-cloudtasks — 가짜 메타데이터 서버 + 가짜 Tasks API)"
+BEFORE=$(stat cloudtasks.create)
+R=$(call POST /api/v1/native-check/jobs "" "{\"note\":\"tasks-$RANDOM\"}"); expect "일감 넣기(커밋 뒤 깨우기 예약)" 200 "$R"
+for _ in $(seq 1 20); do [ "$(stat cloudtasks.create)" -gt "$BEFORE" ] 2>/dev/null && break; sleep 0.5; done
+[ "$(stat cloudtasks.create)" -gt "$BEFORE" ] 2>/dev/null && ok "가짜 Tasks API 가 태스크 만들기를 받았다" || bad "태스크 만들기가 오지 않았다"
+[ "$(stat metadata.token)" -ge 1 ] 2>/dev/null && ok "메타데이터 서버에서 토큰을 받았다(응답 JSON 읽기)" || bad "메타데이터 토큰 요청이 없다"
+TASK=$(curl -s "$FAKES/_tasks" | python3 -c 'import sys,json;t=json.load(sys.stdin)[-1];print(t["path"],t["url"],t["wakeSecretOk"],t["scheduleTimeOk"],t["bearerOk"])' 2>/dev/null)
+[ "$TASK" = "/cloudtasks/v2/projects/native-proj/locations/asia-northeast3/queues/native-drain/tasks https://native-check.invalid/internal/jobs/drain True True True" ] \
+  && ok "경로 · 대상 주소 · 비밀 헤더 · RFC3339 시각 · Bearer 가 맞다" || bad "태스크 모양이 다르다: $TASK"
+
 echo
 if [ "$FAILS" = 0 ]; then echo "PASS(full) — 전부 통과"; exit 0; else echo "FAIL(full) — $FAILS 단계가 어긋났다" >&2; exit 1; fi

@@ -53,6 +53,7 @@ dependencies {
     implementation(project(":modules:storage-image-ffmpeg"))     // 움직이는 GIF · WebP 표시본 → MP4 (앱 안 ffmpeg, 작업 큐) - 꺼진 채 공존한다
     implementation(project(":modules:time"))
     implementation(project(":modules:job-queue-jdbc"))
+    implementation(project(":modules:job-queue-wake-cloudtasks"))   // Cloud Tasks 깨우기 예약 (설정이 비면 아무것도 하지 않는다). 설정 스니펫 · 모듈 목록 시험을 위해 클래스패스에 둔다
     implementation(project(":modules:notification-mail"))
     implementation(project(":modules:alert-jdbc"))   // + alert (api)
     implementation(project(":modules:reward-jdbc"))   // + reward (api) — 지급 건 기록 · 일꾼. 지급기(쿠폰 · 포인트)가 없어 건은 FAILED 로 남는다. 실제 흐름은 apps/sample

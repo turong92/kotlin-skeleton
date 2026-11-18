@@ -138,6 +138,7 @@
 - inquiry: 문의 · 의견 받기 — 로그인 없이도 보내는 한 줄 폼(질문 · 기능… [문의, 문의하기]
 - inquiry-jdbc: 문의를 DB 에 둔다 (PostgreSQL · MySQL) [문의 저장소, 문의 DB]
 - job-queue-jdbc: DB 테이블 기반 재시도 작업 큐 [작업 큐, 백그라운드 작업]
+- job-queue-wake-cloudtasks: 인스턴스가 0대로 내려가는 배포에서 일감이 생길 때(커밋 뒤) [클라우드 태스크, 깨우기 예약]
 - json: JsonCodec · 임의 JSON 을 담는 JsonDocument ·… [JSON, JSON 칼럼]
 - legal: 약관 · 개인정보 처리방침 · 동의 기록 — 종류 · 판(시행일 ·… [약관, 이용약관]
 - legal-jdbc: 약관 · 동의 저장소 — PostgreSQL · MySQL 로… [동의 저장소, 약관 DB]

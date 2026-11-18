@@ -2318,6 +2318,39 @@
       }
     },
     {
+      "id": "job-queue-wake-cloudtasks",
+      "kind": "module",
+      "module": "job-queue-wake-cloudtasks",
+      "path": "modules/job-queue-wake-cloudtasks",
+      "status": "experimental",
+      "summary": "인스턴스가 0대로 내려가는 배포에서 일감이 생길 때(커밋 뒤) · 남은 일이 이르러질 때 작업 큐의 깨우기 주소를 Cloud Tasks 태스크로 예약하는 JobWake 구현 — 메타데이터 서버 토큰(키 파일 없음), 예약 시각은 지금~29일로 맞추고 앞선 예약 뒤의 요청은 합친다. 설정이 비어 있으면 아무것도 하지 않는다(켜짐은 실행 때 판정).",
+      "starter": false,
+      "newProjectFlag": "--modules job-queue-wake-cloudtasks",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.job-queue-wake-cloudtasks"],
+        "snippet": "docs/config/modules/job-queue-wake-cloudtasks.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/job-queue-wake-cloudtasks.md"],
+      "frontend": null,
+      "notFor": [
+        "프로젝트 · 지역 · 큐 · 대상 주소(<P>_JOB_QUEUE_WAKE_CLOUDTASKS_*)는 비밀이 아니고 플랫폼이 넣는다 — 깨우기 비밀값(<P>_JOB_QUEUE_WAKE_SECRET)은 job-queue-jdbc 의 것이다",
+        "DataSource · db-* 모듈과 job-queue-jdbc 스키마가 필요하다",
+        "실제 구글 계정과의 연결은 가짜 서버 시험까지만 확인됐다 — 실계정 리허설에서 먼저 본다"
+      ],
+      "keywords": {
+        "ko": ["클라우드 태스크", "깨우기 예약", "0대 배포"],
+        "en": ["cloud tasks", "wake scheduling", "scale to zero"]
+      }
+    },
+    {
       "id": "json",
       "kind": "module",
       "module": "json",
@@ -5049,6 +5082,7 @@
         "idempotency-jdbc",
         "inquiry",
         "inquiry-jdbc",
+        "job-queue-wake-cloudtasks",
         "json",
         "notification",
         "notification-broadcast",

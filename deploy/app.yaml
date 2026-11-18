@@ -96,6 +96,7 @@ secrets:
 #   [notification-fcm] (env:) SKELETON_NOTIFICATION_FCM_ENABLED=true   서비스 계정(위 secrets:)이 비었거나 못 읽으면 stage|prod 에서 기동 실패 (기본 꺼짐)
 #   [video] SKELETON_VIDEO_PLAYBACK_SECRET  (비밀 — secrets: 에 이름이 있다) 켠 채(skeleton.video.enabled=true) 비었거나 32자보다 짧으면 기동 실패. 변환은 별도 일꾼(apps/video-worker)이 한다 — 선언 한 장 deploy/video-worker.yaml, 일꾼 토큰은 운영자 발급 API(POST /api/v1/videos/admin/workers)가 한 번 보여 준다 (docs/deploy.md §7 「영상 변환 일꾼」)
 #   [video-cloudrun] (env:) SKELETON_VIDEO_CLOUDRUN_ENABLED=true · _PROJECT · _REGION · _JOB (비밀 아님)   켠 채 서비스 계정 키(위 secrets:)가 비었거나 못 읽으면 기동 실패 — 안 켜면 읽지 않는다
+#   [job-queue-wake-cloudtasks] 플랫폼이 넣는다 — <P>_JOB_QUEUE_WAKE_CLOUDTASKS_PROJECT · _REGION · _QUEUE · _TARGET_URL (비밀 아님, wake 선언이 있을 때)   하나라도 비면 아무것도 하지 않는다 · 켠 채 깨우기 비밀값(<P>_JOB_QUEUE_WAKE_SECRET)이 비면 보호 환경에서 기동 실패
 #   [alert] 웹훅 URL 이 비면 경보가 로그로만 남는다 (기동은 된다)
 #   [crypto] SKELETON_CRYPTO_PRIMARY_KEY_ID (env:) · SKELETON_CRYPTO_KEYS_<ID> (base64 AES 키 — 운영자 비밀, secrets: 에 그 이름을 더한다)   키가 없으면 암호화 빈이 없다
 #   [config-aws-ssm] AWS_PROFILE · AWS 자격 증명   홈서버에는 AWS 가 없다 — 이 모듈은 고르지 않는다 (paths 를 정하면 부팅에서 자격 증명을 찾는다)

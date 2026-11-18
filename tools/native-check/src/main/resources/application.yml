@@ -108,6 +108,13 @@ skeleton:
     mode: on-request       # 0대 배포의 모양: 폴링 스레드 없이 깨우기 주소가 부를 때만 처리한다 (네이티브는 이 선택이 빌드 때 굳는다)
     wake:
       secret: native-check-wake-secret-0123456789-abcdefgh
+  job-queue-wake-cloudtasks:   # 깨우기 예약 — 가짜 메타데이터 서버 · 가짜 Tasks API(scripts/native-fakes.py, --full 시험). 가짜가 없으면 요청이 실패해 WARN 만 남고 삼켜진다
+    project: native-proj
+    region: asia-northeast3
+    queue: native-drain
+    target-url: https://native-check.invalid/internal/jobs/drain
+    api-base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/cloudtasks
+    metadata-url: ${NATIVE_FAKE_URL:http://localhost:19000}/metadata
   crypto:
     primary-key-id: check
     keys:

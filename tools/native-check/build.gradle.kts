@@ -16,6 +16,7 @@ dependencies {
     implementation(project(":modules:migration-flyway"))
     implementation(project(":modules:time"))
     implementation(project(":modules:job-queue-jdbc"))
+    implementation(project(":modules:job-queue-wake-cloudtasks"))   // Cloud Tasks 깨우기 — 가짜 서버(scripts/native-fakes.py)로 「Cloud Tasks 예약」 단계를 확인한다
     implementation(project(":modules:payment-jdbc"))
     implementation(project(":modules:crypto"))
     // --full 시험(scripts/native-test.sh --full)이 쓰는 모듈 — 메일 · 파일 저장 · 소셜 로그인 · 토스 · Paddle · 실시간 알림. 꺼진 채 시작하는 것은 application.yml 이 시험용 값으로 켠다 (빌드 때 굳는다)

@@ -7,6 +7,7 @@
 일부러 앱이 쓰지 않는 칸도 실어 보낸다(진짜 응답처럼). 시험 전용 비밀 값만 쓰며 외부로 나가지 않는다. 표준 라이브러리만 쓴다.
 
     GET  /_stats                         호출 횟수 (이름 → 횟수) — 시험이 "정말 이 상대를 불렀는가" 를 본다
+    GET  /_tasks                         받은 Cloud Tasks 태스크(경로 · 대상 주소 · 비밀 헤더가 맞는지) — 값은 내보내지 않는다
     POST /paddle/_deliver                {path 또는 url, secret, body}: Paddle 처럼 서명(Paddle-Signature)해서 앱의 웹훅 주소로 보낸다 → {status}
     GET  /line/authorize                 브라우저 대신: nonce · code_challenge 를 받아 코드를 내준다 (LINE 은 PKCE · nonce 필수)
 """
@@ -15,6 +16,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import threading
 import time
 import urllib.request
@@ -23,6 +25,10 @@ from urllib.parse import parse_qs, urlparse
 
 LINE_SECRET = "native-line-secret-0123456789abcdef"
 LINE_ID = "native-line"
+GCP_TOKEN = "native-gcp-access-token"
+WAKE_SECRET = "native-check-wake-secret-0123456789-abcdefgh"   # tools/native-check/application.yml 의 skeleton.job-queue.wake.secret 과 같다
+RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
+tasks_received = []
 stats = {}
 lock = threading.Lock()
 line_grants = {}
@@ -165,6 +171,26 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and path == "/line/userinfo":
             self._count("line.userinfo")
             return self._json(200, {"sub": "U-native-line-1", "name": "LINE Native"})
+
+        # ---- Cloud Tasks 깨우기(job-queue-wake-cloudtasks): 메타데이터 토큰 + tasks.create ----
+        if method == "GET" and path == "/metadata/computeMetadata/v1/instance/service-accounts/default/token":
+            self._count("metadata.token")
+            if self.headers.get("Metadata-Flavor") != "Google":
+                return self._json(403, {"error": "missing Metadata-Flavor"})
+            return self._json(200, {"access_token": GCP_TOKEN, "expires_in": 3599, "token_type": "Bearer"})
+        if method == "POST" and path.startswith("/cloudtasks/v2/") and path.endswith("/tasks"):
+            self._count("cloudtasks.create")
+            task = json.loads(raw or b"{}").get("task", {})
+            http_request = task.get("httpRequest", {})
+            tasks_received.append({
+                "path": path, "url": http_request.get("url"),
+                "bearerOk": auth == "Bearer " + GCP_TOKEN,
+                "wakeSecretOk": (http_request.get("headers") or {}).get("X-Wake-Secret") == WAKE_SECRET,   # 값은 내보내지 않는다 — 맞는지만
+                "scheduleTimeOk": bool(RFC3339.match(task.get("scheduleTime") or "")),
+            })
+            return self._json(200, {"name": path + "/native-%d" % len(tasks_received), "scheduleTime": task.get("scheduleTime"), "view": "BASIC"})
+        if method == "GET" and path == "/_tasks":
+            return self._json(200, tasks_received)
 
         # ---- 토스: 승인 · 조회 · 빌링 (Basic 인증 확인) ----
         if path.startswith("/toss/"):

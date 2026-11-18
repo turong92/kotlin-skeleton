@@ -1,0 +1,11 @@
+# job-queue-wake-cloudtasks — 일감이 생길 때 · 이르러질 때 깨우기 주소를 부르는 Cloud Tasks 태스크를 만든다 (JobWake 구현). 접두사는 모듈 이름 그대로.
+# 넷이 다 차야 켜진다(실행 때 판정). 비어 있으면 아무것도 하지 않는다. 값은 배포가 정한다 — 환경변수 <P>_JOB_QUEUE_WAKE_CLOUDTASKS_* (비밀 아님)
+skeleton:
+  job-queue-wake-cloudtasks:
+    project: ""                    # 구글 클라우드 프로젝트 id (<P>_JOB_QUEUE_WAKE_CLOUDTASKS_PROJECT)
+    region: ""                     # 큐가 있는 지역, 예 asia-northeast3 (<P>_JOB_QUEUE_WAKE_CLOUDTASKS_REGION)
+    queue: ""                      # Cloud Tasks 큐 이름 (<P>_JOB_QUEUE_WAKE_CLOUDTASKS_QUEUE)
+    target-url: ""                 # 태스크가 부를 깨우기 주소 전체, https (<P>_JOB_QUEUE_WAKE_CLOUDTASKS_TARGET_URL). 태스크가 X-Wake-Secret(skeleton.job-queue.wake.secret)을 싣는다
+    timeout: 5s                    # 구글 쪽 한 번 호출(토큰 · 태스크 만들기)의 시간 제한
+    api-base-url: https://cloudtasks.googleapis.com   # Cloud Tasks API 주소 — 시험 · 네이티브 점검이 가짜 서버로 바꾸는 값이다. 운영은 건드리지 않는다(보호 환경에서 다르면 기동 실패)
+    metadata-url: http://metadata.google.internal      # 메타데이터 서버 주소 — 위와 같다
