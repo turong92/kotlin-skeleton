@@ -137,6 +137,7 @@ fails when this table and the prefixes found in module code differ.
 | `legal` | `skeleton.legal` |
 | `idempotency` | `skeleton.idempotency` |
 | `job-queue-jdbc` | `skeleton.job-queue` |
+| `job-queue-wake-cloudtasks` | `skeleton.job-queue-wake-cloudtasks` |
 | `migration` | `skeleton.migration` |
 | `persistence-jdbc` | `skeleton.persistence-jdbc.startup-wait` |
 | `notification` | `skeleton.notification.inbox` |
