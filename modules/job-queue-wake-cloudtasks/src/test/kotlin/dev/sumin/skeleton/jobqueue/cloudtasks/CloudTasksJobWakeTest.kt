@@ -147,14 +147,14 @@ class CloudTasksJobWakeTest {
     @Test
     fun `does not hold a lock while calling the network`() {
         val wake = jobWake()
-        google.taskDelayMillis = 1000
+        google.taskDelayMillis = 3000   // 두 요청 모두 3초 — 락을 쥐면 약 5.8초, 안 쥐면 약 3초
         val first = Thread { wake.request(time.now.plusSeconds(60)) }.apply { start() }
         Thread.sleep(200)   // 첫 요청이 Tasks 응답을 기다리는 중
         val started = System.nanoTime()
         wake.request(time.now.plusSeconds(30))   // 락을 안 잡으니 기다리지 않고 자기 호출을 한다(겹쳐 둘이 생겨도 무해)
         val tookMillis = (System.nanoTime() - started) / 1_000_000
         first.join()
-        assertTrue(tookMillis < 1500, "다른 요청이 끝나길 기다리지 않는다")
+        assertTrue(tookMillis < 5000, "다른 요청이 끝나길 기다리지 않는다")
         assertEquals(2, google.taskRequests.size)
     }
 }
