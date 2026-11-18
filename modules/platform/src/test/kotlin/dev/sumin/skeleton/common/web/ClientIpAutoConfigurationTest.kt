@@ -16,11 +16,17 @@ class ClientIpAutoConfigurationTest {
         .withBean(tools.jackson.databind.ObjectMapper::class.java, { tools.jackson.databind.ObjectMapper() })
 
     @Test
-    fun `unset mode registers a ClientIps bean but no filter`() {
+    fun `unset mode registers the filter but it passes every request through untouched`() {
         runner.run { context ->
             assertNotNull(context.getBean(ClientIps::class.java))
-            assertTrue(context.getBeansOfType(ClientIpFilter::class.java).isEmpty())
-            assertTrue(context.getBeansOfType(FilterRegistrationBean::class.java).values.none { it.filter is ClientIpFilter })
+            val filter = context.getBeansOfType(FilterRegistrationBean::class.java).values.map { it.filter }.filterIsInstance<ClientIpFilter>().single()
+            val request = MockHttpServletRequest().apply { remoteAddr = "203.0.113.9" }
+            val response = org.springframework.mock.web.MockHttpServletResponse()
+            val chain = org.springframework.mock.web.MockFilterChain()
+            filter.doFilter(request, response, chain)
+            assertEquals(200, response.status)
+            assertNotNull(chain.request)
+            assertEquals(null, request.getAttribute(ClientIps.ATTRIBUTE))
         }
     }
 

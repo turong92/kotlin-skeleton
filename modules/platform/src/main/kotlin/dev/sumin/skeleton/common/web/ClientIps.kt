@@ -237,6 +237,10 @@ class ClientIpFilter(
     private val exemptPaths: EdgeSecretExemptPaths = EdgeSecretExemptPaths { emptySet() },
 ) : OncePerRequestFilter() {
     override fun doFilterInternal(request: HttpServletRequest, response: HttpServletResponse, filterChain: FilterChain) {
+        if (!clientIps.configured) { // mode 를 정하지 않았다 - 지금까지와 같다
+            filterChain.doFilter(request, response)
+            return
+        }
         if (clientIps.edgeSecret && !clientIps.originAuthorized(request) && !exempt(request)) {
             reject(response)
             return

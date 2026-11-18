@@ -48,10 +48,12 @@ class WebPolicyAutoConfiguration {
                 }
             }
 
-    /** `ForwardedHeaderFilter` 가 `remoteAddr` 를 덮어쓰기 **전에** 클라이언트를 풀어 둔다 — mode 를 정했을 때만 */
+    /**
+     * `ForwardedHeaderFilter` 가 `remoteAddr` 를 덮어쓰기 **전에** 클라이언트를 풀어 둔다. **늘 등록한다** — mode 는 실행 때 판정한다(`@ConditionalOnProperty` 로 걸면
+     * 네이티브 AOT 에서 빌드 때 굳어, 실행 환경변수로만 `edge-secret` 을 켠 이미지의 관문이 빠진다). mode 가 없으면 필터는 요청을 그냥 지나보낸다.
+     */
     @Bean
     @ConditionalOnMissingBean(name = ["clientIpFilterRegistration"])
-    @ConditionalOnProperty(prefix = "skeleton.web.client-ip", name = ["mode"])
     fun clientIpFilterRegistration(
         clientIps: ClientIps,
         objectMapper: ObjectMapper,

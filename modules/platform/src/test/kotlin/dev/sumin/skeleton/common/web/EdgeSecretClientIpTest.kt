@@ -139,6 +139,21 @@ class EdgeSecretClientIpTest {
     }
 
     @Test
+    fun `the gate is registered from the long property name alone - no alias, no build-time condition`() {
+        WebApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(WebPolicyAutoConfiguration::class.java))
+            .withBean(ObjectMapper::class.java, { ObjectMapper() })
+            .withPropertyValues("skeleton.web.client-ip.mode=edge-secret", "skeleton.web.client-ip.edge-secret-sha256=${sha256(secretA)}")
+            .run { context ->
+                val filter = context.getBeansOfType(org.springframework.boot.web.servlet.FilterRegistrationBean::class.java).values
+                    .map { it.filter }.filterIsInstance<ClientIpFilter>().single()
+                val response = MockHttpServletResponse()
+                filter.doFilter(MockHttpServletRequest("GET", "/api/v1/x"), response, MockFilterChain())
+                assertEquals(403, response.status)
+            }
+    }
+
+    @Test
     fun `edge-secret does not require trusted-proxies`() {
         val runner = WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(WebPolicyAutoConfiguration::class.java))
