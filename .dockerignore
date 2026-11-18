@@ -6,3 +6,4 @@
 **/out
 *.md
 docker-compose.yml
+.crac

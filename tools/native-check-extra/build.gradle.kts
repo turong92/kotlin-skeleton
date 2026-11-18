@@ -35,6 +35,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.security:spring-security-core")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
+    compileOnly("org.crac:crac")   // CRaC 시험(-Pcrac) 때만 실행 클래스패스에 오른다 — CracPool.kt
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 }

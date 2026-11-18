@@ -62,6 +62,14 @@ configure(subprojects.filter { it.buildFile.isFile }) {
     }
 }
 
+// CRaC 체크포인트(Dockerfile.crac · docs/native-image.md "CRaC")는 **선택 빌드**다 — `-Pcrac` 를 줄 때만 부트 앱에 `org.crac:crac` 을 얹는다
+// (Spring 의 `-Dspring.context.checkpoint=onRefresh` 가 클래스패스에 이것을 요구한다). 안 주면 아무 일도 하지 않는다(기본 JVM 빌드는 그대로).
+if (providers.gradleProperty("crac").isPresent) {
+    subprojects {
+        plugins.withId("org.springframework.boot") { dependencies.add("runtimeOnly", "org.crac:crac") }
+    }
+}
+
 // 네이티브 이미지는 **선택 빌드**다 — `-Pnative` 를 줄 때만 부트 앱에 GraalVM 플러그인을 건다. 안 주면 이 블록은 아무 일도 하지 않는다(기본 JVM 빌드는 그대로).
 //   ./gradlew :apps:api:nativeCompile -Pnative -PjavaToolchain=25     (보통 scripts/native-build.sh · Dockerfile.native 가 GraalVM 25 컨테이너에서 부른다)
 // 루트가 모든 서브프로젝트에 java-library 를 걸어서 플러그인이 기본으로 공유 라이브러리(--shared)를 고르므로 실행 파일로 돌려놓는다.

@@ -1,0 +1,35 @@
+# CRaC 체크포인트 배포 이미지 (선택, 실험) — 기본 `Dockerfile`(JVM)·`Dockerfile.native` 는 그대로 두고, 이 파일은 Azul Zulu CRaC JDK 의 Warp 엔진으로 만든 체크포인트를 담는다 (docs/native-image.md "CRaC").
+# 체크포인트는 앱을 **DB 에 붙여서** 띄워 만든다(Spring `-Dspring.context.checkpoint=onRefresh` 는 빈이 다 만들어진 뒤에 찍는다) — `docker build` 안에서는 DB 가 없으므로
+# scripts/crac-build.sh 가 `base` 단계로 앱을 띄워 체크포인트를 만들고, 그것을 얹은 이미지(`FROM base` + `COPY` + 복원 ENTRYPOINT)를 따로 굳힌다
+# (체크포인트를 이 빌드의 컨텍스트에 넣으면 jar 를 다시 빌드하게 되어 체크포인트 때의 jar 와 달라진다). 순서는 그 스크립트 주석.
+#
+#   scripts/crac-build.sh --app api --tag <image>:<tag>          # 이미지 = 체크포인트 포함. 기동은 `java -XX:CRaCRestoreFrom=/opt/crac`
+#   docker build -f Dockerfile.crac --target base --build-arg FFMPEG=1 ...   # 앱 안 ffmpeg(storage-image-ffmpeg)를 쓰는 앱: 실행 이미지에 ffmpeg (기본 꺼짐)
+#
+# 주의 (직접 확인한 것 — docs/native-image.md):
+#  - **체크포인트 때의 환경(DB 주소 · 비밀번호 · 비밀 값)이 이미지 메모리에 굳는다.** 복원 때 환경변수로 바꿔도 이미 읽은 설정은 바뀌지 않는다 — 이미지가 환경(비밀)마다 따로다.
+#  - 체크포인트 시점에 **열린 소켓이 없어야 한다**: DB 풀은 `org.crac.Resource` 로 비웠다 다시 연다(tools/native-check-extra 의 CracPool.kt 가 틀).
+#  - 복원은 추가 권한이 필요 없다(Warp): `--cap-drop ALL` 컨테이너에서 돈다. CPU 가 체크포인트 때와 같은 세대여야 한다(`-XX:CPUFeatures` 로 맞춘다).
+#  - 이 레포의 시험 범위: WSL(amd64) Docker. Cloud Run 에서의 복원은 시험하지 않았다.
+
+# FFMPEG=1 이면 정적 ffmpeg(7.x)를 넣는다 — 이 JDK 이미지의 Ubuntu 22.04 apt ffmpeg(4.4)는 모듈이 쓰는 `-fps_mode`(5.1 이상)를 몰라 변환이 건너뛰어진다(직접 확인)
+ARG FFMPEG=0
+FROM mwader/static-ffmpeg:7.1.1 AS ffmpeg-1
+FROM scratch AS ffmpeg-0
+FROM ffmpeg-${FFMPEG} AS ffmpeg
+
+FROM azul/zulu-openjdk:25-jdk-crac-latest AS builder
+ARG APP_DIR=apps/api
+WORKDIR /src
+COPY . .
+RUN ./gradlew :$(echo ${APP_DIR} | tr / :):bootJar -Pcrac -PjavaToolchain=25 -x test --no-daemon --console=plain \
+    && cp $(ls ${APP_DIR}/build/libs/*.jar | grep -v -- '-plain' | head -1) /app.jar
+
+FROM azul/zulu-openjdk:25-jdk-crac-latest AS base
+RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=ffmpeg / /opt/ffmpeg/
+RUN if [ -x /opt/ffmpeg/ffmpeg ]; then ln -s /opt/ffmpeg/ffmpeg /usr/local/bin/ffmpeg; fi
+COPY --from=builder /app.jar /app/app.jar
+EXPOSE 8080
+# 체크포인트 만들 때: java -XX:CRaCEngine=warp -XX:CRaCCheckpointTo=/crac -Dspring.context.checkpoint=onRefresh -jar /app/app.jar   (jar 경로는 복원 때도 같아야 한다)
+CMD ["java", "-jar", "/app/app.jar"]
