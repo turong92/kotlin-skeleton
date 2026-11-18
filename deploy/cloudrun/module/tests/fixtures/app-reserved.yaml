@@ -1,0 +1,21 @@
+# env 에 플랫폼 예약 이름(ACME_CLIENT_IP_MODE)을 쓴 선언 — plan 이 거부한다.
+name: acme
+port: 8080
+health: /health
+env_prefix: ACME
+domain: acme.example.com
+api_prefix: /api/v1
+db: none
+redis: false
+secrets:
+  - JWT_SECRET
+env:
+  ACME_CLIENT_IP_MODE: proxy
+cloudrun:
+  dockerfile: Dockerfile.native
+  cpu: 1
+  memory: 512Mi
+  min_instances: 0
+  max_instances: 1
+  concurrency: 20
+  timeout: 300s

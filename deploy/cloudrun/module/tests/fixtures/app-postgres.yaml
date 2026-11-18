@@ -1,0 +1,19 @@
+# db: postgres — 홈서버 전용 값. Cloud Run 틀은 external | none 만 받는다(plan 이 거부).
+name: acme
+port: 8080
+health: /health
+env_prefix: ACME
+domain: acme.example.com
+api_prefix: /api/v1
+db: postgres
+redis: false
+secrets:
+  - JWT_SECRET
+cloudrun:
+  dockerfile: Dockerfile.native
+  cpu: 1
+  memory: 512Mi
+  min_instances: 0
+  max_instances: 1
+  concurrency: 20
+  timeout: 300s

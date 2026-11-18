@@ -1,0 +1,31 @@
+# 시험용 선언 — 예시 값(acme · example.com)만 쓴다.
+name: acme
+port: 8080
+health: /health
+env_prefix: ACME
+domain: acme.example.com
+api_prefix: /api/v1
+db: external
+redis: false
+secrets:
+  - JWT_SECRET
+  - SPRING_DATASOURCE_URL
+  - SPRING_DATASOURCE_USERNAME
+  - SPRING_DATASOURCE_PASSWORD
+operator_only:
+  - SPRING_DATASOURCE_URL
+  - SPRING_DATASOURCE_USERNAME
+  - SPRING_DATASOURCE_PASSWORD
+env:
+  ACME_ENV: prod
+cloudrun:
+  dockerfile: Dockerfile.native
+  build_args: { APP: api }
+  cpu: 1
+  memory: 512Mi
+  min_instances: 0
+  max_instances: 1
+  concurrency: 20
+  timeout: 300s
+  wake:
+    schedule: "*/5 * * * *"

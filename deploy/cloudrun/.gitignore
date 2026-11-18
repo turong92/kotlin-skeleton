@@ -1,0 +1,5 @@
+.terraform/
+*.tfstate*
+terraform.tfvars
+# 모듈 시험(terraform test)이 만드는 잠금 — 고정은 루트의 .terraform.lock.hcl 이 한다
+module/.terraform.lock.hcl
