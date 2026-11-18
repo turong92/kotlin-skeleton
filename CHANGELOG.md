@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### notification-fcm - 받아 준 메시지 name 을 DEBUG 로 (2026-11-18)
+
+- FCM HTTP v1 이 2xx 로 받은 메시지의 응답 `name`(`projects/<p>/messages/<id>`)을 `FcmSender` 로거에 DEBUG 로 남긴다 — 푸시가 안 왔을 때 "FCM 이 받았는가"를 서버 로그로 가른다. 토큰 · 본문 · 자격증명은 남기지 않고, 응답을 못 읽어도 결과는 그대로 `Delivered`.
+
 ### ads-web-rewarded - 웹 보상형 광고(GPT) 세션 (2026-11-18)
 
 - 새 모듈 `ads-web-rewarded`(기본 꺼짐, `skeleton.ads-web-rewarded.enabled=true` + 저장소 `WebRewardStore`): `POST /api/v1/ads/web-rewarded/sessions`(열기 — 상한이 찼으면 409 `ADS_WEB_REWARDED.DAILY_LIMIT`)와 `…/{sessionId}/grant`(한 번만 보상). 서버가 웹 광고 시청을 증명할 수 없어서 1회용 세션 · 최소 경과 시간(`min-elapsed` 7s) · 계정/IP 하루 상한(`account-daily-limit` · `ip-daily-limit`, 기본 없음, 단위는 보상 횟수)으로 남용을 막는다. 보상은 platform `RewardIssuer`(`reward-type: point` 등 — 종류를 정했는데 지급기가 없거나 params 가 틀리면 기동 실패)이거나, 정하지 않으면 앱이 `WebRewardTokens.redeem` 으로 한 번 쓰는 1회용 토큰(저장은 해시). 지급기 · DB 오류는 전부 되돌려 503 `REWARD_UNAVAILABLE`(세션은 열린 채, 카운터는 그대로). 계정 삭제 시 그 계정의 세션과 계정 카운터를 지운다. `ads-admob` 의 상한과는 따로 센다.

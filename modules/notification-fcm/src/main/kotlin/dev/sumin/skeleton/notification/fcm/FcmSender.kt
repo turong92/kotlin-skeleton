@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Duration
 import java.util.Base64
+import org.slf4j.LoggerFactory
 import tools.jackson.databind.json.JsonMapper
 
 /**
@@ -58,12 +59,22 @@ class FcmSender(
             Thread.currentThread().interrupt()
             return PushResult.Retry()
         }
-        if (response.status in 200..299) return PushResult.Delivered
+        if (response.status in 200..299) {
+            logAccepted(response)
+            return PushResult.Delivered
+        }
         if (response.status == 401) tokens.invalidate()
         return judge(response)
     }
 
     override fun toString(): String = "FcmSender"
+
+    /** FCM 이 받았다는 증거로 응답 name(`projects/<p>/messages/<id>`)만 DEBUG 로 남긴다. 읽지 못해도 전송 결과는 그대로다. */
+    private fun logAccepted(response: FcmHttpResponse) {
+        if (!log.isDebugEnabled) return
+        val name = runCatching { JSON.readTree(response.body.orEmpty()).path("name").asString() }.getOrNull()
+        if (!name.isNullOrEmpty()) log.debug("FCM accepted message name={}", name)
+    }
 
     private fun judge(response: FcmHttpResponse): PushResult {
         val error = runCatching { JSON.readTree(response.body.orEmpty()) }.getOrNull()?.path("error")
@@ -104,6 +115,7 @@ class FcmSender(
 
     private companion object {
         val JSON: JsonMapper = JsonMapper.builder().build()
+        val log = LoggerFactory.getLogger(FcmSender::class.java)
         const val MAX_TOKEN_CHARS = 4096
         const val DEFAULT_TTL_SECONDS = 24L * 3600
         const val TOKEN_FIELD = "message.token"

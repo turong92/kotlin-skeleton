@@ -1,5 +1,9 @@
 package dev.sumin.skeleton.notification.fcm
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import dev.sumin.skeleton.notification.push.PushDevice
 import dev.sumin.skeleton.notification.push.PushMessage
 import dev.sumin.skeleton.notification.push.PushRegistration
@@ -10,6 +14,7 @@ import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
 import org.assertj.core.api.Assertions.assertThat
+import org.slf4j.LoggerFactory
 
 class FcmSenderTest {
     private val now = Instant.parse("2026-10-31T09:00:00Z")
@@ -57,6 +62,27 @@ class FcmSenderTest {
         assertThat(apns["apns-collapse-id"].asString()).doesNotContain("comment")
         assertThat(apns["apns-expiration"].asString()).isEqualTo((now.epochSecond + 3600).toString())
         assertThat(apns["apns-priority"].asString()).isEqualTo("10")
+    }
+
+    @Test
+    fun `a 2xx answer logs the response name at DEBUG without the token`() {
+        val logger = LoggerFactory.getLogger(FcmSender::class.java) as Logger
+        val appender = ListAppender<ILoggingEvent>().also { it.start() }
+        val before = logger.level
+        logger.addAppender(appender)
+        logger.level = Level.DEBUG
+        try {
+            val result = sender().send(device(), message())
+
+            assertThat(result).isEqualTo(PushResult.Delivered)
+            val event = appender.list.single()
+            assertThat(event.level).isEqualTo(Level.DEBUG)
+            assertThat(event.formattedMessage).contains("projects/demo-project-1/messages/0:1")
+            assertThat(event.formattedMessage).doesNotContain("SECRET").doesNotContain("ya29")
+        } finally {
+            logger.detachAppender(appender)
+            logger.level = before
+        }
     }
 
     @Test
