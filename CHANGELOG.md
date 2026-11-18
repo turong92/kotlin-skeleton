@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Cloud Run + Cloudflare 배포 틀 (2026-11-18)
+
+선언 한 장(`deploy/app.yaml`) + `v*` 태그로 GCP Cloud Run(서울, 최소 0 · 최대 1, 네이티브)과 Cloudflare(Pages · Worker · R2)에 올리는 길. 순서와 사람이 할 일은 [docs/deploy-cloudrun.md](docs/deploy-cloudrun.md). 스켈레톤 기본값은 바뀌지 않는다(새 설정은 꺼짐 또는 빈 값).
+
+- **원점 보호** `skeleton.web.client-ip.mode=edge-secret`(platform): `X-Origin-Auth` 의 SHA-256 이 `edge-secret-sha256`(1~2개) 중 하나일 때만 요청을 받고(아니면 403, 값 · 해시는 로그에 없다) 그때만 `CF-Connecting-IP` · `CF-IPCountry` 를 읽는다. 필터는 늘 등록되고 mode 는 실행 때 판정한다(네이티브에서 굳지 않는다). `EdgeSecretExemptPaths` 로 모듈이 정확히 일치하는 POST 경로를 면제한다(job-queue-jdbc 가 깨우기 주소를 낸다).
+- **`JobWake` 포트**(platform `common/wake`, 기본 빈 없음): `job-queue-jdbc` 가 잡을 넣으면 커밋 뒤(롤백이면 없음) 그 실행 시각에, drain 이 끝나면 남은 가장 이른 시각으로 깨우기를 예약하고, drain 은 프로세스마다 한 번에 하나(겹치면 `busy: true` + `wake.busy-retry` 뒤 재요청). `notification-scheduled` 의 `ScheduledPushes.schedule` 도 `CREATED` · `REPLACED` 일 때 `runAt` 을 예약한다. `DrainResult.busy` · `WakeResponse.busy` 가 더해졌다. `JobWake` 빈이 없으면 지금 동작 그대로.
+- **새 모듈 `job-queue-wake-cloudtasks`**(`JobWake` 의 Cloud Tasks 공급자): 메타데이터 서버 토큰(키 파일 없음), `scheduleTime` 은 지금~29일로 맞춰 올림, 앞선 예약 뒤의 요청은 합치고 HTTP 는 락 밖에서 부른다. 설정 `skeleton.job-queue-wake-cloudtasks.*`(project · region · queue · target-url 이 다 차야 켜지고 실행 때 판정). 보호 환경에서 구글 주소가 기본이 아니거나 target-url 이 https 가 아니거나 깨우기 비밀이 비면 기동 실패. 깨우기 비밀은 태스크 정의에 남으므로 큐 `viewer` 를 따로 주지 않는다.
+- **`deploy/cloudrun/`**(terraform + Worker): Artifact Registry · 실행 · 배포 서비스 계정 · WIF · Secret Manager · Tasks 큐 `<name>-drain` · Scheduler `<name>-tick` · Worker `<name>-api-proxy`(`api_prefix` 아래만 원점으로) · Pages · R2. 앞단 LB · VPC 커넥터 · NAT 없음. 래퍼는 `cloud <env> terraform`.
+- **배포 워크플로** `.github/workflows/deploy-cloudrun.yml` + `deploy/cloudrun/render.sh`: 선언을 플래그 · env 파일 · 빌드 인자로 바꿔 이미지를 만들고 후보 리비전 → `scripts/post-deploy-check.sh` 통과 뒤 트래픽 100%. 선언 값의 특수 문자는 그대로 전달하고 비밀은 이름만 다룬다.
+- **`Dockerfile.native` 빌드 환경**: 빌드 인자 `BUILD_ENV_B64`(`KEY='값'` 줄)로 선언 env 를 빌드 때 읽는다(모듈 켜기/끄기가 빌드 때 굳으므로). 인자가 없으면 기존 빌드와 같다. `render.sh` 는 셸 · 빌드 도구를 바꾸는 예약 이름을 거부한다. `native` 워크플로 `workflow_dispatch` 에 `full` 입력.
+- 앱 · 배포 쪽 규칙: [docs/cloud-run-scale-to-zero.md](docs/cloud-run-scale-to-zero.md), 설정 [docs/client-ip.md](docs/client-ip.md) · [docs/modules/job-queue-wake-cloudtasks.md](docs/modules/job-queue-wake-cloudtasks.md). react-skeleton 의 Pages 배포 워크플로(`deploy-pages.yml`)는 그 레포에 있다.
+
 ### native-image - 이미지 처리 · 포인트 · 광고 확인, 진짜 amd64 실측, ffmpeg 이미지, CRaC 비교 (2026-11-18)
 
 - `tools/native-check-extra` + `scripts/native-smoke-extra.sh`(`native-test.sh --app native-check-extra [--ffmpeg]`): `storage-image`(ImageIO · WebP · CMYK JPEG · 앱 안 ffmpeg) · `point` · `ads-web-rewarded` · `ads-admob` 이 네이티브로 빌드 · 기동 · 흐름 29항목 통과(PostgreSQL 18, 진짜 amd64). `storage-image-imageio` 가 AWT JNI · TwelveMonkeys 힌트(`reachability-metadata.json`)를 낸다 — 없으면 ImageIO 를 처음 쓰는 순간 기동이 실패했다.
