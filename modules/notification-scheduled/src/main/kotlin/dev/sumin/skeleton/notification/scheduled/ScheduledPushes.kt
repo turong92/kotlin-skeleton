@@ -3,6 +3,8 @@ package dev.sumin.skeleton.notification.scheduled
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.erasure.ErasureRequest
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.wake.JobWake
+import dev.sumin.skeleton.common.wake.requestAfterCommit
 
 /**
  * 앱이 부르는 입구 - 예약과 취소뿐이다. 계기(언제 예약하나)는 앱이 정한다.
@@ -14,12 +16,16 @@ class ScheduledPushes(
     private val store: ScheduledPushStore,
     private val properties: ScheduledPushProperties,
     private val time: TimeProvider,
+    /** 있으면 새로 만들거나 바꾼 예약의 시각에 깨우기가 불리게 한다(호출자 트랜잭션이 커밋된 뒤, 밖이면 바로). 인스턴스가 0대여도 때가 되면 훑기가 돈다 */
+    private val wake: JobWake? = null,
 ) {
     fun schedule(push: ScheduledPush): ScheduleResult {
         require(!push.advertising || properties.advertisingType.isNotBlank()) {
             "advertising pushes need skeleton.notification.scheduled.advertising-type"
         }
-        return store.upsert(push, time.now(), properties.dedupeWindow)
+        val result = store.upsert(push, time.now(), properties.dedupeWindow)
+        if (result != ScheduleResult.IGNORED) wake?.requestAfterCommit(push.runAt)
+        return result
     }
 
     /** 키로 취소한다 - 아직 안 나간 예약이 있었으면 true. 이미 나갔거나 없으면 false(멱등) */

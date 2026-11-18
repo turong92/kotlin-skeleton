@@ -81,6 +81,8 @@ data class JobQueueProperties(
         val secret: String = "",
         /** 한 번 불렸을 때 새 묶음을 집기를 멈추는 시간 — 이 시간을 넘기면 지금 묶음까지만 끝내고 돌려준다 (남은 일감은 다음 호출이 이어받는다) */
         val timeBudget: Duration = Duration.ofSeconds(25),
+        /** 깨우기가 겹쳐 다른 판이 이미 돌고 있을 때(busy) 이 시간 뒤에 다시 부르게 예약한다 */
+        val busyRetry: Duration = Duration.ofSeconds(30),
     )
 
     /** 끝난 줄 정리 — 기본은 꺼짐: 줄을 지우는 건 보관 정책(사후 확인 · 감사)이라 앱이 정한다 */

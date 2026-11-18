@@ -2,6 +2,7 @@ package dev.sumin.skeleton.jobqueue.jdbc
 
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.wake.JobWake
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
 import org.springframework.beans.factory.ObjectProvider
@@ -48,9 +49,10 @@ class JobQueueJdbcAutoConfiguration {
         propagator: JobContextPropagator,
         worker: ObjectProvider<JobQueueWorker>,
         lanes: JobLanes,
+        jobWake: ObjectProvider<JobWake>,
     ): JobQueue = JdbcJobQueue(
         repository, properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() }, propagator,
-        onCommitted = { worker.getIfAvailable()?.wake() }, lanes = lanes, // 일꾼은 처리기(큐를 부를 수 있는 빈)를 모으므로 늦게 찾는다 — 빈 순환을 피한다
+        onCommitted = { worker.getIfAvailable()?.wake() }, lanes = lanes, jobWake = jobWake.getIfAvailable(), // 일꾼은 처리기(큐를 부를 수 있는 빈)를 모으므로 늦게 찾는다 — 빈 순환을 피한다
     )
 
     @Bean
@@ -72,8 +74,9 @@ class JobQueueJdbcAutoConfiguration {
         retention: ObjectProvider<JobRetention>,
         projects: ObjectProvider<ProjectRegistry>,
         lanes: JobLanes,
+        jobWake: ObjectProvider<JobWake>,
     ) = JobQueueWorker(
         repository, handlers.orderedStream().toList(), properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() },
-        propagator, deadListeners.orderedStream().toList(), retention.getIfAvailable(), projects.getIfAvailable(), lanes,
+        propagator, deadListeners.orderedStream().toList(), retention.getIfAvailable(), projects.getIfAvailable(), lanes, jobWake.getIfAvailable(),
     )
 }

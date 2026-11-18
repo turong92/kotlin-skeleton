@@ -6,6 +6,7 @@ dependencies {
     testFixturesApi("org.jetbrains.kotlin:kotlin-test-junit5")
 
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
+    implementation("org.springframework:spring-tx")   // JobWake.requestAfterCommit — 커밋 뒤 깨우기
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-webflux")

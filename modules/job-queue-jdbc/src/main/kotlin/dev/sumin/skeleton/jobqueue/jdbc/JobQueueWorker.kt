@@ -4,6 +4,7 @@ import dev.sumin.skeleton.common.project.Project
 import dev.sumin.skeleton.common.project.ProjectContext
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.wake.JobWake
 import java.net.InetAddress
 import java.util.UUID
 import java.util.concurrent.ExecutorService
@@ -41,11 +42,15 @@ class JobQueueWorker(
     private val projects: ProjectRegistry? = null,
     /** 이 일꾼의 차선 — null 이면 기본 일꾼 */
     private val lanes: JobLanes = JobLanes.NONE,
+    /** 있으면 drain 이 끝날 때 남은 가장 이른 일감 시각으로 다시 무장하고, 판이 겹쳐 busy 로 돌려보낼 때 [JobQueueProperties.Wake.busyRetry] 뒤로 다시 부르게 한다 */
+    private val jobWake: JobWake? = null,
 ) : JobDrainer, SmartLifecycle {
     private val log = LoggerFactory.getLogger(javaClass)
     private val handlerByType = handlers.associateBy { it.type }
     val workerId: String = properties.workerId.ifBlank { defaultWorkerId() }
     private val running = AtomicBoolean(false)
+    /** [drain] 이 돌고 있다 — 한 번에 하나 */
+    private val draining = AtomicBoolean(false)
     /** [stop] 이 불렸다 - 직접 [pollOnce] 를 부르는 쪽(시작하지 않은 일꾼)과 가르는 표시 */
     @Volatile private var stopping = false
     private var executor: ExecutorService? = null
@@ -136,18 +141,54 @@ class JobQueueWorker(
      * 프로젝트 모드면 판마다 프로젝트를 모두 한 번씩 돈다([pollOnce]).
      */
     override fun drain(budget: java.time.Duration): DrainResult {
-        val started = System.nanoTime()
-        var rounds = 0
-        var processed = 0
-        var timedOut = false
-        while (!stopping) {
-            val handled = pollOnce()
-            rounds++
-            processed += handled
-            if (handled == 0) break
-            if (System.nanoTime() - started >= budget.toNanos()) { timedOut = true; break }
+        // 판은 이 프로세스에서 한 번에 하나 — 겹친 깨우기는 일감에 손대지 않고 busy 로 돌아가며 조금 뒤 다시 부르게 한다
+        if (!draining.compareAndSet(false, true)) {
+            requestWake(timeProvider.now().plus(properties.wake.busyRetry))
+            return DrainResult(0, 0, timedOut = false, elapsedMillis = 0, busy = true)
         }
-        return DrainResult(processed, rounds, timedOut, (System.nanoTime() - started) / 1_000_000)
+        try {
+            val started = System.nanoTime()
+            var rounds = 0
+            var processed = 0
+            var timedOut = false
+            while (!stopping) {
+                val handled = pollOnce()
+                rounds++
+                processed += handled
+                if (handled == 0) break
+                if (System.nanoTime() - started >= budget.toNanos()) { timedOut = true; break }
+            }
+            rearm()
+            return DrainResult(processed, rounds, timedOut, (System.nanoTime() - started) / 1_000_000)
+        } finally {
+            draining.set(false)
+        }
+    }
+
+    /** 끝난 뒤에도 남은 일(재시도 대기 · 먼 예약 · 시간 한도로 못 한 것)이 있으면 가장 이른 시각에 깨우게 한다 — 없으면 아무것도 예약하지 않는다 */
+    private fun rearm() {
+        if (jobWake == null) return
+        val earliest = try {
+            earliestPending()
+        } catch (ex: Exception) {
+            log.warn("Looking up the next wake time failed: {}", ex.javaClass.simpleName)
+            null
+        }
+        earliest?.let(::requestWake)
+    }
+
+    /** 프로젝트 모드면 서비스 중인 프로젝트 전체에서 가장 이른 것 */
+    private fun earliestPending(): java.time.Instant? {
+        val registry = projects ?: return repository.earliestPendingRunAt(handlerByType.keys)
+        return registry.active.mapNotNull { project -> ProjectContext.runIn(project) { repository.earliestPendingRunAt(handlerByType.keys) } }.minOrNull()
+    }
+
+    private fun requestWake(at: java.time.Instant) {
+        try {
+            jobWake?.request(at)
+        } catch (ex: Exception) {
+            log.warn("Requesting a wake failed: {}", ex.javaClass.simpleName)
+        }
     }
 
     /**

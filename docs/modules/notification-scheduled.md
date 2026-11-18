@@ -9,6 +9,7 @@ scheduledPushes.schedule(ScheduledPush(key = "resume:$userId:$seriesId:$episodeN
 scheduledPushes.cancel("resume:$userId:$seriesId:$episodeNo")   // 그 사이에 읽었으면 취소
 ```
 - **중복 키**: 같은 키로 다시 예약하면 새로 만들지 않고 **아직 안 나간 예약을 바꾼다**(`REPLACED`). 이미 나갔거나 건너뛴 키는 `dedupe-window`(기본 30일) 동안 그대로 둔다(`IGNORED`) — 같은 계기가 여러 번 일어나도 한 통만 간다. **`schedule` 의 반환값(`IGNORED`)을 확인하라**: 같은 키를 나중에 정말 다시 보내고 싶다면 키에 구분 값(회차 · 날짜)을 넣어야지, 그러지 않으면 창 안에서는 조용히 안 나간다(예시 키가 회차까지 담은 이유). `dedupe-window` 가 지난 끝난 키는 새 예약으로 되살아난다(`CREATED`). 끝난 줄을 표에서 지우는 `keep-finished`(30일, 시간당 한 번 정리)는 이 창과 별개의 정리 기간이다 — 창보다 짧으면 지운 키가 창 안에서도 다시 예약된다.
+- **깨우기 예약**: `JobWake` 빈(platform 의 포트, 기본 없음)이 있으면 `CREATED` · `REPLACED` 결과가 나올 때 호출자 트랜잭션이 커밋된 뒤(밖이면 바로) `runAt` 에 깨우기를 예약한다 — 0대로 내려간 인스턴스가 때가 되면 깨어 훑는다. `IGNORED` 는 예약하지 않고, 빈이 없으면 지금 그대로다.
 - **취소**: 키로 지운다 — 아직 안 나간 예약이 있었으면 `true`. 이미 훑기가 집어 나가는 중이면 막지 못한다.
 - **통계**: `ScheduledPushes.stats()` → 예약 중 · 보낸 · 건너뛴 수. 화면은 앱이 만든다.
 

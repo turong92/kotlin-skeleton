@@ -11,7 +11,7 @@
 | 설정 접두사 | `skeleton.job-queue` — [docs/config/modules/job-queue-jdbc.yml](../config/modules/job-queue-jdbc.yml) |
 | 기본 동작 | 켜짐. |
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마. |
-| 교체 지점 | `JobQueue`, `JobLanes`(차선 - 기본 없음) |
+| 교체 지점 | `JobQueue`, `JobLanes`(차선 - 기본 없음), `JobWake`(platform 의 포트 - 있으면 커밋 뒤 · drain 끝에 깨우기를 예약, 기본 없음) |
 | 마이그레이션 | `modules/job-queue-jdbc/src/main/resources/db/migration/postgresql`, `modules/job-queue-jdbc/src/main/resources/db/migration/mysql` |
 | 프론트 짝 | 없음 |
 | 테스트 | `modules/job-queue-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`)) |

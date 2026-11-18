@@ -36,7 +36,7 @@ class JobWakeController(
             WakeTaskResult(task.name, ok)
         }
         val drained = drainer.drain(properties.wake.timeBudget)
-        return ResponseEntity.ok(WakeResponse(results, drained.processed, drained.rounds, drained.timedOut, drained.elapsedMillis))
+        return ResponseEntity.ok(WakeResponse(results, drained.processed, drained.rounds, drained.timedOut, drained.elapsedMillis, drained.busy))
     }
 
     companion object {
@@ -52,4 +52,4 @@ class JobWakeController(
 
 data class WakeTaskResult(val name: String, val ok: Boolean)
 
-data class WakeResponse(val tasks: List<WakeTaskResult>, val processed: Int, val rounds: Int, val timedOut: Boolean, val elapsedMillis: Long)
+data class WakeResponse(val tasks: List<WakeTaskResult>, val processed: Int, val rounds: Int, val timedOut: Boolean, val elapsedMillis: Long, val busy: Boolean)

@@ -81,6 +81,13 @@ class JdbcJobRepository(
             jdbc.sql("select * from jobs where id = :id").param("id", id).query(::map).optional().orElse(null)
         }
 
+    /** 이 워커가 아는 [types] 의 아직 안 끝난(PENDING) 일 가운데 가장 이른 `next_run_at` — 없으면 null. drain 이 끝날 때 다음 깨우기 시각을 정한다 */
+    fun earliestPendingRunAt(types: Set<String>): Instant? {
+        if (types.isEmpty()) return null
+        return jdbc.sql("select min(next_run_at) as earliest from jobs where status = 'PENDING' and job_type in (:types)")
+            .param("types", types).query { rs, _ -> dialect.readInstant(rs, "earliest") }.single()
+    }
+
     private fun laneCondition(lane: String?, laneCutoff: Instant?): String = when {
         lane != null -> "and lane = :lane"
         laneCutoff != null -> "and (lane is null or next_run_at < :laneCutoff)"

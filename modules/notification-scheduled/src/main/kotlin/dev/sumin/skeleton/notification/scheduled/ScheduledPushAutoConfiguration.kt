@@ -2,6 +2,7 @@ package dev.sumin.skeleton.notification.scheduled
 
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.wake.JobWake
 import dev.sumin.skeleton.common.wake.OnRequestTask
 import dev.sumin.skeleton.common.wake.PeriodicRunCheck
 import dev.sumin.skeleton.common.wake.SimpleOnRequestTask
@@ -49,8 +50,8 @@ class ScheduledPushAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun scheduledPushes(@Suppress("UNUSED_PARAMETER") setup: ScheduledPushSetupCheck, store: ScheduledPushStore, properties: ScheduledPushProperties, time: ObjectProvider<TimeProvider>): ScheduledPushes =
-        ScheduledPushes(store, properties, time.getIfAvailable { TimeProvider.systemUtc() })
+    fun scheduledPushes(@Suppress("UNUSED_PARAMETER") setup: ScheduledPushSetupCheck, store: ScheduledPushStore, properties: ScheduledPushProperties, time: ObjectProvider<TimeProvider>, wake: ObjectProvider<JobWake>): ScheduledPushes =
+        ScheduledPushes(store, properties, time.getIfAvailable { TimeProvider.systemUtc() }, wake.getIfAvailable())
 
     @Bean
     @ConditionalOnMissingBean

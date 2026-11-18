@@ -27,4 +27,5 @@ skeleton:
       path: /internal/jobs/drain   # 깨우기 주소 (POST, mode=on-request 일 때만 선다)
       secret: ""                   # 공유 비밀값 — 헤더 X-Wake-Secret 과 상수 시간으로 맞춘다. 비면 주소는 닫혀 있다(404). 보호 환경에서 비거나 약하면(24자 미만) 기동 실패
       time-budget: 25s             # 한 번 불렸을 때 새 묶음을 집기를 멈추는 시간 (남은 일감은 다음 호출이 이어받는다)
+      busy-retry: 30s              # 판이 이미 돌고 있어(busy) 돌려보낸 깨우기를 이 시간 뒤 다시 부르게 예약한다 (JobWake 빈이 있을 때)
     worker-id: ""                  # 워커 식별자 (비우면 hostname + 랜덤)
