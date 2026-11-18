@@ -121,7 +121,7 @@ class AppHints : RuntimeHintsRegistrar {
 - 앱이 직접 쓰는 `ConstraintValidator`(샘플의 `OwnAttachmentKeyValidator`)는 앱의 `RuntimeHintsRegistrar`(`SampleNativeHints`, `@ImportRuntimeHints`)로 등록한다 — 규칙 3 그대로.
 
 모듈 켜기/끄기가 빌드 때 굳으므로 **빌드 구성 = 그때의 환경**이다: `scripts/native-build.sh` 는 `NATIVE_BUILD_ENV="NAME1 NAME2 …"`(빌드 컨테이너에 그대로 넘길 환경변수 이름)을 받고, 값이 바뀌면(숫자는 무시) AOT 결과를 지우고 다시 한다.
-`Dockerfile.native` 는 같은 구성을 빌드 인자 `BUILD_ENV_B64`(`KEY='값'` 셸 줄을 base64 한 줄로)로 받아 `set -a; . <파일>; set +a` 로 읽은 뒤 빌드한다 — Cloud Run 배포 워크플로가 선언의 `env:` 와 플랫폼 env 로 만들어 넘기고, 인자가 없으면 기존 빌드와 같다.
+`Dockerfile.native` 는 같은 구성을 빌드 인자 `BUILD_ENV_B64`(`KEY='값'` 셸 줄을 base64 한 줄로)로 받아 `set -a; . <파일>; set +a` 로 읽은 뒤 빌드한다 — Cloud Run 배포 워크플로가 선언의 `env:` 와 플랫폼 env 로 만들어 넘기고, 인자가 없으면 기존 빌드와 같다. **선언의 `env:` 에 비밀을 쓰지 않는다** — 빌드 인자는 이미지 메타데이터(`docker history`)에 남는다(비밀은 `secrets:`, 실행 때만). `render.sh` 는 셸 · 빌드 도구를 바꾸는 예약 이름(`PATH` · `GRADLE_*` · `JAVA_TOOL_OPTIONS` · `APP` …)을 `env:` 에 쓰면 거부한다.
 
 **프런트(react-skeleton) e2e 를 네이티브 백엔드로 돌리기**: `E2E_NATIVE=1 pnpm e2e` (kotlin 레포 위치는 `SAMPLE_API_DIR`). 백엔드 스크립트(`scripts/sample-e2e-backend.sh`)가 지금 환경(`SKELETON_*` · `SPRING_APPLICATION_JSON` · `PADDLE_*`)으로 샘플을 네이티브로 빌드해
 리눅스 컨테이너로 띄운다. 앱이 쓰는 `localhost:<포트>`(DB · 로컬 S3 · 메일 · 가짜 소셜/토스/Paddle)는 곁 컨테이너(`alpine/socat`)가 호스트로 이어 줘서 JVM 때와 같은 설정이 그대로 맞는다.

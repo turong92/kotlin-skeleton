@@ -54,6 +54,10 @@ echo "ok render accepts empty secrets"
 [ "$(code_of bash "$RENDER" "$FX/app-collision.yaml" "$TMP/collision")" = "2" ] || fail "render fails 2 on env collision with platform"
 echo "ok render fails 2 on env collision with platform"
 
+# render fails 2 on reserved build env names
+[ "$(code_of bash "$RENDER" "$FX/app-reserved.yaml" "$TMP/reserved")" = "2" ] || fail "render fails 2 on reserved build env names"
+echo "ok render fails 2 on reserved build env names"
+
 # render fails 2 without cloudrun block
 [ "$(code_of bash "$RENDER" "$FX/app-nocloudrun.yaml" "$TMP/nocr")" = "2" ] || fail "render fails 2 without cloudrun block"
 echo "ok render fails 2 without cloudrun block"

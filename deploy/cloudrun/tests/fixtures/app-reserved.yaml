@@ -1,0 +1,14 @@
+# env 에 빌드 환경 예약 이름(GRADLE_OPTS)을 썼다 — build-env 를 source 하면 빌드 도구가 바뀐다. render.sh 가 거부한다.
+name: acme
+port: 8080
+env_prefix: ACME
+env:
+  GRADLE_OPTS: -Xmx64m
+cloudrun:
+  dockerfile: Dockerfile.native
+  cpu: 1
+  memory: 512Mi
+  min_instances: 0
+  max_instances: 1
+  concurrency: 20
+  timeout: 300s

@@ -34,6 +34,10 @@ bad="$(jq -r '[((.env // {}) | keys[]), ((.cloudrun.build_args // {}) | keys[])]
 [ -z "$bad" ] || die "env · build_args 이름이 잘못됐다: $bad"
 jq -e '[(.cloudrun.build_args // {}) | .[] | tostring | select(contains("\n"))] | length == 0' <<<"$DJ" >/dev/null || die "cloudrun.build_args 값에 줄바꿈을 쓸 수 없다"
 
+# 빌드 환경 예약 이름 — env 는 build-env 로 빌드 컨테이너에 source 된다. 셸 · 빌드 도구 · JVM 을 바꾸는 이름은 선언 env 로 쓸 수 없다
+reserved="$(jq -r '(.env // {}) | keys[] | select(test("^(APP|FFMPEG|PATH|HOME|PWD|IFS|SHELL|USER|ENV|BASH_ENV|BUILD_ENV_B64|LD_PRELOAD|LD_LIBRARY_PATH|JAVA_HOME|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS|GRADLE_.*|ORG_GRADLE_.*)$"))' <<<"$DJ")"
+[ -z "$reserved" ] || die "env 에 빌드 환경 예약 이름을 쓸 수 없다: $(tr '\n' ' ' <<<"$reserved")"
+
 # 선언과 플랫폼의 이름 겹침 — 이름만 말한다(값은 싣지 않는다)
 dup="$(jq -r --argjson penv "$PLATFORM_ENV_JSON" --argjson psec "$PLATFORM_SECRETS_JSON" '
   ((.env // {}) | keys) as $e | ((.secrets // []) | map(tostring)) as $s
