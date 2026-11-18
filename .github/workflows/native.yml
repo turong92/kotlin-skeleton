@@ -20,11 +20,16 @@ on:
       - 'scripts/native-*.sh'
       - '.github/workflows/native.yml'
   workflow_dispatch:
+    inputs:
+      full:
+        description: '--full 로 돈다 (메일 · 파일 저장 · 소셜 5종 · 토스 · Paddle · SSE · Cloud Tasks 예약까지 — 릴리스 전용, 더 오래 걸린다)'
+        type: boolean
+        default: false
 
 jobs:
   native:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: ${{ inputs.full && 90 || 45 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -33,4 +38,4 @@ jobs:
           key: native-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: native-gradle-
       # 러너 자원에 맞춘다 — 한도를 넘는 --cpus 는 docker 가 거부한다(메모리는 한도를 두지 않는다: 공개 러너 16GB 에서 빌드 최대 6GB 안팎)
-      - run: NATIVE_CPUS="$(nproc)" scripts/native-test.sh
+      - run: NATIVE_CPUS="$(nproc)" scripts/native-test.sh ${{ inputs.full && '--full' || '' }}
