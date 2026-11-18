@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### native-image - 이미지 처리 · 포인트 · 광고 확인, 진짜 amd64 실측, ffmpeg 이미지, CRaC 비교 (2026-11-18)
+
+- `tools/native-check-extra` + `scripts/native-smoke-extra.sh`(`native-test.sh --app native-check-extra [--ffmpeg]`): `storage-image`(ImageIO · WebP · CMYK JPEG · 앱 안 ffmpeg) · `point` · `ads-web-rewarded` · `ads-admob` 이 네이티브로 빌드 · 기동 · 흐름 29항목 통과(PostgreSQL 18, 진짜 amd64). `storage-image-imageio` 가 AWT JNI · TwelveMonkeys 힌트(`reachability-metadata.json`)를 낸다 — 없으면 ImageIO 를 처음 쓰는 순간 기동이 실패했다.
+- `Dockerfile.native`: 빌드 인자 `FFMPEG=1`(기본 꺼짐)로 실행 이미지에 ffmpeg, `runtime-base` 단계, 실행 파일 곁의 공유 라이브러리(`libawt*.so` 등)까지 복사.
+- 선택 `Dockerfile.crac` + `scripts/crac-build.sh`(`-Pcrac`): Zulu CRaC Warp 체크포인트 이미지. 네이티브와 나란히 잰 비교 표와 제약(소켓 · 환경 고정 · 마이그레이션 · 비밀)은 docs/native-image.md. 진짜 amd64 실측으로 docs/native-image.md · docs/cloud-run-scale-to-zero.md 숫자 갱신.
+
 ### notification-fcm - 받아 준 메시지 name 을 DEBUG 로 (2026-11-18)
 
 - FCM HTTP v1 이 2xx 로 받은 메시지의 응답 `name`(`projects/<p>/messages/<id>`)을 `FcmSender` 로거에 DEBUG 로 남긴다 — 푸시가 안 왔을 때 "FCM 이 받았는가"를 서버 로그로 가른다. 토큰 · 본문 · 자격증명은 남기지 않고, 응답을 못 읽어도 결과는 그대로 `Delivered`.
