@@ -16,6 +16,8 @@
 | 프론트 짝 | 없음 |
 | 테스트 | `modules/job-queue-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`)) |
 
+`skeleton.web.client-ip.mode=edge-secret` 이면 깨우기 주소(`skeleton.job-queue.wake.path`, POST)는 원점 비밀(`X-Origin-Auth`) 관문의 면제 경로다 — 이 모듈이 `EdgeSecretExemptPaths` 로 알린다. 자기 인증은 `X-Wake-Secret` 이 한다([클라이언트 IP](../client-ip.md)).
+
 자세히: [재시도 큐 상세](../job-queue-jdbc.md) · [스키마 관리](../schema-management.md)
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

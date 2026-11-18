@@ -52,8 +52,13 @@ class WebPolicyAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["clientIpFilterRegistration"])
     @ConditionalOnProperty(prefix = "skeleton.web.client-ip", name = ["mode"])
-    fun clientIpFilterRegistration(clientIps: ClientIps): FilterRegistrationBean<ClientIpFilter> =
-        FilterRegistrationBean(ClientIpFilter(clientIps)).apply {
+    fun clientIpFilterRegistration(
+        clientIps: ClientIps,
+        objectMapper: ObjectMapper,
+        exemptPaths: ObjectProvider<EdgeSecretExemptPaths>,
+    ): FilterRegistrationBean<ClientIpFilter> =
+        // 면제 경로는 요청마다 읽는다(모듈이 모드를 실행 때 판정한다) - 여러 빈의 집합을 모은다
+        FilterRegistrationBean(ClientIpFilter(clientIps, objectMapper, EdgeSecretExemptPaths { exemptPaths.orderedStream().toList().flatMapTo(HashSet()) { it.paths() } })).apply {
             order = Ordered.HIGHEST_PRECEDENCE
         }
 

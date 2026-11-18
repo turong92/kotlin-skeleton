@@ -76,6 +76,8 @@ data class WebProperties(
         val mode: ClientIpMode? = null,
         /** 전달 헤더를 믿을 피어 CIDR (같은 호스트의 cloudflared · 리버스 프록시 = 루프백이 기본) */
         val trustedProxies: List<String> = listOf("127.0.0.0/8", "::1/128"),
+        /** [ClientIpMode.EDGE_SECRET] 의 원점 비밀(`X-Origin-Auth`)의 SHA-256(소문자 16진수 64자) 1~2개 — 둘이면 비밀을 바꾸는 동안 둘 다 받는다 */
+        val edgeSecretSha256: List<String> = emptyList(),
     )
 
     data class RateLimit(

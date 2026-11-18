@@ -5,6 +5,7 @@ import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.project.ProjectUnscopedPaths
 import dev.sumin.skeleton.common.wake.OnRequestTask
 import dev.sumin.skeleton.common.web.BearerIgnoredPaths
+import dev.sumin.skeleton.common.web.EdgeSecretExemptPaths
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -43,6 +44,11 @@ class JobWakeAutoConfiguration {
     @ConditionalOnMissingBean(name = ["jobWakeBearerIgnored"])
     fun jobWakeBearerIgnored(properties: JobQueueProperties): BearerIgnoredPaths =
         BearerIgnoredPaths { if (properties.mode == JobQueueProperties.Mode.ON_REQUEST) listOf(properties.wake.path) else emptyList() }
+
+    /** `client-ip.mode=edge-secret` 의 원점 관문 면제 — Scheduler · Tasks 가 엣지(Worker)를 거치지 않고 직접 부른다. 모으는 빈이라 `@ConditionalOnMissingBean` 이 아니다 */
+    @Bean
+    fun jobWakeEdgeSecretExempt(properties: JobQueueProperties): EdgeSecretExemptPaths =
+        EdgeSecretExemptPaths { setOf(properties.wake.path) }
 
     @Bean
     @ConditionalOnMissingBean(name = ["jobWakeDeployGuard"])

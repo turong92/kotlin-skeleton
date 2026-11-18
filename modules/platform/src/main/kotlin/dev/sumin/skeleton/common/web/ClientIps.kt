@@ -1,12 +1,19 @@
 package dev.sumin.skeleton.common.web
 
+import dev.sumin.skeleton.common.ApiError
+import dev.sumin.skeleton.common.PlatformErrorCode
+import dev.sumin.skeleton.common.TraceIdFilter
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
+import java.security.MessageDigest
+import org.slf4j.MDC
+import org.springframework.http.MediaType
 import org.springframework.web.filter.OncePerRequestFilter
+import tools.jackson.databind.ObjectMapper
 
 /**
  * 원점 앞에 무엇이 있나. `skeleton.web.client-ip.mode`:
@@ -20,7 +27,16 @@ import org.springframework.web.filter.OncePerRequestFilter
  * - [CLOUDFLARE]: 원점에 **인증돼** Cloudflare(우리 영역)만 닿는다 — Cloudflare Tunnel(원점 포트 비공개) 또는 영역 전용 인증서를 검사하는 프록시.
  *   믿는 프록시에서 온 요청의 `CF-Connecting-IP`. 없거나 틀리면 [PROXY] 규칙.
  */
-enum class ClientIpMode { DIRECT, PROXY, CLOUDFLARE }
+enum class ClientIpMode {
+    DIRECT, PROXY, CLOUDFLARE,
+
+    /**
+     * 엣지(Cloudflare Worker 등)가 원점 비밀 헤더 `X-Origin-Auth` 를 싣는다 — 원점은 그 SHA-256 이 `edge-secret-sha256` 목록에 있을 때만 요청을 받고(아니면 403),
+     * 그때만 `CF-Connecting-IP` · `CF-IPCountry` 를 읽는다. 소켓 피어 · `trusted-proxies` 는 보지 않는다(공개 주소로 직접 붙는 Cloud Run 같은 곳).
+     * [EdgeSecretExemptPaths] 의 POST 경로만 비밀 없이 통과하되 CF 헤더는 믿지 않는다.
+     */
+    EDGE_SECRET,
+}
 
 /**
  * 요청 한 건의 클라이언트 — [ip] 는 감사 · 사람 확인(`remoteip`)용, [limitKey] 는 요청 한도 · 중복 키(IPv6 는 /64).
@@ -44,10 +60,36 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
     private val mode: ClientIpMode? = props.mode
     private val proxies: List<Cidr> = props.trustedProxies.map(String::trim).filter(String::isNotEmpty).map(Cidr::parse)
 
+    private val edgeHashes: List<ByteArray> = if (mode != ClientIpMode.EDGE_SECRET) emptyList() else props.edgeSecretSha256.map(String::trim).map { hash ->
+        require(SHA256_HEX.matches(hash)) {
+            "skeleton.web.client-ip.edge-secret-sha256 entries must be 64 lower-case hex characters (the SHA-256 of the origin secret)"
+        }
+        hexBytes(hash)
+    }
+
     init {
-        require(mode == null || mode == ClientIpMode.DIRECT || proxies.isNotEmpty()) {
+        require(mode == null || mode == ClientIpMode.DIRECT || mode == ClientIpMode.EDGE_SECRET || proxies.isNotEmpty()) {
             "skeleton.web.client-ip.mode=${mode?.name?.lowercase()} needs skeleton.web.client-ip.trusted-proxies"
         }
+        require(mode != ClientIpMode.EDGE_SECRET || edgeHashes.size in 1..2) {
+            "skeleton.web.client-ip.mode=edge-secret needs one or two skeleton.web.client-ip.edge-secret-sha256 entries"
+        }
+    }
+
+    /** [ClientIpMode.EDGE_SECRET] 인가 — [ClientIpFilter] 가 관문을 세운다 */
+    val edgeSecret: Boolean get() = mode == ClientIpMode.EDGE_SECRET
+
+    /**
+     * 요청의 `X-Origin-Auth` 가 목록의 해시 중 하나로 풀리나. 헤더가 없거나 둘 이상이거나 비었거나 [MAX_ORIGIN_HEADER] 자를 넘으면 해시하지 않고 거절한다.
+     * 해시 비교는 상수 시간이다 — 값은 어디에도 남기지 않는다.
+     */
+    fun originAuthorized(request: HttpServletRequest): Boolean {
+        val values = request.getHeaders(ORIGIN_AUTH)?.toList().orEmpty()
+        val value = values.singleOrNull() ?: return false
+        if (value.isBlank() || value.length > MAX_ORIGIN_HEADER) return false
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+        // 둘 다 끝까지 비교한다 (먼저 맞는 쪽에서 멈추지 않는다)
+        return edgeHashes.map { MessageDigest.isEqual(digest, it) }.fold(false) { acc, ok -> acc or ok }
     }
 
     /** mode 가 정해졌을 때만 [ClientIpFilter] 가 필요하다 */
@@ -56,6 +98,7 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
     fun describe(): String = when (mode) {
         null -> "unset (remoteAddr as the servlet layer reports it; ForwardedHeaderFilter lets any caller choose it)"
         ClientIpMode.DIRECT -> "direct (no forwarding header is trusted)"
+        ClientIpMode.EDGE_SECRET -> "edge-secret (CF headers believed only with a valid X-Origin-Auth; ${edgeHashes.size} secret hash(es))"
         else -> "${mode.name.lowercase()} (trusted proxies ${proxies.joinToString(",")})"
     }
 
@@ -66,6 +109,11 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
     fun resolve(request: HttpServletRequest): ClientAddress {
         if (mode == null) return raw(request.remoteAddr)
         val remote = literal(request.remoteAddr) ?: return raw(request.remoteAddr)
+        if (mode == ClientIpMode.EDGE_SECRET) {
+            if (!originAuthorized(request)) return address(remote)
+            val country = countryOf(request.getHeader(CF_IP_COUNTRY))
+            return address(literal(request.getHeader(CF_CONNECTING_IP)) ?: remote, country)
+        }
         if (mode == ClientIpMode.DIRECT || !trusted(remote)) return address(remote)
         if (mode == ClientIpMode.CLOUDFLARE) {
             val country = countryOf(request.getHeader(CF_IP_COUNTRY))
@@ -135,6 +183,10 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
         const val FORWARDED_FOR = "X-Forwarded-For"
         const val CF_CONNECTING_IP = "CF-Connecting-IP"
         const val CF_IP_COUNTRY = "CF-IPCountry"
+        const val ORIGIN_AUTH = "X-Origin-Auth"
+        private const val MAX_ORIGIN_HEADER = 8192
+        private val SHA256_HEX = Regex("[0-9a-f]{64}")
+        private fun hexBytes(hex: String): ByteArray = ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
         private val COUNTRY = Regex("[A-Z]{2}")
         private val IPV4 = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
         private val IPV4_PORT = Regex("^(\\d{1,3}(\\.\\d{1,3}){3}):\\d{1,5}$")
@@ -175,11 +227,40 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
     }
 }
 
-/** `ForwardedHeaderFilter` 가 `remoteAddr` · 전달 헤더를 바꾸기 전에 클라이언트를 풀어 요청 속성([ClientIps.ATTRIBUTE])에 둔다 */
-class ClientIpFilter(private val clientIps: ClientIps) : OncePerRequestFilter() {
+/**
+ * `ForwardedHeaderFilter` 가 `remoteAddr` · 전달 헤더를 바꾸기 전에 클라이언트를 풀어 요청 속성([ClientIps.ATTRIBUTE])에 둔다.
+ * [ClientIpMode.EDGE_SECRET] 이면 관문도 된다 — 원점 비밀이 맞지 않고 [exemptPaths] 의 POST 경로도 아니면 403(값 · 해시는 응답과 로그에 싣지 않는다).
+ */
+class ClientIpFilter(
+    private val clientIps: ClientIps,
+    private val objectMapper: ObjectMapper = ObjectMapper(),
+    private val exemptPaths: EdgeSecretExemptPaths = EdgeSecretExemptPaths { emptySet() },
+) : OncePerRequestFilter() {
     override fun doFilterInternal(request: HttpServletRequest, response: HttpServletResponse, filterChain: FilterChain) {
+        if (clientIps.edgeSecret && !clientIps.originAuthorized(request) && !exempt(request)) {
+            reject(response)
+            return
+        }
         request.setAttribute(ClientIps.ATTRIBUTE, clientIps.resolve(request))
         filterChain.doFilter(request, response)
+    }
+
+    private fun exempt(request: HttpServletRequest) = request.method == "POST" && request.requestURI in exemptPaths.paths()
+
+    private fun reject(response: HttpServletResponse) {
+        response.status = PlatformErrorCode.FORBIDDEN.status.value()
+        response.contentType = MediaType.APPLICATION_JSON_VALUE
+        objectMapper.writeValue(
+            response.outputStream,
+            ApiError(
+                code = PlatformErrorCode.FORBIDDEN.code,
+                title = PlatformErrorCode.FORBIDDEN.title,
+                status = PlatformErrorCode.FORBIDDEN.status.value(),
+                detail = "Origin authentication failed.",
+                traceId = MDC.get(TraceIdFilter.MDC_KEY),
+                spanId = MDC.get(TraceIdFilter.MDC_SPAN_ID_KEY),
+            ),
+        )
     }
 }
 

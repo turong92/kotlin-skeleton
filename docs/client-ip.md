@@ -17,8 +17,9 @@ unset keeps `remoteAddr` as the servlet layer reports it, and the app logs a WAR
 skeleton:
   web:
     client-ip:
-      mode: proxy                     # direct | proxy | cloudflare   (unset = legacy, see above)
+      mode: proxy                     # direct | proxy | cloudflare | edge-secret   (unset = legacy, see above)
       trusted-proxies: ["127.0.0.0/8", "::1/128"]   # peers whose forwarding headers are believed
+      # edge-secret-sha256: ["<64 hex>"]            # edge-secret only: SHA-256 of the origin secret, one or two
 ```
 
 | mode | use when | client is |
@@ -26,12 +27,22 @@ skeleton:
 | `direct` | nothing sits in front of the app | the socket peer; no header is read |
 | `proxy` | a reverse proxy you run (Caddy, nginx) appends to `X-Forwarded-For` | walk `X-Forwarded-For` right to left, skip trusted hops, first untrusted address wins; entries that are not IPs stop the walk (no DNS) |
 | `cloudflare` | only Cloudflare reaches the origin (Tunnel with a private origin port, or an origin that verifies the zone's client certificate) | `CF-Connecting-IP` from a trusted peer; missing/garbage falls back to the `proxy` rule |
+| `edge-secret` | the origin has a public address (Cloud Run) and an edge you run (a Cloudflare Worker) is the only caller that knows a secret | `CF-Connecting-IP` from a request whose `X-Origin-Auth` hashes to one of `edge-secret-sha256`; every other request gets `403` |
 
 In `cloudflare` mode the trusted peer's `CF-IPCountry` (two letters; `XX` and `T1` are no country) is also read - `ClientAddress.country`, which the payment module uses to decide the provider and the refund rules. In every other mode the header is not believed (anyone could send it).
 
 Headers are only read when the socket peer is inside `trusted-proxies`. A Cloudflare-range address alone is **not** trusted
 (Workers `connect()` and WARP reach any origin from Cloudflare addresses). With `cloudflare`/`proxy` and an empty
 `trusted-proxies` the app refuses to start; so does an entry that is not an IP/CIDR.
+
+### `edge-secret`
+
+The socket peer and `trusted-proxies` are not looked at (a public origin has no fixed proxy peer). Instead the same `ClientIpFilter` is the gate:
+
+- `X-Origin-Auth` is hashed with SHA-256 and compared in constant time with the one or two lower-case hex entries of `edge-secret-sha256` (two = both accepted while the secret rotates). It must be present exactly once, non-blank, and at most 8192 characters (longer is rejected without hashing); anything else is `403` with the usual error body. The header value and its hash never reach the response or the logs.
+- A valid secret makes `CF-Connecting-IP` and `CF-IPCountry` believed, by the same rules as `cloudflare`; a missing or garbage `CF-Connecting-IP` falls back to the peer address.
+- Modules may exempt an exact **POST** path with an `EdgeSecretExemptPaths` bean (job-queue-jdbc exempts `skeleton.job-queue.wake.path`: the platform calls it directly, `X-Wake-Secret` authenticates it). An exempt request passes without the secret, but its CF headers are **not** believed.
+- The app refuses to start when the mode is `edge-secret` and `edge-secret-sha256` is empty, has more than two entries, or an entry is not 64 lower-case hex characters. The message names the property only.
 
 The rate-limit key (`ClientAddress.limitKey`) is the address, and for IPv6 the `/64` prefix — rotating addresses inside one
 subnet is one client. `ClientAddress.ip` is the exact address (audit logs, captcha `remoteip`).
