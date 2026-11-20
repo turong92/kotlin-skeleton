@@ -1,7 +1,11 @@
 // node --test deploy/cloudrun/alert-relay.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { timingSafeEqual } from 'node:crypto'
 import relay from './alert-relay.js'
+
+// Workers 런타임의 crypto.subtle.timingSafeEqual 은 Node 에 없다 — 같은 모양으로 채운다
+crypto.subtle.timingSafeEqual ??= (a, b) => timingSafeEqual(new Uint8Array(a), new Uint8Array(b))
 
 const ENV = {
   RELAY_TOKEN: 'relay-token-for-test',
@@ -23,13 +27,14 @@ async function run(token, body, { method = 'POST', discordStatus = 204 } = {}) {
   const realFetch = globalThis.fetch
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init })
+    if (discordStatus === 'throw') throw new Error('network down')
     return new Response(null, { status: discordStatus })
   }
   try {
-    const q = token === null ? '' : `?auth_token=${token}`
     const res = await relay.fetch(
-      new Request('https://example.com/_alert-relay' + q, {
+      new Request('https://example.com/_alert-relay', {
         method,
+        headers: token === null ? {} : { Authorization: 'Basic ' + btoa(`relay:${token}`) },
         body: method === 'POST' ? JSON.stringify(body) : undefined,
       }),
       ENV,
@@ -66,6 +71,7 @@ test('relay says closed for a closed incident', async () => {
 
 test('relay answers 502 when Discord refuses, 400 for a body without incident, 405 for non-POST', async () => {
   assert.equal((await run(ENV.RELAY_TOKEN, INCIDENT, { discordStatus: 500 })).res.status, 502)
+  assert.equal((await run(ENV.RELAY_TOKEN, INCIDENT, { discordStatus: 'throw' })).res.status, 502)
   assert.equal((await run(ENV.RELAY_TOKEN, {})).res.status, 400)
   assert.equal((await run(ENV.RELAY_TOKEN, null, { method: 'GET' })).res.status, 405)
 })

@@ -1,10 +1,10 @@
 # 바깥 감시 — 선언에 cloudrun.monitoring 이 있을 때만. Cloud Run 앞단이 앱에 닿기 전에 내는 503 은 앱 안의 alert 모듈이 못 본다.
-# 업타임 체크(공개 도메인의 <api_prefix>/health, worker.js 가 원점 /health 로 넘긴다) + 경보 정책 둘 → webhook_tokenauth 채널 → 중계 Worker(alert-relay.js) → Discord.
+# 업타임 체크(공개 도메인의 <api_prefix>/health, worker.js 가 원점 /health 로 넘긴다) + 경보 정책 둘 → webhook_basicauth 채널 → 중계 Worker(alert-relay.js) → Discord.
 
 resource "random_password" "relay_token" {
   count   = local.has_monitoring ? 1 : 0
   length  = 32
-  special = false # 토큰은 `?auth_token=` 쿼리로 간다
+  special = false # Basic 인증의 비밀번호로 간다
 }
 
 resource "google_monitoring_uptime_check_config" "api" {
@@ -37,13 +37,14 @@ resource "google_monitoring_notification_channel" "discord" {
   count        = local.has_monitoring ? 1 : 0
   project      = var.project_id
   display_name = "${local.name} discord relay"
-  type         = "webhook_tokenauth"
+  type         = "webhook_basicauth" # webhook_tokenauth 는 url 라벨뿐이라 토큰을 실을 곳이 없다
 
   labels = {
-    url = "https://${var.app.domain}${local.relay_path}"
+    url      = "https://${var.app.domain}${local.relay_path}"
+    username = "relay" # alert-relay.js 의 USERNAME 과 같다
   }
   sensitive_labels {
-    auth_token = random_password.relay_token[0].result
+    password = random_password.relay_token[0].result
   }
 
   depends_on = [google_project_service.this]
@@ -57,6 +58,11 @@ resource "google_monitoring_alert_policy" "uptime" {
   combiner              = "OR"
   notification_channels = [google_monitoring_notification_channel.discord[0].id]
 
+  # 점이 안 들어오면(오류가 멈추면) 기본 7일까지 열려 있어 다음 장애를 놓친다 — 30분 뒤 닫는다
+  alert_strategy {
+    auto_close = "1800s"
+  }
+
   conditions {
     display_name = "health check failed"
     condition_threshold {
@@ -66,7 +72,7 @@ resource "google_monitoring_alert_policy" "uptime" {
       duration        = "60s"
 
       aggregations {
-        alignment_period     = "300s"
+        alignment_period     = "${max(1200, local.mon_uptime_minutes * 60 * 2)}s" # 검사 간격보다 길게 묶는다
         per_series_aligner   = "ALIGN_NEXT_OLDER"
         cross_series_reducer = "REDUCE_COUNT_FALSE"
         group_by_fields      = ["resource.label.host"]
@@ -85,6 +91,10 @@ resource "google_monitoring_alert_policy" "errors" {
   display_name          = "${local.name} cloud run 5xx"
   combiner              = "OR"
   notification_channels = [google_monitoring_notification_channel.discord[0].id]
+
+  alert_strategy {
+    auto_close = "1800s"
+  }
 
   conditions {
     display_name = "5xx responses"

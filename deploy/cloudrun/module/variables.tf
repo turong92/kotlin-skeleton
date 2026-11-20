@@ -72,9 +72,10 @@ variable "app" {
     condition = try(var.app.cloudrun.monitoring, null) == null || (
       contains([1, 5, 10, 15], try(var.app.cloudrun.monitoring.uptime_period_minutes, 5)) &&
       try(var.app.cloudrun.monitoring.error_threshold, 5) >= 1 &&
-      try(var.app.cloudrun.monitoring.error_window_minutes, 5) >= 1
+      try(var.app.cloudrun.monitoring.error_window_minutes, 5) >= 1 &&
+      try(var.app.cloudrun.monitoring.error_window_minutes, 5) <= 1440
     )
-    error_message = "cloudrun.monitoring 의 uptime_period_minutes 는 1 · 5 · 10 · 15 중 하나, error_threshold · error_window_minutes 는 1 이상이어야 한다."
+    error_message = "cloudrun.monitoring 의 uptime_period_minutes 는 1 · 5 · 10 · 15 중 하나, error_threshold 는 1 이상, error_window_minutes 는 1~1440 이어야 한다."
   }
 
   validation {

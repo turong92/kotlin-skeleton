@@ -33,8 +33,9 @@ cloud prod terraform -chdir=deploy/cloudrun plan
 Cloud Run 앞단이 앱에 닿기 전에 내는 503(연결 부족 · 인스턴스 포화)은 앱 안의 `alert` 모듈이 못 본다. 선언에 `cloudrun.monitoring:` 을 넣으면 GCP Cloud Monitoring 이 밖에서 보고 Discord 로 알린다. 칸이 없으면 아무것도 만들지 않는다.
 
 - **켜는 법**: `app.yaml` 의 `cloudrun:` 아래에 `monitoring: {}`(기본값 그대로) 또는 값을 적는다 — `uptime_period_minutes`(1·5·10·15, 기본 5) · `error_threshold`(기본 5건) · `error_window_minutes`(기본 5분). 그리고 `terraform.tfvars` 에 `discord_webhook_url`(sensitive, 값은 사람이 넣는다)을 적고 `apply`.
-- **만드는 것**: 업타임 체크 1(공개 `https://<domain><api_prefix>/health` — `worker.js` 가 그 한 경로만 원점 `/health` 로 다시 써서 넘긴다, 비밀은 업타임 설정에 없다), 경보 정책 2(업타임 실패 · Cloud Run `request_count` 5xx), 알림 채널 1(webhook_tokenauth) → 중계 Worker(토큰이 틀리면 401, Discord 에 한국어 한 줄).
+- **만드는 것**: 업타임 체크 1(공개 `https://<domain><api_prefix>/health` — `worker.js` 가 그 한 경로만 원점 `/health` 로 다시 써서 넘긴다, 비밀은 업타임 설정에 없다), 경보 정책 2(업타임 실패 · Cloud Run `request_count` 5xx), 알림 채널 1(webhook_basicauth, 비밀번호는 `random_password`) → 중계 Worker(`Authorization: Basic` 이 틀리면 401, Discord 에 한국어 한 줄).
 - **비용 메모**: 업타임 체크 1개(5분 간격)와 알림 채널은 GCP 무료 한도 안의 크기로 보이나(정확한 한도 · 가격은 GCP 문서에서 확인), 중계 Worker 는 경보 때만 불려 Workers 무료 한도로 충분하다.
+- **인스턴스를 깨운다**: 업타임 체크가 `/health`(DB 까지 확인)를 여러 지점에서 계속 불러 0대 축소와 외부 DB 오토서스펜드를 사실상 막는다. 간격이 길수록 덜 깨운다.
 - **DB 연결 수**는 외부 DB(PlanetScale 등)라 GCP 지표가 없다 — 그쪽 대시보드 지표로 따로 본다.
 
 ## 시험 (실계정 없이)

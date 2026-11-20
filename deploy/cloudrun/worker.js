@@ -34,6 +34,7 @@ export default {
     // 호스트는 문자열 합치기로 고정한다. `new URL(path, base)` 는 path 가 `//evil.example/…` 면 호스트를 바꿔 비밀이 샌다
     const origin = new URL(env.ORIGIN_URL)
     // 바깥 감시(업타임 체크)용 예외 하나: GET/HEAD `<API_PREFIX>health` 만 원점 `/health` 로 다시 써서 넘긴다(쿼리는 버린다).
+    // 주의: 앱에 `<api_prefix>/health` 라우트가 있으면 GET/HEAD 는 이 예외에 가려져 그 라우트에 닿지 않는다
     // 그 밖의 경로 · 메서드는 위 규칙 그대로(`health/x` · `healthz` · POST 는 다시 쓰지 않는다)
     const isHealth =
       (request.method === 'GET' || request.method === 'HEAD') &&

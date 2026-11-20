@@ -27,7 +27,7 @@ run "nothing_without_monitoring" {
   assert {
     condition = (length(google_monitoring_uptime_check_config.api) + length(google_monitoring_alert_policy.uptime) +
       length(google_monitoring_alert_policy.errors) + length(google_monitoring_notification_channel.discord) +
-    length(cloudflare_workers_script.alert_relay)) == 0
+    length(cloudflare_workers_script.alert_relay) + length(cloudflare_workers_route.alert_relay) + length(random_password.relay_token)) == 0
     error_message = "monitoring 이 없으면 감시 자원을 하나도 만들지 않는다"
   }
   assert {
@@ -64,6 +64,51 @@ run "uptime_hits_the_public_health_path_every_five_minutes" {
     condition     = google_monitoring_uptime_check_config.api[0].monitored_resource[0].labels["host"] == "acme.example.com" && google_monitoring_uptime_check_config.api[0].period == "300s"
     error_message = "호스트는 공개 도메인, 기본 간격 5분"
   }
+}
+
+run "channel_is_basicauth_and_policies_auto_close" {
+  command = plan
+
+  assert {
+    condition     = google_monitoring_notification_channel.discord[0].type == "webhook_basicauth" && google_monitoring_notification_channel.discord[0].labels["username"] == "relay"
+    error_message = "webhook_tokenauth 의 라벨은 url 뿐이다 — basicauth(url · username + password)를 쓴다"
+  }
+  assert {
+    condition     = google_monitoring_alert_policy.uptime[0].alert_strategy[0].auto_close == "1800s" && google_monitoring_alert_policy.errors[0].alert_strategy[0].auto_close == "1800s"
+    error_message = "두 정책 모두 30분 뒤 자동으로 닫힌다(기본 7일이면 다음 장애를 놓친다)"
+  }
+  assert {
+    condition     = google_monitoring_alert_policy.uptime[0].conditions[0].condition_threshold[0].aggregations[0].alignment_period == "1200s"
+    error_message = "업타임 정렬 구간은 max(1200, 간격×2) — 기본 5분은 1200s"
+  }
+}
+
+run "uptime_alignment_follows_a_long_period" {
+  command = plan
+  variables {
+    app = merge(yamldecode(file("tests/fixtures/app-monitoring.yaml")), {
+      cloudrun = merge(yamldecode(file("tests/fixtures/app-monitoring.yaml")).cloudrun, {
+        monitoring = { uptime_period_minutes = 15 }
+      })
+    })
+  }
+
+  assert {
+    condition     = google_monitoring_alert_policy.uptime[0].conditions[0].condition_threshold[0].aggregations[0].alignment_period == "1800s"
+    error_message = "15분 간격이면 1800s"
+  }
+}
+
+run "rejects_error_window_over_a_day" {
+  command = plan
+  variables {
+    app = merge(yamldecode(file("tests/fixtures/app-monitoring.yaml")), {
+      cloudrun = merge(yamldecode(file("tests/fixtures/app-monitoring.yaml")).cloudrun, {
+        monitoring = { error_window_minutes = 1441 }
+      })
+    })
+  }
+  expect_failures = [var.app]
 }
 
 run "error_policy_counts_cloud_run_5xx_with_defaults" {
