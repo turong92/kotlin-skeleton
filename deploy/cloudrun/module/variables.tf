@@ -69,6 +69,15 @@ variable "app" {
   }
 
   validation {
+    condition = try(var.app.cloudrun.monitoring, null) == null || (
+      contains([1, 5, 10, 15], try(var.app.cloudrun.monitoring.uptime_period_minutes, 5)) &&
+      try(var.app.cloudrun.monitoring.error_threshold, 5) >= 1 &&
+      try(var.app.cloudrun.monitoring.error_window_minutes, 5) >= 1
+    )
+    error_message = "cloudrun.monitoring 의 uptime_period_minutes 는 1 · 5 · 10 · 15 중 하나, error_threshold · error_window_minutes 는 1 이상이어야 한다."
+  }
+
+  validation {
     condition = length(setintersection(
       toset(concat(try(keys(var.app.env), []), try(tolist(var.app.secrets), []))),
       toset(concat(
@@ -110,4 +119,11 @@ variable "cloudflare_account_id" {
 
 variable "cloudflare_zone_id" {
   type = string
+}
+
+variable "discord_webhook_url" {
+  description = "경보를 받을 Discord 웹훅 주소 — cloudrun.monitoring 이 있을 때만 쓴다(값은 사람이 tfvars 에 넣는다)"
+  type        = string
+  sensitive   = true
+  default     = ""
 }

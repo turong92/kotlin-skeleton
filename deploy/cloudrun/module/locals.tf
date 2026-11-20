@@ -10,6 +10,14 @@ locals {
   wake     = try(local.cr.wake, null)
   has_wake = local.wake != null
 
+  # 바깥 감시 — 칸이 있으면 켠다({} 도 켠 것). 기본 국룰: 5분 간격, 5분에 5건
+  monitoring               = try(local.cr.monitoring, null)
+  has_monitoring           = local.monitoring != null
+  mon_uptime_minutes       = try(local.monitoring.uptime_period_minutes, 5)
+  mon_error_threshold      = try(local.monitoring.error_threshold, 5)
+  mon_error_window_minutes = try(local.monitoring.error_window_minutes, 5)
+  relay_path               = "/_alert-relay"
+
   # 선언 비밀: operator_only 가 아닌 것은 무작위 판을 만들고, operator_only 는 그릇만 만든다
   declared_secrets = try(tolist(var.app.secrets), [])
   operator_only    = toset(try(var.app.operator_only, []))

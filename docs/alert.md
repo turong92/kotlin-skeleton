@@ -16,6 +16,8 @@ AlertChannel(s)                             webhook (Discord JSON); mail if noti
       each on its own virtual thread, 3 attempts with doubling backoff; one failing channel never blocks another
 ```
 
+Outside the app: a 503 that Cloud Run returns before the request reaches the app (connection or instance exhaustion) is invisible to this module — the Cloud Run frame watches it from outside: [deploy/cloudrun/README.md](../deploy/cloudrun/README.md) (`cloudrun.monitoring`).
+
 If recording itself fails and the kind is `directFallback` (the 5xx surge), the webhook is called **directly** once per interval, so the alert survives a dead database.
 
 ## Off by default

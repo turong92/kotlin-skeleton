@@ -42,4 +42,5 @@ module "app" {
   github_repository     = var.github_repository
   cloudflare_account_id = var.cloudflare_account_id
   cloudflare_zone_id    = var.cloudflare_zone_id
+  discord_webhook_url   = var.discord_webhook_url
 }

@@ -1,5 +1,5 @@
 locals {
-  apis = [
+  apis = concat([
     "run.googleapis.com",
     "artifactregistry.googleapis.com",
     "secretmanager.googleapis.com",
@@ -8,7 +8,7 @@ locals {
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "sts.googleapis.com",
-  ]
+  ], local.has_monitoring ? ["monitoring.googleapis.com"] : [])
 }
 
 resource "google_project_service" "this" {

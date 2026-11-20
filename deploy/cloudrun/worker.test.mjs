@@ -73,3 +73,32 @@ test('worker keeps query string and method', async () => {
   assert.equal(u.search, '?a=1&b=x%20y')
   assert.equal(await calls[0].text(), 'payload')
 })
+
+test('worker rewrites only GET/HEAD <prefix>health to origin /health', async () => {
+  for (const method of ['GET', 'HEAD']) {
+    const { res, calls } = await run('https://example.com/api/v1/health?x=1', { method })
+    assert.equal(res.status, 200, method)
+    assert.equal(calls.length, 1, method)
+    const u = new URL(calls[0].url)
+    assert.equal(u.origin, ENV.ORIGIN_URL, method)
+    assert.equal(u.pathname, '/health', method)
+    assert.equal(u.search, '', method)
+    assert.equal(calls[0].headers.get('X-Origin-Auth'), ENV.ORIGIN_AUTH_SECRET, method)
+  }
+})
+
+test('worker does not rewrite lookalikes or other methods of the health path', async () => {
+  const cases = [
+    ['GET', '/api/v1/health/x', '/api/v1/health/x'],
+    ['GET', '/api/v1/healthz', '/api/v1/healthz'],
+    ['POST', '/api/v1/health', '/api/v1/health'],
+  ]
+  for (const [method, path, expected] of cases) {
+    const { calls } = await run('https://example.com' + path, { method })
+    assert.equal(calls.length, 1, path)
+    assert.equal(new URL(calls[0].url).pathname, expected, `${method} ${path}`)
+  }
+  const { res, calls } = await run('https://example.com/health')
+  assert.equal(res.status, 404)
+  assert.equal(calls.length, 0)
+})

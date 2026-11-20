@@ -6,6 +6,7 @@
 //  1. API_PREFIX 아래만 넘긴다(허용 목록) — `/internal/*` 를 포함한 나머지는 404. Cloud Tasks · Scheduler 는 run.app 을 직접 부른다
 //  2. 클라이언트가 보낸 `X-Origin-Auth` · `X-Forwarded-For` · `X-Real-IP` 는 버리고 `X-Origin-Auth` 에 비밀을 붙인다 —
 //     앱(client-ip.mode=edge-secret)은 이 헤더가 맞는 요청에서만 `CF-Connecting-IP` 를 믿고, 헤더가 없는 직접 호출을 403 한다
+//     (예외: GET/HEAD `${API_PREFIX}health` 한 경로만 원점 `/health` 로 다시 쓴다 — 바깥 감시용)
 //  3. 본문은 스트림 그대로, 응답도 그대로(캐시하지 않는다), 리다이렉트는 따라가지 않는다
 //
 // 바인딩: ORIGIN_URL(원점 주소) · API_PREFIX(`/api/v1/` — 끝 슬래시 포함) · 비밀 ORIGIN_AUTH_SECRET
@@ -32,7 +33,14 @@ export default {
 
     // 호스트는 문자열 합치기로 고정한다. `new URL(path, base)` 는 path 가 `//evil.example/…` 면 호스트를 바꿔 비밀이 샌다
     const origin = new URL(env.ORIGIN_URL)
-    const upstream = new URL(origin.origin + url.pathname + url.search)
+    // 바깥 감시(업타임 체크)용 예외 하나: GET/HEAD `<API_PREFIX>health` 만 원점 `/health` 로 다시 써서 넘긴다(쿼리는 버린다).
+    // 그 밖의 경로 · 메서드는 위 규칙 그대로(`health/x` · `healthz` · POST 는 다시 쓰지 않는다)
+    const isHealth =
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      url.pathname === env.API_PREFIX + 'health'
+    const upstream = new URL(
+      isHealth ? origin.origin + '/health' : origin.origin + url.pathname + url.search,
+    )
     if (upstream.origin !== origin.origin) {
       return new Response('Bad Request', { status: 400 })
     }

@@ -13,6 +13,13 @@ variable "github_repository" {
   type        = string
 }
 
+variable "discord_webhook_url" {
+  description = "경보를 받을 Discord 웹훅 주소 — cloudrun.monitoring 이 있을 때만 필요. terraform.tfvars(git 밖)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "cloudflare_zone_id" {
   description = "도메인이 든 Cloudflare 영역 ID — terraform.tfvars"
   type        = string

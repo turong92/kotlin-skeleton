@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`deploy/cloudrun/`**(terraform + Worker): Artifact Registry · 실행 · 배포 서비스 계정 · WIF · Secret Manager · Tasks 큐 `<name>-drain` · Scheduler `<name>-tick` · Worker `<name>-api-proxy`(`api_prefix` 아래만 원점으로) · Pages · R2. 앞단 LB · VPC 커넥터 · NAT 없음. 래퍼는 `cloud <env> terraform`.
 - **배포 워크플로** `.github/workflows/deploy-cloudrun.yml` + `deploy/cloudrun/render.sh`: 선언을 플래그 · env 파일 · 빌드 인자로 바꿔 이미지를 만들고 후보 리비전 → `scripts/post-deploy-check.sh` 통과 뒤 트래픽 100%. 선언 값의 특수 문자는 그대로 전달하고 비밀은 이름만 다룬다.
 - **`Dockerfile.native` 빌드 환경**: 빌드 인자 `BUILD_ENV_B64`(`KEY='값'` 줄)로 선언 env 를 빌드 때 읽는다(모듈 켜기/끄기가 빌드 때 굳으므로). 인자가 없으면 기존 빌드와 같다. `render.sh` 는 셸 · 빌드 도구를 바꾸는 예약 이름을 거부한다. `native` 워크플로 `workflow_dispatch` 에 `full` 입력.
+- **바깥 감시(선택)** `cloudrun.monitoring`: 선언에 있을 때만 업타임 체크 · 경보 정책 2(업타임 실패, Cloud Run 5xx) · webhook_tokenauth 채널 · Discord 중계 Worker(`deploy/cloudrun/alert-relay.js`)를 만든다(기본 꺼짐). `worker.js` 는 GET/HEAD `<api_prefix>/health` 한 경로만 원점 `/health` 로 다시 쓴다(나머지 허용 목록 규칙은 그대로). 켜는 법 · 비용: [deploy/cloudrun/README.md](deploy/cloudrun/README.md).
 - 앱 · 배포 쪽 규칙: [docs/cloud-run-scale-to-zero.md](docs/cloud-run-scale-to-zero.md), 설정 [docs/client-ip.md](docs/client-ip.md) · [docs/modules/job-queue-wake-cloudtasks.md](docs/modules/job-queue-wake-cloudtasks.md). react-skeleton 의 Pages 배포 워크플로(`deploy-pages.yml`)는 그 레포에 있다.
 
 ### native-image - 이미지 처리 · 포인트 · 광고 확인, 진짜 amd64 실측, ffmpeg 이미지, CRaC 비교 (2026-11-18)
