@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### prod 가 아닌 환경은 검색 색인 금지 (2026-11-22)
+
+- **platform `NoIndexFilter`**: `skeleton.env` 가 `local` · `stage` 면 서버 응답에 `X-Robots-Tag: noindex, nofollow`(오류 응답 포함). 비었거나 `prod` 면 그대로. 늘 등록하고 켤지는 실행 때 정한다(네이티브 AOT). robots.txt `Disallow` 로 막지 않는다 — `docs/deploy.md` §4.
+
 ### Cloud Run + Cloudflare 배포 틀 (2026-11-18)
 
 선언 한 장(`deploy/app.yaml`) + `v*` 태그로 GCP Cloud Run(서울, 최소 0 · 최대 1, 네이티브)과 Cloudflare(Pages · Worker · R2)에 올리는 길. 순서와 사람이 할 일은 [docs/deploy-cloudrun.md](docs/deploy-cloudrun.md). 스켈레톤 기본값은 바뀌지 않는다(새 설정은 꺼짐 또는 빈 값).

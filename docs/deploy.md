@@ -128,6 +128,7 @@ Cloud Run 틀은 `<ENV_PREFIX>_CLIENT_IP_MODE=edge-secret` 과 `<ENV_PREFIX>_WEB
 - `skeleton.deploy.require-env=true` 면 비었을 때도 기동 실패 ("스위치를 꼭 정한다" — 옵트인, 기본은 꺼짐).
 - **스프링 프로필과의 관계**: 스위치는 프로필을 켜지 않고, 프로필은 스위치를 켜지 않는다. 둘이 어긋나면(`prod` 인데 프로필 `prod` 가 꺼짐, 또는 그 반대) 기동은 되고 **경고**만 한다 —
   실사용 프로젝트처럼 어긋남을 실패로 보고 싶으면 앱이 `DeployGuard` 하나를 둔다. 프로필로 보호하던 가드(auth `protected-profiles`, migration `clean-allowed-profiles`)는 **자기 프로필 목록으로 그대로** 동작하고, 스위치가 stage · prod 면 프로필과 상관없이 같은 규칙이 **더** 선다.
+- **검색 색인 금지**: 스위치가 `local` · `stage` 면 서버 응답(오류 포함 — edge-secret 관문이 거절한 403 은 그 앞이라 빠진다)에 `X-Robots-Tag: noindex, nofollow`(platform `NoIndexFilter`). 비었거나 `prod` 면 달지 않는다. 밖에 연 개발 · 시험 주소가 검색에 잡히지 않게 하는 것이다 — robots.txt 의 `Disallow` 로 막지 않는다(막으면 크롤러가 헤더를 못 읽어 이미 잡힌 주소가 빠지지 않는다). 끄려면 `noIndexFilterRegistration` 이름의 빈을 둔다. 웹 쪽은 react-skeleton `packages/seo/README.md` 「규칙」.
 
 ### `DeployGuard` — 모듈이 기여하는 기동 규칙
 

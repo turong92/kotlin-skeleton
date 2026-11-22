@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.common.web
 
+import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
@@ -14,6 +15,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
 import org.springframework.core.Ordered
+import org.springframework.core.env.Environment
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.CorsConfigurationSource
@@ -89,6 +91,18 @@ class WebPolicyAutoConfiguration {
         FilterRegistrationBean(SecurityHeadersFilter(properties.securityHeaders)).apply {
             order = Ordered.HIGHEST_PRECEDENCE + 20
     }
+
+    /**
+     * prod 가 아닌 환경의 검색 색인 금지. **늘 등록하고** 켤지는 실행 때 스위치(`skeleton.env`)로 정한다 — 조건 애너테이션은 네이티브 AOT 에서 빌드 때 굳는다.
+     * 끄려면 같은 이름의 빈을 둔다.
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = ["noIndexFilterRegistration"])
+    fun noIndexFilterRegistration(environment: Environment): FilterRegistrationBean<NoIndexFilter> =
+        FilterRegistrationBean(NoIndexFilter()).apply {
+            order = Ordered.HIGHEST_PRECEDENCE
+            isEnabled = NoIndexFilter.enabledFor(DeployContext.from(environment).env)
+        }
 
     @Bean("skeletonCorsConfigurationSource")
     @ConditionalOnMissingBean(name = ["skeletonCorsConfigurationSource"])
