@@ -22,7 +22,7 @@
 | 설정 접두사 | 없음 — account 의 접두사 그대로(sign-up · verification · reset · login · password 아래): [docs/config/modules/account.yml](../config/modules/account.yml) |
 | 기본 동작 | 켜짐. 가입 · 확인 · 재설정 · 변경 HTTP 와 로그인 시도 제한 · 기록이 켜진다. |
 | 부팅에 필요한 것 | `account` 의 부팅 조건과 같다(메일 발송기 등). 따로 없다. |
-| 교체 지점 | `PasswordEncoder`, `PasswordHasher`, `PasswordPolicy`, `BreachedPasswordCheck`, `PasswordSignInMethod`, `RegistrationService`, `PasswordService`, `LoginThrottle`, `LoginRecorder`, `AccountPasswordPublicController`, `AccountPasswordController` |
+| 교체 지점 | `PasswordEncoder`, `PasswordHasher`, `PasswordPolicy`, `BreachedPasswordCheck`, `PasswordSignInMethod`, `ResetLinkIssuer`, `RegistrationService`, `PasswordService`, `LoginThrottle`, `LoginRecorder`, `AccountPasswordPublicController`, `AccountPasswordController` |
 | 마이그레이션 | 없음 (해시는 `account_identities.secret` 의 `method='password'` 행 — 스키마는 `account-jdbc`) |
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/account-password/src/test` |

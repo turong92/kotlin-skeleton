@@ -123,6 +123,7 @@ class SessionBodyDeliveryWebTest : SessionWebTestBase() {
     }
 
     @Test
+    // 시험용 길(FirstStepPassedController)의 거절만 본다 — 진짜 비밀번호 거절은 auth-password · account-password 시험
     fun `a refused sign-in opens no session and sets no cookie`() {
         val r = login(email = "nobody@example.com")
         assertEquals(401, r.response.status)

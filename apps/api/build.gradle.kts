@@ -8,8 +8,8 @@ dependencies {
     implementation(project(":modules:platform"))
     implementation(project(":modules:auth"))
     implementation(project(":modules:account-jdbc"))       // 계정 (+ account): 가입 · 이메일 확인 · 재설정 · 삭제 — auth 가 진짜 계정으로 로그인한다
-    implementation(project(":modules:account-password"))   // 이메일 + 비밀번호 가입 · 확인 · 찾기 · 재설정 · 변경 (+ account). 소셜 · 링크만 쓰는 앱은 이 줄을 뺀다 (docs/modules/account-password.md)
-    implementation(project(":modules:auth-password"))      // 비밀번호 로그인 POST /api/v1/auth/login (+ auth). 소셜 · 링크만 쓰는 앱은 이 줄을 뺀다
+    implementation(project(":modules:account-password"))   // 이메일 + 비밀번호 가입 · 확인 · 찾기 · 재설정 · 변경 (+ account). 소셜 · 링크만 쓰는 앱은 이 줄을 뺀다 — auth-password 와 account-password 는 같이 뺀다 (docs/modules/account-password.md)
+    implementation(project(":modules:auth-password"))      // 비밀번호 로그인 POST /api/v1/auth/login (+ auth). 소셜 · 링크만 쓰는 앱은 이 줄을 뺀다 — auth-password 와 account-password 는 같이 뺀다
     implementation(project(":modules:auth-session-jdbc"))  // 리프레시 토큰 · 세션 목록 (+ auth-session). 메일 · 매직 링크는 docs/accounts.md
     implementation(project(":modules:legal-jdbc"))         // 약관 · 개인정보 처리방침 + 가입 동의 기록 + 재동의 (+ legal). 문서는 모듈의 TEMPLATE — prod 로 뜨기 전에 자기 문서로 바꾼다 (docs/legal.md)
     implementation(project(":modules:persistence-jdbc"))
