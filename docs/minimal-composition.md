@@ -4,7 +4,7 @@ Two apps ship with the skeleton:
 
 | App | What it is | Modules |
 |---|---|---|
-| `apps/api` | the **starter** — the minimal recipe below, built and booted by its own tests | `platform`, `auth`, `account-jdbc`, `auth-session-jdbc`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time` |
+| `apps/api` | the **starter** — the minimal recipe below, built and booted by its own tests | `platform`, `auth`, `account-jdbc`, `account-password`, `auth-password`, `auth-session-jdbc`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time` |
 | `apps/workbench` | the **demo** — every module together, with sample endpoints under `/api/v1/skeleton/**` | all of them |
 
 A real service starts from `apps/api` and keeps only what it needs. This page is the recipe. To stamp a project in one command
@@ -23,7 +23,9 @@ override points, migrations, frontend counterpart, tests): [`docs/modules/README
 dependencies {
     implementation(project(":modules:platform"))
     implementation(project(":modules:auth"))              // JWT, dev-login, break-glass
-    implementation(project(":modules:account-jdbc"))      // real accounts: sign-up, email verification, reset, deletion (+ account)
+    implementation(project(":modules:account-jdbc"))      // real accounts: deletion, admin, sign-in methods (+ account)
+    implementation(project(":modules:account-password")) // email + password: sign-up, email verification, reset, change, login throttle (+ account)
+    implementation(project(":modules:auth-password"))    // POST /api/v1/auth/login. Social-only or link-only services drop BOTH password modules
     implementation(project(":modules:auth-session-jdbc")) // refresh tokens, session list (+ auth-session)
     implementation(project(":modules:persistence-jdbc"))  // audit timestamps, SqlDialect
     implementation(project(":modules:db-postgresql"))     // exactly one db-* module: driver, Flyway support, SqlDialect
@@ -202,8 +204,10 @@ test proving a context with only that module (and its declared dependencies) boo
 | `auth` | yes | nothing in `local` / `dev` / `test` / no profile; in `prod` / `staging` (`skeleton.auth.protected-profiles`): `skeleton.auth.jwt.secret` ≥ 32 bytes and your own `AuthAccountRepository` bean | — |
 | `auth-session` | yes (in-memory sessions) | nothing in `local` / `dev` / `test`; in `prod` / `staging` / `skeleton.env=stage\|prod`: a non-memory `SessionStore` — `auth-session-jdbc` | — |
 | `auth-session-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `auth_sessions`, as above) | — |
-| `account` | yes (HTTP `/api/v1/account/**`, sign-up open, in-memory store, mail only logged) | nothing in `local` / `dev` / `test`; in protected envs: `account-jdbc`, a mail sender (`notification-mail`) and `skeleton.account.mail.link-base-url` — `DeployGuard` `account` names what is missing | `notification-mail` (mail), `captcha-turnstile` (captcha), `alert` (brute-force alerts), `idempotency`, `auth-social` (social sign-in/linking), `job-queue-jdbc` (purge job) — all optional, all compile-only |
+| `account` | yes (HTTP `/api/v1/account/**`, in-memory store, mail only logged) | nothing in `local` / `dev` / `test`; in protected envs: `account-jdbc`, a mail sender (`notification-mail`) and `skeleton.account.mail.link-base-url` — `DeployGuard` `account` names what is missing | `notification-mail` (mail), `captcha-turnstile` (captcha), `alert` (brute-force alerts), `idempotency`, `auth-social` (social sign-in/linking), `job-queue-jdbc` (purge job) — all optional, all compile-only |
 | `account-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `accounts`, as above) | — |
+| `account-password` | yes (HTTP sign-up · verification · password reset/change, login throttle + recording; open sign-up) | the `account` conditions; keep it together with `auth-password` (login endpoint) — dropping both removes every password path | — |
+| `auth-password` | yes (HTTP `POST /api/v1/auth/login`) | `auth`; keep it together with `account-password` (throttle · recording hooks, sign-up) | — |
 | `auth-magic-link` | yes (sign-in closed to unknown addresses) | `account` (declared dependency) | a mail path to deliver the link |
 | `auth-social` | yes (no provider until enabled) | nothing | provider keys |
 | `auth-social-google` / `-kakao` / `-naver` | off until `skeleton.auth-social.providers.<x>.enabled=true` | nothing | client id / secret |

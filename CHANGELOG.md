@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 비밀번호 가입 · 로그인을 모듈로 분리 — account-password · auth-password (2026-11-23)
+
+소셜 · 링크만 쓰는 서비스가 비밀번호 코드를 모듈째 뺄 수 있다. 와이어는 그대로다(경로 · DTO · 에러 코드 · `skeleton.account.*` 설정 · `ReauthInput.currentPassword`, DB 변경 없음). 패키지 이름도 그대로다.
+
+- **`account-password`**: 가입 · 이메일 코드 확인 · 재전송, 비밀번호 찾기 · 재설정 · 변경 · 정책 · 해시, `PasswordSignInMethod`, 로그인 시도 제한 · 기록(`LoginThrottle` · `LoginRecorder`). `account` 에는 `PasswordCredentials` · `ResetLinkIssuer` 포트만 남고, 비밀번호 줄이 있는 시드 계정이 있는데 이 모듈이 없으면 기동 실패다.
+- **`auth-password`**: `POST /api/v1/auth/login`(`PasswordLoginService` · `PasswordLoginController` · `RequiredLoginIdentifier` · `AuthNativeHints`).
+- **`auth` 에 남은 것**(account-password 가 `LoginHooks` 를 구현하므로 auth-password 로 옮기면 모듈끼리 의존이 생긴다): `LoginHooks` · `LoginAttempt` · `LoginFailure`, 기본 `PasswordEncoder`(BCrypt, 시드 계정 해시용), `AuthTokenResponse` · `InvalidCredentialsException`.
+- **옮겨야 할 것**: 앱의 `build.gradle.kts` 에 `implementation(project(":modules:account-password"))` · `implementation(project(":modules:auth-password"))` 두 줄(없으면 가입 · 로그인 경로가 사라진다). **둘은 같이 둔다 · 같이 뺀다** — 한쪽만 두면 한도 고리가 없거나 로그인 경로가 없다. 스타터(`apps/api`)는 둘 다 가진다.
+- 시험: 비밀번호 흐름 시험은 두 모듈로 옮겼고, 다른 모듈 시험은 비밀번호 없이 계정을 만든다. 진짜 로그인 + 진짜 한도 · 기록 고리 조합은 `apps/sample` 의 `PasswordLoginHooksIntegrationTest`.
+
 ### 출시 전 체크리스트 (2026-11-23)
 
 - **`docs/launch-checklist.md`**: 켠 기능(로그인 · 광고 · 결제 · 메일)별로 방침에 넣을 값 · 업체 개인정보 문의처 · 소셜 앱 dev/prod 분리 · 광고 심사 순서 · 결제 사업자 표시 · 클라우드 계정 준비. 빈 값은 기존 legal 사실 가드(`{{키}}`)로 잡는다 — 새 가드 코드는 없다.

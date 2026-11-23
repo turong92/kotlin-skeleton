@@ -62,7 +62,7 @@ Spring AOT 는 `@ConditionalOnProperty` · `@ConditionalOnBean` 같은 **조건�
 | `migration-flyway` (`FlywayNativeHints`) | `db/migration` 아래 파일, Flyway 의 `version.txt` · 플러그인 목록, `Slf4jLogCreator` | 마이그레이션 · Flyway 기동 |
 | `legal` (`LegalNativeHints`) | `legal-templates/` · `legal/` 문서 | 약관 카탈로그 |
 | `time` (`TimeNativeHints`) | `country-zones.tsv` | 나라별 시간대 표 |
-| `auth` (`AuthNativeHints`) | `RequiredLoginIdentifierValidator` | Bean Validation 검증기 |
+| `auth-password` (`AuthNativeHints`) | `RequiredLoginIdentifierValidator` | Bean Validation 검증기 |
 | `payment-toss` · `payment-kakaopay` · `payment-naverpay` · `payment-stripe` · `auth-social-google/kakao/naver` · `crypto` | 외부 응답 · 웹훅 본문 · 토큰 본문 DTO (`BindingHints`) | 컨트롤러 밖에서 JSON 으로 바꾸는 타입 |
 | `auth-social` (`AuthSocialNativeHints`) | `OAuthSocialLoginRequest` | 소셜 로그인 경로가 컨트롤러가 아니라 **함수형 라우트**(`RouterFunction`)라 AOT 가 요청 본문 타입을 못 찾는다 |
 | `notification-sse` (`NotificationSseNativeHints`) | `NotificationSseConnectedEvent` · `NotificationEvent` | `SseEmitter.send(객체)` 로 흘리는 이벤트 본문 |

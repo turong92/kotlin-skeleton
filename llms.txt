@@ -21,7 +21,7 @@
 - react: `scripts/new-project.sh <target-dir> <name> [--packages a,b,c] [--ssr] [--without-storybook] [--with-workbench] [--with-sample] [--scope @acme]`  (react-skeleton 레포에서 실행)
 - mobile: `flutter-skeleton` 레포의 `capabilities.json` — 모듈의 모바일 짝은 거기 backend 에서 찾는다
 - 아래 기능 줄의 「→ kotlin / react」 조각을 합쳐 쓴다: `--modules` 는 하나로(쉼표) 합치고 다른 옵션은 덧붙인다. 의존으로 닫히는 모듈은 적지 않아도 따라온다. `--dry-run` 은 고른 모듈만 보인다. 완성된 예와 손으로 써야 하는 것: docs/new-project-recipe.md · docs/capabilities.md
-- 스타터(apps/api)에 이미 있어 조각에 적지 않는 모듈: `account`, `account-jdbc`, `alert`, `auth`, `auth-session`, `auth-session-jdbc`, `auth-social`, `captcha-turnstile`, `db-postgresql`, `idempotency`, `job-queue-jdbc`, `legal`, `legal-jdbc`, `migration`, `migration-flyway`, `notification-mail`, `persistence-jdbc`, `platform`, `time`
+- 스타터(apps/api)에 이미 있어 조각에 적지 않는 모듈: `account`, `account-jdbc`, `account-password`, `alert`, `auth`, `auth-password`, `auth-session`, `auth-session-jdbc`, `auth-social`, `captcha-turnstile`, `db-postgresql`, `idempotency`, `job-queue-jdbc`, `legal`, `legal-jdbc`, `migration`, `migration-flyway`, `notification-mail`, `persistence-jdbc`, `platform`, `time`
 
 ## 필요한 것 → 고를 것 (결정표)
 
@@ -79,8 +79,9 @@
 
 ## 기능 한눈에 (id: 요약 [키워드]) — 켜는 조각 · 상세는 docs/capabilities.md
 
-- account: 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호… [회원가입, 가입]
+- account: 계정 수명주기 — 이메일 변경(이메일 · 비밀번호 가입 · 확인 ·… [회원가입, 가입]
 - account-jdbc: account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL… [계정 저장, 계정 DB]
+- account-password: 이메일 · 비밀번호 가입과 이메일 코드 확인, 비밀번호 찾기 · 재설정… [회원가입, 이메일 가입]
 - ads-admob: AdMob 보상형 광고의 서버 측 확인(SSV) [애드몹 보상형 광고, 광고 보고 포인트]
 - ads-web-rewarded: 웹 보상형 광고(Google Ad Manager GPT) [웹 보상형 광고, 광고 보고 보상]
 - ads-web-rewarded-jdbc: 웹 보상형 광고 저장소 — PostgreSQL · MySQL 로… [웹 보상형 광고 저장소, 광고 세션 표]
@@ -93,10 +94,11 @@
 - async: @Async · CompletableFuture 작업이 호출 스레드의… [비동기, 백그라운드 작업]
 - async-notification: 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로… [비동기 예외 알림, 백그라운드 오류 알림]
 - audit-jdbc: 운영자 행동 기록(OperatorAuditLog)을 DB 에 남긴다… [운영 기록, 감사 로그]
-- auth: 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬… [로그인, 로그아웃]
+- auth: 로그인 계약 — JWT 발급/검증 · 로컬 dev-login · 비상용… [로그인, 로그아웃]
 - auth-magic-link: 이메일로 받은 한 번 쓰는 링크로 로그인(비밀번호 없이) [매직링크, 링크 로그인]
 - auth-mfa: 2단계 인증(TOTP) — 모든 로그인 길(비밀번호 · 소셜 · 매직… [2단계 인증, 이중 인증]
 - auth-mfa-jdbc: 2단계 인증 저장을 DB 에 둔다 (PostgreSQL · MySQL) [2단계 인증 저장소, MFA DB]
+- auth-password: 비밀번호 로그인 POST /api/v1/auth/login(이메일 ·… [비밀번호 로그인, 이메일 로그인]
 - auth-session: 로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 ·… [세션, 리프레시 토큰]
 - auth-session-jdbc: auth-session 의 세션 · 리프레시 토큰 저장을… [세션 저장, 세션 DB]
 - auth-social: 소셜 로그인의 제공자 중립 계약 [소셜 로그인, 간편 로그인]

@@ -9,12 +9,13 @@
 |---|---|---|
 | `auth` (확장) | 로그인 · JWT. 새로 생긴 것: `LoginHooks`(시도 앞뒤 고리) · `LoginSessionIssuer`/`SessionRevoker`(세션 SPI) · `AuthAccount.loginBlock`(막힌 계정) · `sid` 클레임 · 계정 없을 때도 해시 한 번(타이밍) · `upgradePasswordHash`(로그인 때 해시 올리기) | `auth` 만 쓰는 앱이 그대로 동작해야 한다 — 확장은 전부 선택 고리다 |
 | `auth-session` (+`-jdbc`) | 리프레시 토큰 회전 · 재사용 탐지 · 세션 목록 · 철회 · 쿠키/바디 전달 | **계정 없이도** 쓸 수 있다 (`auth` 에만 의존). 자기 계정 저장소를 가진 앱도 세션만 얹을 수 있다 |
-| `account` (+`-jdbc`) | 계정 · 로그인 수단 · 가입 · 확인 · 재설정 · 변경 · 삭제 · 운영자 · 한도 · 이벤트 · HTTP | 계정 저장소 포트(`AccountRepository`)와 메일 · 캡차 · 알림 고리를 가진 한 덩어리. 저장은 어댑터 |
+| `account` (+`-jdbc`) | 계정 · 로그인 수단 · 이메일 변경 · 삭제 · 운영자 · 이벤트 · HTTP | 계정 저장소 포트(`AccountRepository`)와 메일 · 캡차 · 알림 고리를 가진 한 덩어리. 저장은 어댑터 |
+| `account-password` · `auth-password` | 이메일 + 비밀번호: 가입 · 확인 · 찾기 · 재설정 · 변경 · 정책 · 로그인 시도 제한 · 기록(account-password), `POST /auth/login`(auth-password) | 비밀번호는 **수단 하나**다 — 소셜 · 링크만 쓰는 서비스는 둘을 같이 뺀다. 둘은 서로를 모르고 auth 의 `LoginHooks` 로만 이어진다(한도 · 기록 고리 + 로그인 경로가 같이 있어야 한다). `account` 는 `PasswordCredentials` · `ResetLinkIssuer` 포트만 가진다 |
 | `auth-magic-link` | 메일 링크 로그인 | 같은 계정 위의 **수단 하나** — `SignInMethod` 가 새 수단이 계정 모듈을 건드리지 않고 붙는다는 증거 |
 | `auth-social` (확장) | 제공자가 확인한 이메일인지(`emailVerified`)와 제공자가 그 주소의 **권위자**인지(`emailAuthoritative`, 기본 `emailVerified` 와 같다)를 프로필에 싣는다 | 계정 연결 · 병합 규칙이 권위자 값을 믿는다 |
 | `platform` (확장) | `AccountErasureListener` · `ErasureRequest` · `AccountTombstone` · `AccountDataExporter` | board · notification-jdbc 가 `account` 를 몰라도 삭제 고리를 구현하도록 공용 계약으로 |
 
-의존 방향: `account → auth, platform` · `auth-magic-link → account` · `*-jdbc → 자기 계약 모듈 + persistence-jdbc`. 선택 통합(`notification-mail` · `captcha-turnstile` · `alert` · `idempotency` · `auth-social` · `job-queue-jdbc`)은 `account` 의 `compileOnly` 이고 각자 `@ConditionalOnClass` 자동설정이 있다 (`noOptionalTest` 가 없는 클래스패스를 증명).
+의존 방향: `account → auth, platform` · `account-password → account` · `auth-password → auth` · `auth-magic-link → account` · `*-jdbc → 자기 계약 모듈 + persistence-jdbc`. 선택 통합(`notification-mail` · `captcha-turnstile` · `alert` · `idempotency` · `auth-social` · `job-queue-jdbc`)은 `account` 의 `compileOnly` 이고 각자 `@ConditionalOnClass` 자동설정이 있다 (`noOptionalTest` 가 없는 클래스패스를 증명).
 
 ## 한 줄로 붙이기
 

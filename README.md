@@ -69,6 +69,7 @@ modules/                # grouped by area; a module's store / provider clients s
 
   [Auth and accounts]
   auth                  # stateless auth, JWT, dev-login, break-glass access (+ login hooks, session SPI)
+  |- auth-password      # POST /auth/login (pair with account-password; social-only services drop both)
   |- auth-session       # refresh tokens (rotation + reuse detection), session list, logout
   |  `- auth-session-jdbc   # session store for PostgreSQL / MySQL
   |- auth-magic-link    # email-link sign-in (one more method on the same account)
@@ -80,7 +81,8 @@ modules/                # grouped by area; a module's store / provider clients s
      |- auth-social-x       # optional X (Twitter) OAuth 2.0 + PKCE provider client
      |- auth-social-apple   # optional Sign in with Apple (iOS app tokens, account-deletion revoke)
      `- auth-social-oidc    # optional generic OpenID Connect provider (several by properties, LINE preset)
-  account               # account lifecycle: sign-up, email verification, reset, change, sign-in methods, deletion, login ID, admin
+  account               # account lifecycle: email change, sign-in methods, deletion, login ID, admin
+  |- account-password   # email + password: sign-up, verification, reset, change, login throttle (pair with auth-password)
   `- account-jdbc       # account store for PostgreSQL / MySQL
   author-profile        # optional author profiles: several unlinkable nicknames per account
   `- author-profile-jdbc # author profile store for PostgreSQL / MySQL
@@ -137,13 +139,13 @@ modules/                # grouped by area; a module's store / provider clients s
 
 Use modules as capability choices:
 
-- `apps/api` is the **starter**: the smallest composition that builds and boots **with real accounts** (`platform`, `auth`, `account-jdbc`, `auth-session-jdbc`, `legal-jdbc`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time` — sign-up, email verification, login, refresh tokens, password reset and deletion work out of the box; add `notification-mail` to actually send the mails), one `HelloController`, a short `application.yml`. A real service starts here and adds one dependency line per module it needs (`docs/minimal-composition.md`).
+- `apps/api` is the **starter**: the smallest composition that builds and boots **with real accounts** (`platform`, `auth`, `account-jdbc`, `account-password`, `auth-password`, `auth-session-jdbc`, `legal-jdbc`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time` — sign-up, email verification, login, refresh tokens, password reset and deletion work out of the box; add `notification-mail` to actually send the mails), one `HelloController`, a short `application.yml`. A real service starts here and adds one dependency line per module it needs (`docs/minimal-composition.md`).
 - `apps/workbench` is the **demo**: it depends on every module, keeps the sample controllers (`/api/v1/examples/*`, `/api/v1/skeleton/*`) and the integration tests that prove the modules coexist. Nothing is copied from it into a product; it is also the backend of the `react-skeleton` workbench UI.
 - Modules are never reached through component scan. Both apps live in a sub-package of the root (`dev.sumin.skeleton.app.api`, `dev.sumin.skeleton.app.workbench`), so `@SpringBootApplication` scans only app code, and every module registers its beans through its `AutoConfiguration`. A module's controllers/filters/advice therefore need no app-side wiring, and `skeleton.<module>.enabled=false` removes the module cleanly.
 - `modules/platform` is the shared foundation for most apps. It also contributes default OpenAPI metadata, standard response/error schemas, web policy defaults, outbound HTTP client scaffolding, and trace header documentation.
   See `docs/logging.md` for stable `skeleton.debug.*` logger categories.
 - `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans. It also contributes JWT bearer security metadata to OpenAPI.
-- `modules/account` + `account-jdbc` give the app real accounts (sign-up, verification, reset, change, deletion, admin tools, sign-in methods as rows of one `identities` table), `modules/auth-session` + `-jdbc` add refresh-token rotation and a device/session list, `modules/auth-magic-link` adds email-link sign-in — see `docs/accounts.md`.
+- `modules/account` + `account-jdbc` give the app real accounts (email change, deletion, admin tools, sign-in methods as rows of one `identities` table), `modules/account-password` + `modules/auth-password` add the email + password method (sign-up, verification, reset, change, login — a social-only service drops both), `modules/auth-session` + `-jdbc` add refresh-token rotation and a device/session list, `modules/auth-magic-link` adds email-link sign-in — see `docs/accounts.md`.
 - `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` are optional provider clients. Add only the provider modules an application actually needs.
 - `modules/async` is included when app/background work needs MDC and SecurityContext propagation across `@Async` or `CompletableFuture` work. It contributes `skeletonAsyncTaskExecutor`, `AsyncContextTaskDecorator`, and `AsyncTaskGroup`. See `docs/async.md`.
@@ -187,7 +189,7 @@ scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix>
 ```
 
 ```bash
-# 스타터 그대로 (platform, auth, account-jdbc, auth-session-jdbc, legal-jdbc, persistence-jdbc, db-postgresql, migration-flyway, time)
+# 스타터 그대로 (platform, auth, account-jdbc, account-password, auth-password, auth-session-jdbc, legal-jdbc, persistence-jdbc, db-postgresql, migration-flyway, time)
 scripts/new-project.sh ~/work/acme com.acme.shop acme Acme
 
 # 모듈 더하기 — 한 모듈 = 의존성 한 줄 + (바꿀 때만) 설정 몇 줄

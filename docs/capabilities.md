@@ -10,7 +10,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - **무엇이 필요하다는 말을 받으면** 아래 결정표에서 그 말(키워드)을 찾아 id · 명령 조각을 고른다. 표에 없으면 「전체 목록」의 키워드 열을 훑는다. 만들기 전에 이미 있는지 먼저 본다.
 - 모듈 이름 = id. `자동으로 따라온다` 는 Gradle 의존으로 닫혀 같이 오는 모듈이라 `--modules` 에 적지 않아도 된다. `함께 골라야 한다` 는 자동으로 오지 않지만 없으면 동작하지 않는 짝이다.
-- 스타터(`apps/api`)에 이미 있는 모듈: `account`, `account-jdbc`, `alert`, `auth`, `auth-session`, `auth-session-jdbc`, `auth-social`, `captcha-turnstile`, `db-postgresql`, `idempotency`, `job-queue-jdbc`, `legal`, `legal-jdbc`, `migration`, `migration-flyway`, `notification-mail`, `persistence-jdbc`, `platform`, `time` — 조각에서 뺀다.
+- 스타터(`apps/api`)에 이미 있는 모듈: `account`, `account-jdbc`, `account-password`, `alert`, `auth`, `auth-password`, `auth-session`, `auth-session-jdbc`, `auth-social`, `captcha-turnstile`, `db-postgresql`, `idempotency`, `job-queue-jdbc`, `legal`, `legal-jdbc`, `migration`, `migration-flyway`, `notification-mail`, `persistence-jdbc`, `platform`, `time` — 조각에서 뺀다.
 - 설정 키와 기본값은 `docs/config/modules/<모듈>.yml`, 모듈 한 쪽 문서는 `docs/modules/<모듈>.md`. 환경변수의 `<P>` 는 배포 선언의 `env_prefix`(설정 접두사의 대문자).
 
 ## new-project.sh 인터페이스
@@ -71,8 +71,9 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 | id | 요약 | 켜는 조각 | 키워드 (한국어 / 영어) | 짝 프런트 |
 |---|---|---|---|---|
-| `account` | 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐 · `required-when=WRITE` 면 읽기는 통과하고 쓰기에서만 막는다), 로그인 아이디(이메일이 바뀌어도 안 바뀌는 비공개 간판 — 아이디 또는 이메일로 로그인 · 실시간 중복 확인 POST /account/login-id/availability · 아이디 정하기 게이트 POST /account/login-id · 아이디 찾기 메일 POST /account/login-id/forgot · 탈퇴해도 재사용 금지(해시), 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 로그인 시도 제한, 관리자 도구(운영 시험 계정 표시 — 통계 · 매출 · 공지 all 에서 제외), 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 로그인 아이디, 아이디 찾기, 관리자 도구, 계정 정지, 프로필, 프로필 사진, 아바타, 시험 계정, 테스트 계정 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, login id, username login, find my id, admin tools, suspend account, profile, profile picture, avatar, test account, exclude from statistics | `@skeleton/auth` |
+| `account` | 계정 수명주기 — 이메일 변경(이메일 · 비밀번호 가입 · 확인 · 재설정 · 변경 · 로그인 시도 제한은 account-password), 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐 · `required-when=WRITE` 면 읽기는 통과하고 쓰기에서만 막는다), 로그인 아이디(이메일이 바뀌어도 안 바뀌는 비공개 간판 — 아이디 또는 이메일로 로그인 · 실시간 중복 확인 POST /account/login-id/availability · 아이디 정하기 게이트 POST /account/login-id · 아이디 찾기 메일 POST /account/login-id/forgot · 탈퇴해도 재사용 금지(해시), 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 관리자 도구(운영 시험 계정 표시 — 통계 · 매출 · 공지 all 에서 제외), 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 로그인 아이디, 아이디 찾기, 관리자 도구, 계정 정지, 프로필, 프로필 사진, 아바타, 시험 계정, 테스트 계정 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, login id, username login, find my id, admin tools, suspend account, profile, profile picture, avatar, test account, exclude from statistics | `@skeleton/auth` |
 | `account-jdbc` | account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일 · 닉네임 키를 utf8mb4_bin 으로 정확 일치, 닉네임 방식 셋을 유니크 (키, 꼬리표) 하나로). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법. 시험 계정 표시 표(account_test_marks)와 집계 조건(TestAccountFilter) 구현. | 스타터(apps/api)에 기본 포함 | 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration | `@skeleton/auth` |
+| `account-password` | 이메일 · 비밀번호 가입과 이메일 코드 확인, 비밀번호 찾기 · 재설정 · 변경, 비밀번호 정책 · 해시(bcrypt 기본 · argon2 선택, 옛 해시는 로그인 때 새 방식으로), 로그인 시도 제한(IP · 식별자별)과 로그인 결과 기록(lastLoginAt · 이벤트). 소셜 · 링크만 쓰는 서비스는 이 모듈과 auth-password 를 같이 뺀다. | 스타터(apps/api)에 기본 포함 | 회원가입, 이메일 가입, 비밀번호 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 비밀번호 변경, 로그인 시도 제한, 비밀번호 정책 / sign up, password sign up, email verification, password reset, forgot password, change password, login throttle, password policy | `@skeleton/auth` |
 | `ads-admob` | AdMob 보상형 광고의 서버 측 확인(SSV) 수신 — 구글이 서명해 부르는 GET /api/v1/ads/admob/ssv 를 ECDSA 서명(구글 공개키 24시간 이하 캐시)과 허용 광고 단위 목록으로 확인하고, 같은 거래 번호는 한 번만 PointWallet.earn 으로 포인트를 쌓는다. 클라이언트가 보상을 달라고 부르는 길은 없다. 기본 꺼짐. | `--modules ads-admob` | 애드몹 보상형 광고, 광고 보고 포인트, 리워드 광고, 광고 보상, 서버 측 확인 / admob rewarded ads, server-side verification, ssv callback, ad reward points, rewarded video | — |
 | `ads-web-rewarded` | 웹 보상형 광고(Google Ad Manager GPT) 세션 — POST /api/v1/ads/web-rewarded/sessions 로 세션을 열고 .../{id}/grant 로 한 번만 보상을 받는다. 서버가 시청을 증명할 수 없어서 1회용 세션 · 최소 경과 시간 · 계정/IP 하루 상한으로 남용을 막는다. 보상은 platform 의 RewardIssuer(예: point 적립) 또는 앱이 쓰는 1회용 토큰. 기본 꺼짐. | `--modules ads-web-rewarded` | 웹 보상형 광고, 광고 보고 보상, 웹 리워드 광고, 광고 세션, GPT 보상형 / web rewarded ads, gpt rewarded, rewarded ad session, ad reward token, rewarded web | `@skeleton/ads` |
 | `ads-web-rewarded-jdbc` | 웹 보상형 광고 저장소 — PostgreSQL · MySQL 로 ads-web-rewarded 의 저장 포트를 구현한다: 광고 세션 표(1회용 · 토큰은 해시만)와 하루 보상 카운터 표. 같은 세션의 동시 보상은 세션 줄 잠금으로 한 번만, 상한 직전 동시 보상은 조건부 +1 로 하나만 통과한다. | `--modules ads-web-rewarded-jdbc` | 웹 보상형 광고 저장소, 광고 세션 표, 광고 보상 카운터 / web rewarded ads storage, ad session tables, ad reward daily counters | `@skeleton/ads` |
@@ -85,10 +86,11 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `async` | @Async · CompletableFuture 작업이 호출 스레드의 trace id · MDC · 보안 컨텍스트를 이어받는 실행기와 작업 그룹. | `--modules async` | 비동기, 백그라운드 작업, 스레드 풀, @Async, 작업 그룹 / async, background task, thread pool, mdc propagation, completable future | — |
 | `async-notification` | 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로 흘려 보낸다. | `--modules async-notification` | 비동기 예외 알림, 백그라운드 오류 알림, 비동기 에러 / async exception alert, background error notification, uncaught async exception | — |
 | `audit-jdbc` | 운영자 행동 기록(OperatorAuditLog)을 DB 에 남긴다 (PostgreSQL · MySQL) — 누가 · 언제 · 무엇을 · 대상 · 결과 · 접속 IP/기기, 트리거로 더하기만(수정 불가 · 30일 안 삭제 불가), 행동과 같은 트랜잭션, 운영자 조회(기간 · 운영자 · 대상 필터 + 커서, 권한 audit.read), 보관 기한(기본 없음 — 정하면 매일 지움). | `--modules audit-jdbc` | 운영 기록, 감사 로그, 감사 기록, 운영자 행동 기록, 누가 바꿨나 / audit log, operator audit, admin activity log, who changed what | — |
-| `auth` | 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬 dev-login · 비상용 break-glass · SecurityFilterChain (계정 저장소는 앱이 정한다). | 스타터(apps/api)에 기본 포함 | 로그인, 로그아웃, 인증, 토큰, JWT, 권한, 관리자 로그인, 비상 접근 / login, authentication, jwt, token, dev login, break glass, security | `@skeleton/auth` |
+| `auth` | 로그인 계약 — JWT 발급/검증 · 로컬 dev-login · 비상용 break-glass · SecurityFilterChain (계정 저장소는 앱이 정한다. 비밀번호 로그인 POST /auth/login 은 auth-password). | 스타터(apps/api)에 기본 포함 | 로그인, 로그아웃, 인증, 토큰, JWT, 권한, 관리자 로그인, 비상 접근 / login, authentication, jwt, token, dev login, break glass, security | `@skeleton/auth` |
 | `auth-magic-link` | 이메일로 받은 한 번 쓰는 링크로 로그인(비밀번호 없이) — 이미 있는 계정으로 들어오고(skeleton.auth-magic-link.sign-up 으로 가입도 허용), 미확인 계정에서는 가입 때의 미확인 비밀번호를 버린다. | `--modules auth-magic-link` | 매직링크, 링크 로그인, 비밀번호 없는 로그인, 이메일 로그인 / magic link, passwordless, email sign in, link login | `@skeleton/auth` |
 | `auth-mfa` | 2단계 인증(TOTP) — 모든 로그인 길(비밀번호 · 소셜 · 매직 링크 · 탈퇴 취소)의 두 번째 단계. 인증 앱 등록(서버가 만든 QR) · 복구 코드 10개 · 틀린 코드 한도(대기 5번 · 계정 15분 10번) + 알림 메일 · 같은 코드 재사용 방지 · 끄기(다시 인증 + 코드). 비밀은 crypto 봉투로 저장. | `--modules auth-mfa,auth-mfa-jdbc` | 2단계 인증, 이중 인증, OTP, TOTP, 인증 앱, 복구 코드, MFA / two-factor authentication, 2fa, mfa, totp, authenticator app, recovery codes, second factor | — |
 | `auth-mfa-jdbc` | 2단계 인증 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 비밀은 암호화 봉투, 복구 코드는 해시만. 같은 TOTP 걸음 · 같은 복구 코드는 한 문장의 조건부 갱신이라 동시에 몰려도 하나만 통과한다. | `--modules auth-mfa-jdbc` | 2단계 인증 저장소, MFA DB / two-factor storage, mfa repository | — |
+| `auth-password` | 비밀번호 로그인 POST /api/v1/auth/login(이메일 · 아이디 + 비밀번호). 한도 · 기록 고리는 account-password 가 auth 의 LoginHooks 로 붙인다. 소셜 · 링크만 쓰는 서비스는 이 모듈과 account-password 를 같이 뺀다. | 스타터(apps/api)에 기본 포함 | 비밀번호 로그인, 이메일 로그인, 아이디 로그인, 로그인 API / password login, email login, username login, login endpoint | `@skeleton/auth` |
 | `auth-session` | 로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 · 재사용 탐지 + 이벤트), 세션 목록 · 개별 로그아웃, body 전달(기본) 또는 HttpOnly 쿠키(CSRF 헤더). 끝난 세션 주기 청소와 계정 삭제 때 세션 행 삭제. | 스타터(apps/api)에 기본 포함 | 세션, 리프레시 토큰, 토큰 갱신, 로그인 유지, 기기 목록, 다른 기기 로그아웃 / session, refresh token, token rotation, keep signed in, device list, sign out everywhere | `@skeleton/auth` |
 | `auth-session-jdbc` | auth-session 의 세션 · 리프레시 토큰 저장을 PostgreSQL · MySQL 로 — 한 토큰은 조건부 UPDATE 한 문장으로 한 번만 쓰이고, 인스턴스끼리 세션을 나눈다. | 스타터(apps/api)에 기본 포함 | 세션 저장, 세션 DB, 리프레시 토큰 저장 / session storage, session table, refresh token storage | `@skeleton/auth` |
 | `auth-social` | 소셜 로그인의 제공자 중립 계약 — POST /api/v1/auth/social/{provider}/login 라우팅 · 계정 연결 · 가입 정책 (제공자는 google · kakao · naver 모듈). | 스타터(apps/api)에 기본 포함 | 소셜 로그인, 간편 로그인, 구글 로그인, 카카오 로그인, 네이버 로그인, OAuth, 계정 연결 / social login, oauth, sign in with google, kakao login, naver login, account linking | `@skeleton/auth` |
@@ -263,7 +265,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 ## 항목 상세
 
-### `account` — 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐 · `required-when=WRITE` 면 읽기는 통과하고 쓰기에서만 막는다), 로그인 아이디(이메일이 바뀌어도 안 바뀌는 비공개 간판 — 아이디 또는 이메일로 로그인 · 실시간 중복 확인 POST /account/login-id/availability · 아이디 정하기 게이트 POST /account/login-id · 아이디 찾기 메일 POST /account/login-id/forgot · 탈퇴해도 재사용 금지(해시), 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 로그인 시도 제한, 관리자 도구(운영 시험 계정 표시 — 통계 · 매출 · 공지 all 에서 제외), 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다.
+### `account` — 계정 수명주기 — 이메일 변경(이메일 · 비밀번호 가입 · 확인 · 재설정 · 변경 · 로그인 시도 제한은 account-password), 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐 · `required-when=WRITE` 면 읽기는 통과하고 쓰기에서만 막는다), 로그인 아이디(이메일이 바뀌어도 안 바뀌는 비공개 간판 — 아이디 또는 이메일로 로그인 · 실시간 중복 확인 POST /account/login-id/availability · 아이디 정하기 게이트 POST /account/login-id · 아이디 찾기 메일 POST /account/login-id/forgot · 탈퇴해도 재사용 금지(해시), 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 관리자 도구(운영 시험 계정 표시 — 통계 · 매출 · 공지 all 에서 제외), 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/account`
 - 켜는 법: 스타터(apps/api)에 기본 포함
@@ -294,6 +296,21 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - account 없이 단독으로는 의미가 없다 — account 의 포트 구현이다
   - 다른 DB 는 AccountRepository · OneTimeTokenStore 를 앱이 직접 구현한다
 - 키워드: 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration
+
+### `account-password` — 이메일 · 비밀번호 가입과 이메일 코드 확인, 비밀번호 찾기 · 재설정 · 변경, 비밀번호 정책 · 해시(bcrypt 기본 · argon2 선택, 옛 해시는 로그인 때 새 방식으로), 로그인 시도 제한(IP · 식별자별)과 로그인 결과 기록(lastLoginAt · 이벤트). 소셜 · 링크만 쓰는 서비스는 이 모듈과 auth-password 를 같이 뺀다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/account-password`
+- 켜는 법: 스타터(apps/api)에 기본 포함
+- 의존 한 줄: `implementation(project(":modules:account-password"))`
+- 함께 골라야 한다: `auth-password`
+- HTTP 경로: `/api/v1`, `/api/v1/account`
+- 문서: `docs/modules/account-password.md`
+- 짝 프런트(react-skeleton): 항목 `auth`, `account-lifecycle` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - 설정은 account 와 같은 skeleton.account.* (sign-up · verification · reset · login · password) — 이 모듈의 접두사는 따로 없다
+  - POST /auth/login 자체는 auth-password — 둘은 서로를 모르고 auth 의 LoginHooks 로만 이어지므로 같이 둔다(한쪽만 두면 한도 · 기록 고리 또는 로그인 경로가 없다)
+  - 소셜 · 링크 로그인은 auth-social · auth-magic-link — 이 모듈 없이 account 만으로 돈다(비밀번호 줄이 있는 시드 계정은 기동 실패)
+- 키워드: 회원가입, 이메일 가입, 비밀번호 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 비밀번호 변경, 로그인 시도 제한, 비밀번호 정책 / sign up, password sign up, email verification, password reset, forgot password, change password, login throttle, password policy
 
 ### `ads-admob` — AdMob 보상형 광고의 서버 측 확인(SSV) 수신 — 구글이 서명해 부르는 GET /api/v1/ads/admob/ssv 를 ECDSA 서명(구글 공개키 24시간 이하 캐시)과 허용 광고 단위 목록으로 확인하고, 같은 거래 번호는 한 번만 PointWallet.earn 으로 포인트를 쌓는다. 클라이언트가 보상을 달라고 부르는 길은 없다. 기본 꺼짐.
 
@@ -472,7 +489,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 접속 로그 · 사용자 행동 분석이 아니다 — 운영자가 한 쓰기 행동만 남긴다
 - 키워드: 운영 기록, 감사 로그, 감사 기록, 운영자 행동 기록, 누가 바꿨나 / audit log, operator audit, admin activity log, who changed what
 
-### `auth` — 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬 dev-login · 비상용 break-glass · SecurityFilterChain (계정 저장소는 앱이 정한다).
+### `auth` — 로그인 계약 — JWT 발급/검증 · 로컬 dev-login · 비상용 break-glass · SecurityFilterChain (계정 저장소는 앱이 정한다. 비밀번호 로그인 POST /auth/login 은 auth-password).
 
 - 종류 · 상태: module · stable — 위치 `modules/auth`
 - 켜는 법: 스타터(apps/api)에 기본 포함
@@ -531,6 +548,20 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 쓰지 않는 경우:
   - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 2단계 인증 저장소, MFA DB / two-factor storage, mfa repository
+
+### `auth-password` — 비밀번호 로그인 POST /api/v1/auth/login(이메일 · 아이디 + 비밀번호). 한도 · 기록 고리는 account-password 가 auth 의 LoginHooks 로 붙인다. 소셜 · 링크만 쓰는 서비스는 이 모듈과 account-password 를 같이 뺀다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/auth-password`
+- 켜는 법: 스타터(apps/api)에 기본 포함
+- 의존 한 줄: `implementation(project(":modules:auth-password"))`
+- 함께 골라야 한다: `account-password`
+- HTTP 경로: `/api/v1/auth`
+- 문서: `docs/modules/auth-password.md`
+- 짝 프런트(react-skeleton): 항목 `auth` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - 가입 · 비밀번호 찾기 · 로그인 시도 제한은 account-password — 같이 둔다(auth-password 만 두면 한도가 없어 무제한 추측이 가능하다)
+  - JWT · 세션 · 2단계 고리 · 소셜 로그인은 auth · auth-session · auth-mfa · auth-social
+- 키워드: 비밀번호 로그인, 이메일 로그인, 아이디 로그인, 로그인 API / password login, email login, username login, login endpoint
 
 ### `auth-session` — 로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 · 재사용 탐지 + 이벤트), 세션 목록 · 개별 로그아웃, body 전달(기본) 또는 HttpOnly 쿠키(CSRF 헤더). 끝난 세션 주기 청소와 계정 삭제 때 세션 행 삭제.
 

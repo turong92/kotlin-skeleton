@@ -12,6 +12,8 @@
 | `auth-session-jdbc` | 세션 · 리프레시 토큰 저장소 (PostgreSQL · MySQL) | [auth-session-jdbc](auth-session-jdbc.md) |
 | `account` | 계정 수명주기: 가입 · 이메일 확인 · 재설정 · 변경 · 로그인 수단 · 삭제 · 운영자 도구 | [account](account.md) |
 | `account-jdbc` | 계정 · 로그인 수단 · 토큰 · 감사 저장소 (PostgreSQL · MySQL) | [account-jdbc](account-jdbc.md) |
+| `account-password` | 이메일 + 비밀번호 수단: 가입 · 코드 확인 · 찾기 · 재설정 · 변경 · 정책 · 로그인 시도 제한 (auth-password 와 같이) | [account-password](account-password.md) |
+| `auth-password` | 비밀번호 로그인 POST /auth/login (account-password 와 같이) | [auth-password](auth-password.md) |
 | `auth-magic-link` | 메일 링크 로그인 (같은 계정에 얹는 로그인 수단) | [auth-magic-link](auth-magic-link.md) |
 | `auth-social` | 제공자 중립 소셜 로그인 계약과 엔드포인트 | [auth-social](auth-social.md) |
 | `auth-social-apple` | Apple 로그인 제공자 (iOS 앱 토큰 검증 · 탈퇴 철회) | [auth-social-apple](auth-social-apple.md) |
