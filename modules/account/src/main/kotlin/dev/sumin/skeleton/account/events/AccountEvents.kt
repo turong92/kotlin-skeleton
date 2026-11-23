@@ -101,6 +101,8 @@ class AccountSessionEventListener(private val events: AccountEventPublisher, pri
             event.sessionId?.let { put("session", it) }
             if (event.count > 0) put("count", event.count.toString())
             event.reason?.let { put("reason", it) }
+            event.userAgent?.let { put("ua", it) }
+            event.reusedAfterSeconds?.let { put("reused_after_s", it.toString()) }
         }
         val type = when (event.type) {
             dev.sumin.skeleton.auth.session.SessionEventType.REFRESH_REUSE_DETECTED -> AccountEventType.REFRESH_REUSE_DETECTED

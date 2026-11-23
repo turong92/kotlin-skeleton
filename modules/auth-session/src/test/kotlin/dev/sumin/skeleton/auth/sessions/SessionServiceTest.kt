@@ -59,7 +59,7 @@ class SessionServiceTest {
     fun `replaying a rotated-away token is reuse and kills the whole family including the newest token`() {
         val s = service()
         val first = s.open(account.accountId, client)
-        val second = s.refresh(first.refreshToken!!, client)
+        val second = s.refresh(first.refreshToken!!, client); time.advance(Duration.ofMinutes(20))
 
         assertEquals("AUTH.REFRESH_REUSED", code { s.refresh(first.refreshToken!!, client) })
         assertEquals("AUTH.REFRESH_INVALID", code { s.refresh(second.session.refreshToken!!, client) })
@@ -67,6 +67,8 @@ class SessionServiceTest {
         assertEquals(account.accountId, reuse.accountId)
         assertEquals(first.sessionId, reuse.sessionId)
         assertEquals("203.0.113.7", reuse.ip)
+        assertEquals("JUnit/1", reuse.userAgent)
+        assertEquals(1200L, reuse.reusedAfterSeconds)   // 응답 유실(짧다)과 묵은 토큰(길다)을 가를 수 있게
         assertTrue(s.list(account.accountId, null).isEmpty())
     }
 

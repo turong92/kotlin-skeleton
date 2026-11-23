@@ -7,6 +7,7 @@ import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.time.Duration
 import java.time.Instant
 import java.util.Base64
 import java.util.HexFormat
@@ -77,7 +78,12 @@ class SessionService(
         // 유예 안의 재제시(응답을 잃은 브라우저 · 동시 새로고침)는 **같은 후속 토큰**을 돌려준다 — 새 토큰을 또 찍어 갈래를 만들지도, 세션을 닫지도 않는다
         if (usedAt != null && !(properties.reuseGrace.toMillis() > 0 && !usedAt.plus(properties.reuseGrace).isBefore(now))) {
             store.revoke(session.id, now, "REUSE")
-            onEvent(SessionEvent(SessionEventType.REFRESH_REUSE_DETECTED, session.accountId, session.id, ip = client.ip))
+            onEvent(
+                SessionEvent(
+                    SessionEventType.REFRESH_REUSE_DETECTED, session.accountId, session.id, ip = client.ip,
+                    userAgent = client.userAgent?.take(255), reusedAfterSeconds = Duration.between(usedAt, now).seconds,
+                ),
+            )
             throw RefreshReusedException()
         }
 

@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 `max-sessions-per-account` 를 넘을 때 닫는 세션을 「먼저 만든 것」에서 「마지막 사용이 가장 이른 것」(LRU)으로 바꿨다. 같은 계정으로 새 로그인이 여러 번 들어와도(자동 시험 · 여러 브라우저) 매일 쓰는 기기의 세션이 밀려나지 않는다. 설정 · 와이어 · DB 변경 없음.
 
+### 재사용 탐지 사건에 UA · 경과 초 — auth · auth-session · account (2026-11-23)
+
+`REFRESH_REUSE_DETECTED` 가 옛 토큰을 내민 요청의 user-agent 와, 그 토큰이 쓰인 뒤 몇 초 만에 다시 왔는지(`reused_after_s`)를 싣는다(계정 사건 `detail` 의 `ua` · `reused_after_s`). 응답 유실(짧다) · 묵은 토큰을 든 다른 클라이언트(길다)를 가를 수 있다. `SessionEvent` 에 기본값 있는 필드 둘을 더했을 뿐이라 듣는 쪽은 그대로 돈다.
+
 ### 비밀번호 가입 · 로그인을 모듈로 분리 — account-password · auth-password (2026-11-23)
 
 소셜 · 링크만 쓰는 서비스가 비밀번호 코드를 모듈째 뺄 수 있다. 와이어는 그대로다(경로 · DTO · 에러 코드 · `skeleton.account.*` 설정 · `ReauthInput.currentPassword`, DB 변경 없음). 패키지 이름도 그대로다.
