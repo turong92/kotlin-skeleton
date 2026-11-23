@@ -142,7 +142,7 @@ jobs:
             export SMOKE_EMAIL SMOKE_PASSWORD
             SMOKE_HEADERS_FILE="$headers" scripts/post-deploy-check.sh "$CANDIDATE_URL" --wait 90
           elif [ "$FIRST_DEPLOY" = true ]; then
-            # 시험 계정은 서비스가 처음 뜬 뒤에 가입시킨다 — 첫 배포는 로그인 확인만 건너뛰고 health · 원점 비밀(403)은 본다
+            # 시험 계정은 서비스가 처음 뜬 뒤에 가입시킨다 — 첫 배포는 로그인 확인만 건너뛰고 health · 원점 비밀(403)은 본다. /health 는 기동 확인 때문에 비밀 없이 열려 있어 API 경로로 본다
             echo "SMOKE_EMAIL · SMOKE_PASSWORD 판이 아직 없다 — 첫 배포라 로그인 확인은 건너뛴다"
             deadline=$((SECONDS + 90))
             code=000
@@ -153,9 +153,9 @@ jobs:
               sleep 1
             done
             [ "$code" = 200 ] || { echo "/health 가 200 이 아니다 (마지막 상태 $code)" >&2; exit 1; }
-            code="$(curl -sS -m 30 -o /dev/null -w '%{http_code}' "$CANDIDATE_URL/health" || true)"
-            [ "$code" = 403 ] || { echo "원점 비밀 없이 부른 /health 가 403 이 아니다 (상태 $code)" >&2; exit 1; }
-            echo "health 200 · 원점 비밀 없는 호출 403 확인"
+            code="$(curl -sS -m 30 -o /dev/null -w '%{http_code}' "$CANDIDATE_URL/api/v1/auth/me" || true)"
+            [ "$code" = 403 ] || { echo "원점 비밀 없이 부른 /api/v1/auth/me 가 403 이 아니다 (상태 $code)" >&2; exit 1; }
+            echo "health 200 · 원점 비밀 없는 API 호출 403 확인"
           else
             echo "::error::SMOKE_EMAIL · SMOKE_PASSWORD 판이 없다 — 시험 계정을 가입시키고 값을 넣는다"
             exit 1

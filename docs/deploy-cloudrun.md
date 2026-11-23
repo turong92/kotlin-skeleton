@@ -37,12 +37,12 @@
    무작위여도 되는 비밀(`JWT_SECRET` 등)과 플랫폼 비밀(`ORIGIN_AUTH_SECRET` · `<P>_WEB_CLIENT_IP_EDGE_SECRET_SHA256` · `<P>_JOB_QUEUE_WAKE_SECRET`)은 terraform 이 넣었다.
 8. **레포 변수 옮기기**: `terraform output -json github_variables` 의 열 칸을 이 앱 레포의 GitHub 변수로, react 레포에는 `web_github_variables`(`PAGES_PROJECT`)를 옮긴다. react 쪽은 Pages 편집 권한만 있는 Cloudflare 토큰을 GitHub 비밀로 둔다(react-skeleton `docs/new-project-recipe.md`).
 9. **첫 태그**: 서버 먼저, 웹 나중이다. `git tag v0.1.0 && git push origin v0.1.0`.
-   - 첫 배포는 새 서비스라 `SMOKE_EMAIL` · `SMOKE_PASSWORD` 판이 아직 없다 — 워크플로가 **로그인 확인을 건너뛰고** `/health` 200 과 원점 비밀 없는 호출 403 만 본다(로그에 그렇게 한 줄 남는다).
+   - 첫 배포는 새 서비스라 `SMOKE_EMAIL` · `SMOKE_PASSWORD` 판이 아직 없다 — 워크플로가 **로그인 확인을 건너뛰고** `/health` 200 과 원점 비밀 없는 API 호출(`/api/v1/auth/me`) 403 만 본다(로그에 그렇게 한 줄 남는다).
    - 서비스가 뜬 뒤 시험 계정을 가입시키고 두 값을 넣는다(`cloud prod gcloud secrets versions add SMOKE_EMAIL --data-file=-` · `SMOKE_PASSWORD`). 이후 배포에서 판이 없으면 워크플로가 실패한다.
 
 ## 2. 원점 비밀 — run.app 은 공개 주소다
 
-Worker 가 `X-Origin-Auth` 를 붙이고, 앱(`client-ip.mode=edge-secret`, `docs/client-ip.md`)은 그 헤더의 SHA-256 이 `<P>_WEB_CLIENT_IP_EDGE_SECRET_SHA256` 과 맞는 요청만 받는다. 헤더 없이 run.app 을 직접 부르면 403 이다(drain 경로만 예외 — 자기 비밀 `X-Wake-Secret` 이 막는다). Worker 는 `api_prefix` 아래만 넘기므로 `/internal/*` 은 Worker 를 거쳐 닿지 않는다.
+Worker 가 `X-Origin-Auth` 를 붙이고, 앱(`client-ip.mode=edge-secret`, `docs/client-ip.md`)은 그 헤더의 SHA-256 이 `<P>_WEB_CLIENT_IP_EDGE_SECRET_SHA256` 과 맞는 요청만 받는다. 헤더 없이 run.app 을 직접 부르면 403 이다(예외: drain 경로 — 자기 비밀 `X-Wake-Secret` 이 막는다, GET · HEAD `/health` — Cloud Run 기동 확인이 헤더 없이 부른다). Worker 는 `api_prefix` 아래만 넘기므로 `/internal/*` 은 Worker 를 거쳐 닿지 않는다.
 **회전은 아직 틀이 없다.** Worker 의 비밀과 앱의 해시는 terraform(`random_password`)이 만든 값이라, 손으로 한쪽만 바꾸면 다음 `apply` 가 되돌려 Worker 와 앱이 어긋나고 모든 API 호출이 403 이 된다. 지금은 바꾸지 않는다 — 필요해지면 두 해시를 받는 앱 기능(`edge-secret-sha256` 에 쉼표로 둘)을 쓰는 순서를 terraform 쪽에 먼저 만든다.
 
 ## 3. 깨우기 — Cloud Tasks + Scheduler
@@ -78,7 +78,7 @@ Worker 가 `X-Origin-Auth` 를 붙이고, 앱(`client-ip.mode=edge-secret`, `doc
 | 2 | `v0.1.0` 태그 → 워크플로 초록, post-deploy-check 통과 뒤 트래픽 100% | |
 | 3 | 깊은 웹 주소 새로고침은 Pages 에서 뜨고 `/api/v1/…` 은 API 로 간다(쿠키 로그인 유지) | |
 | 4 | 바깥 콜백(AdMob SSV · 보상 지급 · 소셜 로그인 · 결제 웹훅)이 `/api/v1` → Worker → 원점으로 닿는다 | |
-| 5 | 헤더 없이 run.app 직접 403, `/internal/…` 은 Worker 404, 비밀 없는 drain 은 401 | |
+| 5 | 헤더 없이 run.app 직접 403(`/health` 만 200), `/internal/…` 은 Worker 404, 비밀 없는 drain 은 401 | |
 | 6 | 앱이 보는 클라이언트 IP 가 실제 IP 다 | |
 | 7 | 인스턴스 0대에서 일을 넣으면 Tasks 가 수 초 안에 깨워 처리하고, 큐를 멈춰도 Scheduler 주기 안에 처리된다 | |
 | 8 | 60초 영상 ffmpeg 변환이 1Gi 에서 OOM 없이 drain 안에서 끝나고 그동안 다른 drain 은 `busy` | |
