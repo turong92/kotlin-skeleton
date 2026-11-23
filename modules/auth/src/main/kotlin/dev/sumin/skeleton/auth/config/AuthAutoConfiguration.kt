@@ -7,12 +7,9 @@ import dev.sumin.skeleton.auth.api.AuthController
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.api.SecondFactorGate
 import dev.sumin.skeleton.auth.jwt.JwtTokenService
-import dev.sumin.skeleton.auth.login.LoginHooks
-import dev.sumin.skeleton.auth.login.PasswordLoginService
 import dev.sumin.skeleton.auth.session.LoginSessionIssuer
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.project.ProjectRegistry
-import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.auth.security.AuthErrorWriter
 import dev.sumin.skeleton.auth.security.BearerTokenAuthenticator
 import dev.sumin.skeleton.auth.security.BreakGlassAuthenticationFilter
@@ -97,22 +94,8 @@ class AuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun passwordLoginService(
-        accountRepository: AuthAccountRepository,
-        passwordEncoder: PasswordEncoder,
-        authTokenResponseFactory: AuthTokenResponseFactory,
-        hooks: ObjectProvider<LoginHooks>,
-    ): PasswordLoginService =
-        PasswordLoginService(accountRepository, passwordEncoder, authTokenResponseFactory) { hooks.orderedStream().toList() }
-
-    @Bean
-    @ConditionalOnMissingBean
-    fun authController(
-        loginService: PasswordLoginService,
-        clientIps: ObjectProvider<ClientIps>,
-        operatorAccess: ObjectProvider<OperatorAccess>,
-    ): AuthController =
-        AuthController(loginService, clientIps.getIfAvailable { ClientIps() }, operatorAccess.getIfAvailable())
+    fun authController(operatorAccess: ObjectProvider<OperatorAccess>): AuthController =
+        AuthController(operatorAccess.getIfAvailable())
 
     /** 같은 규칙을 DeployGuard 로 내놓는다 — 플랫폼의 기동 요약에 보이고, `skeleton.env` 로도 보호된다 */
     @Bean
@@ -135,7 +118,6 @@ class AuthAutoConfiguration {
     @ConditionalOnMissingBean(name = ["authPublicEndpointContributor"])
     fun authPublicEndpointContributor(): PublicEndpointContributor =
         PublicEndpointContributor { registry ->
-            registry.add("POST", "/api/v1/auth/login")
             registry.add("POST", "/api/v1/auth/social/*/login")
             registry.add("POST", "/api/v1/auth/social/*/token")
         }

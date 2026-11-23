@@ -3,7 +3,7 @@ package dev.sumin.skeleton.auth.login
 import dev.sumin.skeleton.auth.account.AuthAccount
 
 /**
- * 비밀번호 로그인 시도 하나. [identifier] 는 정규화된 입력(`email:a@b.c` · `username:x` · `accountId:y`) — 계정이 있든 없든 같은 모양이라
+ * 비밀번호 로그인 시도 하나 (`auth-password`). [identifier] 는 정규화된 입력(`email:a@b.c` · `username:x` · `accountId:y`) — 계정이 있든 없든 같은 모양이라
  * 한도 키로 써도 계정 존재 여부가 드러나지 않는다.
  */
 data class LoginAttempt(
@@ -17,7 +17,7 @@ data class LoginAttempt(
 enum class LoginFailure { UNKNOWN_ACCOUNT, BAD_PASSWORD, BLOCKED }
 
 /**
- * 로그인 앞뒤에 끼는 고리 — 빈으로 등록하면 [PasswordLoginService] 가 모아 부른다 (`account` 가 한도 · 이벤트를 여기에 건다).
+ * 로그인 앞뒤에 끼는 고리 — 빈으로 등록하면 `auth-password` 의 `PasswordLoginService` 가 모아 부른다 (`account-password` 가 한도 · 이벤트를 여기에 건다 — 이 인터페이스가 `auth` 에 있어 서로를 몰라도 이어진다).
  * [beforeAttempt] 가 던지면 비밀번호 검사 없이 거기서 끝난다 (예: 429). 나머지는 알림용이라 던지지 않는다.
  */
 interface LoginHooks {

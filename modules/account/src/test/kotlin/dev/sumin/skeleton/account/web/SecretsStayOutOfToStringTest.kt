@@ -2,7 +2,6 @@ package dev.sumin.skeleton.account.web
 
 import dev.sumin.skeleton.account.social.LinkSocialRequest
 import dev.sumin.skeleton.auth.api.AuthTokenResponse
-import dev.sumin.skeleton.auth.api.PasswordLoginRequest
 import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import java.time.Instant
 import kotlin.test.Test
@@ -63,8 +62,7 @@ class SecretsStayOutOfToStringTest {
     }
 
     @Test
-    fun `the login request and the token response hide credentials`() {
-        assertHidden(PasswordLoginRequest(email = "a@b.co", password = secret))
+    fun `the token response hides credentials`() {
         assertHidden(AuthTokenResponse(secret, expiresAt = Instant.EPOCH, principal = CurrentPrincipal("acc_1"), refreshToken = secret))
     }
 

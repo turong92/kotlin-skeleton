@@ -13,6 +13,7 @@ class AccountWebTestApplication
 
 /** 메일은 기록하고 · 뒤로 넘기는 일은 그 자리에서 — 응답 직후 결과를 볼 수 있게 */
 @TestConfiguration(proxyBeanMethods = false)
+@org.springframework.context.annotation.Import(StandInLoginBeans::class)   // `/auth/login` 은 auth-password 의 길 — 여기서는 대역 (StandInLogin.kt)
 class AccountTestBeans {
     @Bean fun recordingMailer(): RecordingMailer = RecordingMailer()
     @Bean fun accountTaskRunner(): AccountTaskRunner = AccountTaskRunner.DIRECT

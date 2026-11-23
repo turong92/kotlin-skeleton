@@ -87,7 +87,6 @@ class AuthOpenApiAutoConfiguration {
 
         val PUBLIC_API_PATHS = setOf(
             "/api/v1/hello",
-            "/api/v1/auth/login",
         )
     }
 }
