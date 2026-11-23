@@ -32,7 +32,7 @@ class SignInDepartedAndFrozenTest {
         ),
     )
 
-    private fun AccountHarness.service() = AccountSignInService(core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google, Magic)))
+    private fun AccountHarness.service() = AccountSignInService(core, SignInMethodRegistry(listOf(dev.sumin.skeleton.account.FakePasswordSignInMethod(), Google, Magic)))
     private fun magic(email: String = "ann@example.com") = SignInProof("magic_link", email, email, true, null, null, "203.0.113.1", false)
     private fun google(subject: String, email: String?) = SignInProof("google", subject, email, email != null, "Ann", "ko", "203.0.113.1", true)
 

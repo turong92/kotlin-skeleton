@@ -15,10 +15,7 @@ class LoginIdSignInTest {
     )
 
     private fun AccountHarness.member(email: String = "ann@example.com", loginId: String = "Ann.Kim"): Account {
-        registration.signUp(SignUpCommand(email, "tangerine-42-moon", null, "ko", "Asia/Seoul", "203.0.113.1", null, loginId = loginId))
-            .also { o -> signUpIds[Emails.normalize(email)] = o.signUpId!! }
-        registration.verifyEmail(signUpIds.getValue(Emails.normalize(email)), lastCode(email), null)
-        return repo.findByEmail(Emails.normalize(email))!!
+        return activeAccount(email, displayName = null, loginId = loginId, locale = "ko")
     }
 
     /** 소셜로만 들어온 계정 — 이메일은 있고 비밀번호 수단은 없다 */

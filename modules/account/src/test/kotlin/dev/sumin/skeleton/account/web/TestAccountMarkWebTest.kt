@@ -62,6 +62,7 @@ class TestAccountMarkWebTest {
     @Autowired lateinit var mail: RecordingMailer
     @Autowired lateinit var audit: OperatorAuditLog
     @Autowired lateinit var marks: TestAccountMarks
+    @Autowired lateinit var fixtures: dev.sumin.skeleton.accounttest.AccountFixtures
     @Autowired lateinit var accounts: dev.sumin.skeleton.account.AccountRepository
 
     private val json = MediaType.APPLICATION_JSON
@@ -70,20 +71,9 @@ class TestAccountMarkWebTest {
 
     @BeforeEach fun clear() { mail.sent.clear(); recorded.clear() }
 
-    private fun register(email: String) {
-        val signUp = mvc.perform(
-            post("/api/v1/account/sign-up").with { it.remoteAddr = "198.51.100.${1 + markIps.getAndIncrement() % 200}"; it }.contentType(json)
-                .content("""{"email":"$email","password":"tangerine-42-moon"}"""),
-        ).andExpect(status().isAccepted).andReturn()
-        val id = JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")
-        mvc.perform(post("/api/v1/auth/verify-email").contentType(json).content("""{"signUpId":"$id","code":"${mail.of(MailKind.VERIFY_CODE).last().vars.getValue("code")}"}""")).andExpect(status().isOk)
-    }
+    private fun register(email: String) { fixtures.create(email) }
 
-    private fun login(email: String) = "Bearer " + JsonPath.read<String>(
-        mvc.perform(post("/api/v1/auth/login").with { it.remoteAddr = "203.0.113.${1 + markIps.getAndIncrement() % 200}"; it }.contentType(json).content("""{"username":"$email","password":"tangerine-42-moon"}"""))
-            .andExpect(status().isOk).andReturn().response.contentAsString,
-        "$.value.accessToken",
-    )
+    private fun login(email: String) = fixtures.bearer(email)
 
     private fun boss(): String {
         if (accounts.findByEmail("boss@example.com") == null) { register("boss@example.com") }

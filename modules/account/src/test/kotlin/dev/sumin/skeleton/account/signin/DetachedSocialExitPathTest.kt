@@ -23,7 +23,7 @@ class DetachedSocialExitPathTest {
             mail = AccountProperties.Mail(linkBaseUrl = "https://app.example.com"), password = AccountProperties.Password(bcryptStrength = 4),
         ),
     )
-    private val registry = SignInMethodRegistry(listOf(PasswordSignInMethod(), Google))
+    private val registry = SignInMethodRegistry(listOf(dev.sumin.skeleton.account.FakePasswordSignInMethod(), Google))
     private val signIn = AccountSignInService(h.core, registry)
     private val ids = IdentityService(h.core, registry)
     private val PW = ReauthInput("tangerine-42-moon")
@@ -48,8 +48,8 @@ class DetachedSocialExitPathTest {
         val mailed = h.mailer.of(MailKind.REAUTH_CODE).last { it.to == "bob@example.com" }.vars.getValue("code")
         assertEquals("ACCOUNT.LAST_SIGN_IN_METHOD", code { ids.unlink(b.id, bGoogle.id, "ses_b", ReauthInput(confirmationCode = mailed)) })
 
-        // B sets its first password (proved by the mailed code), now having two methods, and detaches the social with that password
-        h.passwords.change(b.id, null, "tangerine-42-moon", "ses_b", mailed)
+        // B has its first password (made directly - the password flows are account-password's), now having two methods, and detaches the social with that password
+        h.repo.addIdentityIfEmailVerified(dev.sumin.skeleton.account.Identity(h.core.newIdentityId(), b.id, "password", b.email!!, true, secret = h.credentials!!.hash("tangerine-42-moon"), createdAt = h.time.now()), null)
         ids.unlink(b.id, bGoogle.id, "ses_b", PW)
 
         // the way is free: A attaches it

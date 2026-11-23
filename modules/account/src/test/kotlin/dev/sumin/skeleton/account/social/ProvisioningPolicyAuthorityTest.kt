@@ -3,7 +3,7 @@ package dev.sumin.skeleton.account.social
 import dev.sumin.skeleton.account.AccountHarness
 import dev.sumin.skeleton.account.AccountProperties
 import dev.sumin.skeleton.account.signin.AccountSignInService
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
+import dev.sumin.skeleton.account.FakePasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.auth.social.oauth.OAuthUserProfile
 import dev.sumin.skeleton.common.ApplicationException
@@ -15,7 +15,7 @@ import kotlin.test.assertFailsWith
 class ProvisioningPolicyAuthorityTest {
     private val social = AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true)
     private fun harness() = AccountHarness(AccountProperties(social = social, mail = AccountProperties.Mail(linkBaseUrl = "https://x"), password = AccountProperties.Password(bcryptStrength = 4)))
-    private fun policy(h: AccountHarness) = AccountOAuthProvisioningPolicy(AccountSignInService(h.core, SignInMethodRegistry(listOf(PasswordSignInMethod(), SocialSignInMethod("google")))), social)
+    private fun policy(h: AccountHarness) = AccountOAuthProvisioningPolicy(AccountSignInService(h.core, SignInMethodRegistry(listOf(FakePasswordSignInMethod(), SocialSignInMethod("google")))), social)
     private fun profile(authoritative: Boolean) = OAuthUserProfile("google", "g-1", "ann@example.com", null, "Ann", emailVerified = true, emailAuthoritative = authoritative)
 
     @Test

@@ -24,22 +24,16 @@ class SecretsStayOutOfToStringTest {
 
     @Test
     fun `account request bodies hide passwords and tokens`() {
-        assertHidden(SignUpRequest("a@b.co", secret))
-        assertHidden(ResetPasswordRequest(secret, secret))
-        assertHidden(ChangePasswordRequest(secret, secret))
         assertHidden(ChangeEmailRequest("a@b.co", secret, secret, SocialReauthRequest("kakao", secret)))
         assertHidden(DeleteAccountRequest(secret, secret, SocialReauthRequest("kakao", secret)))
         assertHidden(ReauthRequest(secret, secret, SocialReauthRequest("kakao", secret)))
         assertHidden(SocialReauthRequest("kakao", secret))
-        assertHidden(VerifyEmailRequest(secret, secret))
-        assertHidden(ResendRequest(secret))
         assertHidden(LoginIdAvailabilityRequest(secret))
         assertHidden(LoginIdRequest(secret))
         assertHidden(LoginIdForgotRequest(secret, secret))
         assertHidden(CodeRequest(secret))
         assertHidden(LoginIdAvailabilityResponse(secret, false, "TAKEN"))
         assertHidden(dev.sumin.skeleton.account.LoginIdAvailability(secret, false, "TAKEN"))
-        assertHidden(SignUpResponse("VERIFICATION_SENT", secret))
         assertHidden(LinkSocialRequest(secret, null, secret, secret, SocialReauthRequest("kakao", secret)))
         assertHidden(LinkSocialRequest(null, idToken = secret, accessToken = secret))
         assertHidden(SocialReauthRequest("kakao", null, idToken = secret, accessToken = secret))
@@ -52,7 +46,6 @@ class SecretsStayOutOfToStringTest {
         assertHidden(dev.sumin.skeleton.account.SocialReauth("kakao", secret))
         assertHidden(dev.sumin.skeleton.account.MailboxProof(setOf("idn_1"), secret))
         assertHidden(dev.sumin.skeleton.account.challenge.ChallengeRow("id", "sign_up", "a@b.co", null, null, null, secret, "hash", 5, 0, Instant.EPOCH, Instant.EPOCH, Instant.EPOCH, null))
-        assertHidden(dev.sumin.skeleton.account.SignUpCommand("a@b.co", secret, null, null, null, null, null))
         assertHidden(dev.sumin.skeleton.auth.session.OpenedSession("ses_1", secret, Instant.EPOCH))
         assertHidden(dev.sumin.skeleton.account.AccountProperties.SeedAccount(email = "a@b.co", password = secret))
         assertHidden(dev.sumin.skeleton.account.AccountProperties.Blocks(secret = secret))
@@ -63,8 +56,6 @@ class SecretsStayOutOfToStringTest {
     fun `account 202 and 201 answers are declared with the platform operation annotations so OpenAPI says 202 not 200`() {
         fun annotated(type: Class<*>, name: String, annotation: Class<out Annotation>) = type.methods.single { it.name == name }.isAnnotationPresent(annotation)
         val accepted = dev.sumin.skeleton.common.openapi.AcceptedOperation::class.java
-        assertTrue(annotated(AccountPublicController::class.java, "resend", accepted))
-        assertTrue(annotated(AccountPublicController::class.java, "forgot", accepted))
         assertTrue(annotated(LoginIdReminderController::class.java, "forgot", accepted))
         assertTrue(annotated(AccountController::class.java, "changeEmail", accepted))
         assertTrue(annotated(AccountController::class.java, "delete", accepted))

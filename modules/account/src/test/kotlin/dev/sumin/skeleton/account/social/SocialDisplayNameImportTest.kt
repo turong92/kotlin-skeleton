@@ -5,7 +5,7 @@ import dev.sumin.skeleton.account.AccountProperties
 import dev.sumin.skeleton.account.AccountProperties.DisplayName.Fallback
 import dev.sumin.skeleton.account.AccountProperties.DisplayName.Uniqueness
 import dev.sumin.skeleton.account.signin.AccountSignInService
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
+import dev.sumin.skeleton.account.FakePasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.auth.social.oauth.OAuthUserProfile
 import kotlin.test.Test
@@ -25,7 +25,7 @@ class SocialDisplayNameImportTest {
                 displayName = AccountProperties.DisplayName(uniqueness = uniqueness, fallback = fallback, reserved = reserved),
             ),
         )
-        val registry = SignInMethodRegistry(listOf(PasswordSignInMethod()) + providers.map { SocialSignInMethod(it) })
+        val registry = SignInMethodRegistry(listOf(FakePasswordSignInMethod()) + providers.map { SocialSignInMethod(it) })
         return h to AccountOAuthProvisioningPolicy(AccountSignInService(h.core, registry), social)
     }
 

@@ -76,9 +76,11 @@ class Reauth(private val core: AccountCore) {
         codePurpose: String = ChallengePurposes.REAUTH, passwordFailure: AccountErrorCode = AccountErrorCode.CURRENT_PASSWORD_INVALID,
     ): Proof {
         val email = account.email
-        val hash = email?.let { core.accounts.findIdentity(SignInMethods.PASSWORD, it)?.secret }
+        // 비밀번호 포트(`account-password`)가 없으면 비밀번호 줄은 없다 — 메일 코드 · 소셜 길로 간다
+        val credentials = core.passwords()
+        val hash = if (credentials == null) null else email?.let { core.accounts.findIdentity(SignInMethods.PASSWORD, it)?.secret }
         if (hash != null) {
-            if (input.currentPassword == null || !core.hasher.matches(input.currentPassword, hash)) throw AccountException(passwordFailure)
+            if (input.currentPassword == null || !credentials!!.matches(input.currentPassword, hash)) throw AccountException(passwordFailure)
             return Proof.NONE
         }
         if (email == null) return socialProof(account, input.social)

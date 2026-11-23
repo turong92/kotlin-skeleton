@@ -49,6 +49,9 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
     val identities = IdentityService(core, registry)
     private val auth = AccountAuthRepository(core)
 
+    /** 로그인 성공 기록 (마지막 로그인 시각 + `LOGIN_SUCCESS`) — 토큰 발급이 끝난 뒤 호출자가 부른다. 모든 수단이 같은 한 곳을 지난다 */
+    fun recordSignIn(accountId: String, ip: String?, method: String) = core.recordSignIn(accountId, ip, method)
+
     /** 로그인할 계정을 돌려준다. 모르는 주체이고 가입을 허용하지 않았거나 삭제된 계정이면 null */
     fun signIn(proof: SignInProof): AuthAccount? {
         val method = registry.require(proof.method)
@@ -72,8 +75,7 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
             proveMailbox(account, core.accounts.findIdentity(method.code, subject), now)
             core.events.publish(AccountEventType.EMAIL_VERIFIED, account.id, proof.ip, mapOf("method" to method.code))
         }
-        core.accounts.update(account.id, AccountPatch(lastLoginAt = now), now)
-        core.events.publish(AccountEventType.LOGIN_SUCCESS, account.id, proof.ip, mapOf("method" to method.code))
+        recordSignIn(account.id, proof.ip, method.code)
         val fresh = core.accounts.findById(account.id) ?: return null
         core.bootstrap.afterVerified(fresh)
         return auth.toAuth(core.accounts.findById(account.id) ?: fresh)

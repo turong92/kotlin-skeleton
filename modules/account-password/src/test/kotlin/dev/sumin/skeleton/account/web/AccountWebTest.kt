@@ -190,26 +190,6 @@ class AccountWebTest {
     }
 
     @Test
-    fun `an authentication failure is never cached under an Idempotency-Key - the retry with the right password runs, a success is still replayed`() {
-        val email = registered()
-        val auth = bearer(login(email))
-        val key = java.util.UUID.randomUUID().toString()
-        val target = unique()
-        mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).header("Idempotency-Key", key).json("""{"newEmail":"$target","currentPassword":"wrong-password-1"}"""))
-            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.CURRENT_PASSWORD_INVALID"))
-        // the mistyped password must not stick to the key: another attempt really executes (and fails again on its own merits - not a stored replay)
-        mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).header("Idempotency-Key", key).json("""{"newEmail":"$target","currentPassword":"another-wrong-pass-2"}"""))
-            .andExpect(status().isBadRequest).andExpect(header().string("X-Idempotency-Replayed", "false"))
-        // the right password with the same key now works
-        mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).header("Idempotency-Key", key).json("""{"newEmail":"$target","currentPassword":"tangerine-42-moon"}"""))
-            .andExpect(status().isAccepted).andExpect(header().string("X-Idempotency-Replayed", "false"))
-        // and a success is replayed, not executed twice
-        mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).header("Idempotency-Key", key).json("""{"newEmail":"$target","currentPassword":"tangerine-42-moon"}"""))
-            .andExpect(status().isAccepted).andExpect(header().string("X-Idempotency-Replayed", "true"))
-        assertEquals(1, mail.of(MailKind.EMAIL_CHANGE_CODE).size)
-    }
-
-    @Test
     fun `an email change is confirmed with the code mailed to the new address, entered in the signed-in session, and moves the login`() {
         val email = registered()
         val newEmail = unique()

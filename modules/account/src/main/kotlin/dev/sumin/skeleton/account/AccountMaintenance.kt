@@ -45,6 +45,11 @@ class AccountSeeder(private val core: AccountCore, private val projects: Project
 
     /** [seeds] 는 시드 목록 — 프로젝트가 있으면 프로젝트마다 그 프로젝트의 설정으로 부른다 */
     fun seed(seeds: List<AccountProperties.SeedAccount> = core.props.seed.accounts) {
+        // 시드 계정은 비밀번호로 로그인하는 계정이다 — 해시할 곳(`account-password`)이 없으면 조용히 건너뛰지 않고 기동을 멈춘다
+        val credentials = core.passwords()
+        check(seeds.isEmpty() || credentials != null) {
+            "skeleton.account.seed.accounts defines ${seeds.size} seed account(s) with a password, but modules:account-password is not on the classpath: add it, or remove the seed accounts"
+        }
         seeds.forEachIndexed { index, seed ->
             val email = Emails.normalize(seed.email)
             if (core.accountByEmail(email) != null) return@forEachIndexed
@@ -54,7 +59,7 @@ class AccountSeeder(private val core: AccountCore, private val projects: Project
                 roles = core.props.defaultRoles + seed.roles, displayName = null, locale = ProfileRules.locale(seed.locale),
                 timeZone = null, createdAt = now, updatedAt = now,
             )
-            val identity = Identity(core.newIdentityId(), base.id, SignInMethods.PASSWORD, email, true, secret = core.hasher.hash(seed.password), createdAt = now)
+            val identity = Identity(core.newIdentityId(), base.id, SignInMethods.PASSWORD, email, true, secret = credentials!!.hash(seed.password), createdAt = now)
             // 시드 이름은 운영자가 정한 값이라 예약어 검사를 하지 않는다 (규칙에 맞게만 고친다). 방식이 TAGGED 면 꼬리표가 붙는다
             // 시드 아이디는 운영자가 정한 값이라 예약어 검사를 하지 않는다 (형식은 본다 — 틀리면 기동이 멈춘다). 꺼짐이면 읽지 않는다
             val loginId = seed.loginId?.takeIf { core.props.loginId.enabled && it.isNotBlank() }?.let {

@@ -3,7 +3,6 @@ package dev.sumin.skeleton.account.web
 import dev.sumin.skeleton.account.DeletionService
 import dev.sumin.skeleton.account.EmailChangeService
 import dev.sumin.skeleton.account.MeView
-import dev.sumin.skeleton.account.PasswordService
 import dev.sumin.skeleton.account.ProfileChange
 import dev.sumin.skeleton.account.ProfileService
 import dev.sumin.skeleton.account.Reauth
@@ -32,14 +31,13 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
-/** 로그인한 사람의 계정: 프로필 · 비밀번호 변경 · 이메일 변경 · 로그인 수단 · 삭제. HTTP 변환만. [AccountWebAutoConfiguration] 이 등록한다. */
+/** 로그인한 사람의 계정: 프로필 · 이메일 변경 · 로그인 수단 · 삭제. HTTP 변환만. [AccountWebAutoConfiguration] 이 등록한다. */
 @RestController
 @RequestMapping("/api/v1/account")
 @Tag(name = "Account")
 class AccountController(
     private val callers: AccountCallers,
     private val profile: ProfileService,
-    private val passwords: PasswordService,
     private val emailChange: EmailChangeService,
     private val identities: IdentityService,
     private val deletion: DeletionService,
@@ -66,17 +64,6 @@ class AccountController(
     @GetMapping("/me/avatar")
     fun avatar(authentication: Authentication?): DataResponse<SignedAvatar> =
         Response.ok(profile.avatarSigned(callers.require(authentication).accountId) ?: throw dev.sumin.skeleton.account.AccountException(dev.sumin.skeleton.account.AccountErrorCode.NOT_FOUND))
-
-    @Operation(
-        summary = "Change the password (or set a first one)",
-        description = "currentPassword is required when the account has a password. Other sessions are signed out; the caller's stays.",
-    )
-    @PostMapping("/password/change")
-    fun changePassword(authentication: Authentication?, @Valid @RequestBody request: ChangePasswordRequest): ResponseEntity<Void> {
-        val caller = callers.require(authentication)
-        passwords.change(caller.accountId, request.currentPassword, request.newPassword!!, caller.sessionId, request.confirmationCode)
-        return Response.noContent()
-    }
 
     @Operation(
         summary = "Ask to change the account email; a 6-digit code goes to the NEW address and nothing changes until it is entered in this session (202)",

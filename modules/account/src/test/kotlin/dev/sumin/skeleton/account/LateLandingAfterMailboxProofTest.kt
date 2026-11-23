@@ -2,7 +2,7 @@ package dev.sumin.skeleton.account
 
 import dev.sumin.skeleton.account.mail.MailKind
 import dev.sumin.skeleton.account.signin.IdentityService
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
+import dev.sumin.skeleton.account.FakePasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.account.social.SocialLinkService
 import dev.sumin.skeleton.account.social.SocialSignInMethod
@@ -36,13 +36,13 @@ class LateLandingAfterMailboxProofTest {
     private fun squatted(h: AccountHarness) {
         h.repo.insert(
             Account("acc_q", "victim@example.com", false, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now),
-            listOf(Identity("idn_pw", "acc_q", "password", "victim@example.com", false, secret = h.hasher.hash("squatter-pass-1"), createdAt = now)),
+            listOf(Identity("idn_pw", "acc_q", "password", "victim@example.com", false, secret = h.credentials!!.hash("squatter-pass-1"), createdAt = now)),
         )
     }
 
     /** 주인이 재설정 링크로 메일함을 증명했다 — [PasswordService.reset] 의 저장소 연산 그대로 */
     private fun ownerProvesMailbox(h: AccountHarness) {
-        check(h.repo.proveMailbox("acc_q", now, MailboxProof(keepIdentityIds = setOf("idn_pw"), passwordSecret = h.hasher.hash("owner-pass-9"), newPasswordIdentityId = "idn_new")))
+        check(h.repo.proveMailbox("acc_q", now, MailboxProof(keepIdentityIds = setOf("idn_pw"), passwordSecret = h.credentials!!.hash("owner-pass-9"), newPasswordIdentityId = "idn_new")))
     }
 
     @Test
@@ -50,14 +50,14 @@ class LateLandingAfterMailboxProofTest {
         val h = AccountHarness()
         squatted(h)
         val provider = HookProvider("alpha") { ownerProvesMailbox(h) }   // the proof lands while the provider is being called
-        val methods = SignInMethodRegistry(listOf(PasswordSignInMethod(), SocialSignInMethod("alpha")))
+        val methods = SignInMethodRegistry(listOf(FakePasswordSignInMethod(), SocialSignInMethod("alpha")))
         val links = SocialLinkService(OAuthProviderRegistry(listOf(provider), AuthSocialProperties(providers = mapOf("alpha" to AuthSocialProperties.Provider(enabled = true)))), IdentityService(h.core, methods), h.core)
 
         val e = assertFailsWith<ApplicationException> { links.link("acc_q", "alpha", "good-1", null, ReauthInput("squatter-pass-1"), ses) }
 
         assertEquals("ACCOUNT.REAUTH_FAILED", e.errorCode.code)
         assertEquals(listOf("password"), h.repo.identitiesOf("acc_q").map { it.method }, "nothing the squatter added survives the owner's proof")
-        assertEquals(true, h.hasher.matches("owner-pass-9", h.repo.findIdentity("password", "victim@example.com")!!.secret!!))
+        assertEquals(true, h.credentials!!.matches("owner-pass-9", h.repo.findIdentity("password", "victim@example.com")!!.secret!!))
     }
 
     @Test

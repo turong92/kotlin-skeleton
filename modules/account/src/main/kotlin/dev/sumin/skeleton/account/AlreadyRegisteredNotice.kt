@@ -6,7 +6,7 @@ import dev.sumin.skeleton.account.mail.MailKind
 
 // "이미 계정이 있어요" 메일 — 가입([RegistrationService])과 첫 이메일 등록([EmailChangeService])이 같은 메일 · 같은 규칙을 쓴다.
 
-internal fun AccountCore.notifyAlreadyRegistered(existing: Account, allowed: Boolean, credentialLinks: Boolean, kind: MailKind = MailKind.ALREADY_REGISTERED) {
+fun AccountCore.notifyAlreadyRegistered(existing: Account, allowed: Boolean, credentialLinks: Boolean, kind: MailKind = MailKind.ALREADY_REGISTERED) {
     val address = existing.email ?: return
     if (existing.status == AccountStatus.DELETED || !allowed) return
     mailer.send(AccountMail(kind, address, existing.locale, vars = alreadyRegisteredVars(existing, credentialLinks)))
@@ -23,11 +23,12 @@ internal fun AccountCore.alreadyRegisteredVars(existing: Account, credentialLink
     accounts.identitiesOf(existing.id).map { it.method }.distinct().takeIf { it.isNotEmpty() }?.let { put("methods", it.joinToString(",")) }
     if (existing.status == AccountStatus.SUSPENDED) return@buildMap
     if (credentialLinks && props.signUp.existingAccountMail.includeCredentialsLinks) {
-        issueResetLink(existing, onlyIfNoneOpen = true)?.let {
+        resetLinks()?.issue(existing, onlyIfNoneOpen = true)?.let {
             put("resetUrl", it.url); put("resetMinutes", it.minutes.toString())
             events.publish(AccountEventType.PASSWORD_RESET_REQUESTED, existing.id, detail = mapOf("via" to "already_registered"))
         }
         magicLinks()?.issue(existing)?.let { put("magicUrl", it.url); put("magicMinutes", it.minutes.toString()) }
     }
-    if ("resetUrl" !in this) links.forgot()?.let { put("forgotUrl", it) }
+    // 비밀번호 찾기 페이지는 비밀번호 수단(`account-password`)이 있을 때만 있다
+    if ("resetUrl" !in this && resetLinks() != null) links.forgot()?.let { put("forgotUrl", it) }
 }

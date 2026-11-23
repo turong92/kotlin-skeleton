@@ -6,11 +6,8 @@ import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AdminService
 import dev.sumin.skeleton.account.DeletionService
 import dev.sumin.skeleton.account.EmailChangeService
-import dev.sumin.skeleton.account.PasswordService
 import dev.sumin.skeleton.account.ProfileService
 import dev.sumin.skeleton.account.Reauth
-import dev.sumin.skeleton.account.RegistrationService
-import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.account.signin.IdentityService
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.web.ClientIps
@@ -40,13 +37,11 @@ class AccountWebAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun accountPublicController(
-        registration: RegistrationService,
-        passwords: PasswordService,
-        policy: PasswordPolicy,
         deletion: DeletionService,
+        signIns: dev.sumin.skeleton.account.signin.AccountSignInService,
         clientIps: ObjectProvider<ClientIps>,
         tokens: ObjectProvider<dev.sumin.skeleton.auth.api.AuthTokenResponseFactory>,
-    ): AccountPublicController = AccountPublicController(registration, passwords, policy, deletion, clientIps.getIfAvailable { ClientIps() }) { tokens.getObject() }
+    ): AccountPublicController = AccountPublicController(deletion, signIns, clientIps.getIfAvailable { ClientIps() }) { tokens.getObject() }
 
     /** 실시간 아이디 확인 — 아이디 기능이 켜졌을 때만 있다 (꺼짐이면 경로가 없다 = 404) */
     @Bean
@@ -74,14 +69,13 @@ class AccountWebAutoConfiguration {
     fun accountController(
         callers: AccountCallers,
         profile: ProfileService,
-        passwords: PasswordService,
         emailChange: EmailChangeService,
         identities: IdentityService,
         deletion: DeletionService,
         reauth: Reauth,
         discard: dev.sumin.skeleton.account.DiscardService,
         clientIps: ObjectProvider<ClientIps>,
-    ): AccountController = AccountController(callers, profile, passwords, emailChange, identities, deletion, reauth, discard, clientIps.getIfAvailable { ClientIps() })
+    ): AccountController = AccountController(callers, profile, emailChange, identities, deletion, reauth, discard, clientIps.getIfAvailable { ClientIps() })
 
     @Bean
     @ConditionalOnMissingBean
@@ -130,13 +124,7 @@ class AccountWebAutoConfiguration {
     @ConditionalOnMissingBean(name = ["accountPublicEndpointContributor"])
     fun accountPublicEndpointContributor(): PublicEndpointContributor =
         PublicEndpointContributor { registry ->
-            registry.add("POST", "/api/v1/account/sign-up")
-            registry.add("POST", "/api/v1/account/verification/resend")
-            registry.add("POST", "/api/v1/auth/verify-email")
             registry.add("POST", "/api/v1/account/delete/cancel")
-            registry.add("POST", "/api/v1/account/password/forgot")
-            registry.add("POST", "/api/v1/account/password/reset")
-            registry.add("GET", "/api/v1/account/password/policy")
             registry.add("GET", "/api/v1/auth/methods")
         }
 }

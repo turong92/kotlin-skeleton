@@ -6,6 +6,8 @@ import dev.sumin.skeleton.account.challenge.CodeCheck
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.MailKind
+import dev.sumin.skeleton.account.password.PasswordHasher
+import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PlatformErrorCode
@@ -56,7 +58,7 @@ data class SignUpOutcome(val status: SignUpStatus, val signUpId: String? = null,
  * 메일은 [AccountCore.tasks] 로 넘긴다. 이미 계정이 있는 주소에는 코드 대신 "이미 계정이 있어요" 메일이 가고, 그 시도의 코드는 누구도 모른다 — 코드 입력은 새 주소의 틀린 추측과 똑같이 줄어들다 끝난다.
  * 이메일 확인을 끈 앱(`sign-up.email-verification=false`)만 동기로 돌며 중복이 409 로 드러난다.
  */
-class RegistrationService(private val core: AccountCore) {
+class RegistrationService(private val core: AccountCore, private val hasher: PasswordHasher, private val policy: PasswordPolicy) {
     private val json = JsonMapper.builder().build()
 
     fun signUp(cmd: SignUpCommand): SignUpOutcome {
@@ -81,9 +83,9 @@ class RegistrationService(private val core: AccountCore) {
         core.captcha.check(cmd.captchaToken, cmd.ip, "sign_up")
         // 아이디를 쓸 수 있나 — 캡차 **뒤**(캡차를 못 넘긴 호출에게 아이디의 상태를 알리지 않는다), 비밀번호 정책 앞. 아이디만 본다: 같이 낸 이메일이 가입돼 있든 아니든 같은 시점 · 같은 응답이다
         if (loginId != null) core.requireLoginIdAvailable(loginId)
-        val violations = core.policy.check(cmd.password, email)
+        val violations = policy.check(cmd.password, email)
         if (violations.isNotEmpty()) throw PasswordPolicyException(violations)
-        val hash = core.hasher.hash(cmd.password)
+        val hash = hasher.hash(cmd.password)
 
         if (!p.signUp.emailVerification) return SignUpOutcome(createVerified(email, hash, cmd, name, loginId))
 
@@ -200,16 +202,6 @@ class RegistrationService(private val core: AccountCore) {
         val fresh = core.accounts.findById(account.id) ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
         core.bootstrap.afterVerified(fresh)
         return AccountAuthRepository(core).toAuth(core.accounts.findById(account.id) ?: fresh) ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
-    }
-
-    /**
-     * 코드로 가입한 사람의 로그인을 **토큰이 발급된 뒤에** 기록한다 — [verifyEmail] 의 결과로 토큰 발급이 막히면(정지 · 삭제) 성공 로그인으로 남지 않는다.
-     * 호출자(컨트롤러)가 `AuthTokenResponseFactory.issue` 가 던지지 않은 다음에 부른다.
-     */
-    fun recordSignIn(accountId: String, ip: String?, method: String = SignInMethods.PASSWORD) {
-        val now = core.time.now()
-        core.accounts.update(accountId, AccountPatch(lastLoginAt = now), now)
-        core.events.publish(AccountEventType.LOGIN_SUCCESS, accountId, ip, mapOf("method" to method))
     }
 
     private fun refuseIfBlocked(email: String) {

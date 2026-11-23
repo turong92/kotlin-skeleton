@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":modules:platform"))
     implementation(project(":modules:auth"))
     implementation(project(":modules:account-jdbc"))       // 진짜 계정: 가입 · 이메일 확인 · 재설정 · 삭제 (+ account). 시드 계정은 application-local.yml
+    implementation(project(":modules:account-password"))   // 이메일 + 비밀번호 가입 · 확인 · 찾기 · 재설정 · 변경 (+ account)
     implementation(project(":modules:auth-session-jdbc"))  // 리프레시 토큰 · 세션 목록 (+ auth-session)
     implementation(project(":modules:auth-magic-link"))    // 메일 링크 로그인 — 같은 계정 위의 로그인 수단 하나
     implementation(project(":modules:legal-jdbc"))         // 약관 · 개인정보 처리방침 · 마케팅 동의 + 가입 동의 기록 + 재동의 (+ legal). 문서는 src/main/resources/legal/ (지금은 TEMPLATE) — docs/legal.md

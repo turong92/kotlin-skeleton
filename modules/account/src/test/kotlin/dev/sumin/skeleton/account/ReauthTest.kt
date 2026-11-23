@@ -3,9 +3,7 @@ package dev.sumin.skeleton.account
 import dev.sumin.skeleton.account.abuse.RateLimitedException
 import dev.sumin.skeleton.account.challenge.ChallengePurposes
 import dev.sumin.skeleton.account.mail.MailKind
-import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.common.ApplicationException
-import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -13,41 +11,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** 비밀번호를 바꾸면 그 전에 나간 민감한 코드 · 링크가 죽고, 비밀번호 없는 계정의 민감한 일은 메일 코드로 다시 인증한다 */
+/** 민감한 일 앞의 다시 인증: 비밀번호 줄(포트가 있을 때) · 메일 코드. 비밀번호 변경이 코드를 죽이는 시험은 `account-password` 의 ReauthTest */
 class ReauthTest {
     private val h = AccountHarness()
     private val ses = "ses_1"
     private fun code(block: () -> Unit) = assertFailsWith<ApplicationException> { block() }.errorCode.code
-
-    private fun attackerRequestsEmailChange(): Account {
-        val a = h.activeAccount()
-        h.emailChange.request(a.id, "attacker@example.com", ReauthInput("tangerine-42-moon"), ses)   // a stolen session + a known password
-        return a
-    }
-
-    @Test
-    fun `changing the password kills a pending email-change code`() {
-        val a = attackerRequestsEmailChange()
-        val sent = h.mailer.of(MailKind.EMAIL_CHANGE_CODE).single().vars.getValue("code")
-        h.passwords.change(a.id, "tangerine-42-moon", "a-brand-new-pass-7", null)   // the victim, warned by the old-address notice
-        assertEquals("ACCOUNT.CODE_EXPIRED", code { h.emailChange.confirm(a.id, ses, sent) })
-        assertEquals("ann@example.com", h.repo.findById(a.id)!!.email)
-    }
-
-    @Test
-    fun `resetting the password kills pending email-change, delete and reauth codes and magic links`() {
-        val a = attackerRequestsEmailChange()
-        h.deletion.requestConfirmation(a.id, ses)
-        h.reauth.requestConfirmation(a.id, ses)
-        val magic = h.tokens.issue(TokenPurposes.MAGIC_LINK, "ann@example.com", a.id, Duration.ofMinutes(15))
-        h.passwords.forgot("ann@example.com", "203.0.113.1", null)
-        h.passwords.reset(h.mailer.tokenOf(h.mailer.of(MailKind.PASSWORD_RESET).single()), "a-brand-new-pass-7")
-
-        assertNull(h.challenges.findOpen(ChallengePurposes.EMAIL_CHANGE, a.id))
-        assertNull(h.challenges.findOpen(ChallengePurposes.DELETE_CONFIRM, a.id))
-        assertNull(h.challenges.findOpen(ChallengePurposes.REAUTH, a.id))
-        assertNull(h.tokens.peek(TokenPurposes.MAGIC_LINK, magic))
-    }
 
     @Test
     fun `a reauth code is mailed to the account address as a code - not a link - and capped per account`() {
@@ -81,7 +49,7 @@ class ReauthTest {
         h.reauth.requestConfirmation("acc_a", ses)
         val sent = h.mailer.of(MailKind.REAUTH_CODE).single().vars.getValue("code")
         val wrong = if (sent == "000000") "000001" else "000000"
-        fun attempt(c: String) = code { h.passwords.change("acc_a", null, "a-brand-new-pass-7", ses, c) }
+        fun attempt(c: String) = code { h.reauth.check("acc_a", ReauthInput(confirmationCode = c), ses) }
         repeat(4) { assertEquals("ACCOUNT.CODE_INVALID", attempt(wrong)) }
         assertEquals("ACCOUNT.CODE_EXPIRED", attempt(wrong))
         assertEquals("ACCOUNT.CODE_EXPIRED", attempt(sent))
@@ -90,7 +58,7 @@ class ReauthTest {
     @Test
     fun `linking a sign-in method tells the account's address`() {
         val a = h.activeAccount()
-        val registry = dev.sumin.skeleton.account.signin.SignInMethodRegistry(listOf(dev.sumin.skeleton.account.signin.PasswordSignInMethod(), object : dev.sumin.skeleton.account.signin.SignInMethod { override val code = "google" }))
+        val registry = dev.sumin.skeleton.account.signin.SignInMethodRegistry(listOf(FakePasswordSignInMethod(), object : dev.sumin.skeleton.account.signin.SignInMethod { override val code = "google" }))
         dev.sumin.skeleton.account.signin.IdentityService(h.core, registry).link(a.id, "google", "g-1", verified = true)
         val notice = h.mailer.of(MailKind.IDENTITY_LINKED_NOTICE).single()
         assertEquals("ann@example.com", notice.to)
@@ -103,5 +71,16 @@ class ReauthTest {
         assertEquals("ACCOUNT.CURRENT_PASSWORD_INVALID", code { h.reauth.check(a.id, ReauthInput("not-the-password"), ses) })
         h.reauth.check(a.id, ReauthInput("tangerine-42-moon"), ses)
         assertEquals("ACCOUNT.NOT_FOUND", code { h.reauth.check("acc_missing", ReauthInput("tangerine-42-moon"), ses) })
+    }
+
+    @Test
+    fun `without a password port the password line does not exist - an account that still has a password row is re-authenticated by mailed code`() {
+        val bare = AccountHarness(passwordCredentials = null)
+        val a = bare.activeAccount(password = null)
+        bare.repo.addIdentityIfEmailVerified(Identity("idn_pw", a.id, SignInMethods.PASSWORD, "ann@example.com", true, secret = "fake:tangerine-42-moon", createdAt = bare.time.now()), null)
+        assertEquals("ACCOUNT.REAUTH_REQUIRED", assertFailsWith<ApplicationException> { bare.reauth.check(a.id, ReauthInput("tangerine-42-moon"), ses) }.errorCode.code, "the password is not even looked at")
+        bare.reauth.requestConfirmation(a.id, ses)
+        val sent = bare.mailer.of(MailKind.REAUTH_CODE).single().vars.getValue("code")
+        bare.reauth.check(a.id, ReauthInput(confirmationCode = sent), ses).commit()
     }
 }

@@ -6,8 +6,6 @@ import dev.sumin.skeleton.account.AccountProperties
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.account.events.AccountEvent
-import dev.sumin.skeleton.alert.AlertKind
-import dev.sumin.skeleton.alert.OwnerAlerts
 import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.auth.api.AuthErrorCode
 import dev.sumin.skeleton.auth.login.LoginAttempt
@@ -208,25 +206,6 @@ class LoginControlsTest {
         assertEquals(h.time.now(), h.repo.findById(a.id)!!.lastLoginAt)
         assertEquals(h.time.now(), h.repo.findIdentity("password", "ann@example.com")!!.lastUsedAt)
         assertTrue(h.events.all.any { it.type == AccountEventType.LOGIN_SUCCESS && it.accountId == a.id && it.detail["method"] == "password" })
-    }
-
-    // ---- alert bridge
-
-    private class CapturingAlerts : OwnerAlerts {
-        val emitted = mutableListOf<Triple<AlertKind, String, String>>()
-        override fun emit(kind: AlertKind, key: String, detail: String, immediate: Boolean) { emitted += Triple(kind, key, detail) }
-    }
-
-    @Test
-    fun `throttling and refresh-token reuse raise owner alerts that carry no account data`() {
-        val alerts = CapturingAlerts()
-        val listener = AlertingAccountEventListener(alerts)
-        listener.on(AccountEvent(AccountEventType.LOGIN_THROTTLED, null, h.time.now(), "203.0.113.9", mapOf("scope" to "ip")))
-        listener.on(AccountEvent(AccountEventType.REFRESH_REUSE_DETECTED, "acc_1", h.time.now()))
-        listener.on(AccountEvent(AccountEventType.LOGIN_SUCCESS, "acc_1", h.time.now()))
-
-        assertEquals(listOf("account.login-throttled", "account.refresh-reuse"), alerts.emitted.map { it.first.name })
-        assertTrue(alerts.emitted.none { "@" in it.third })
     }
 
     @Test

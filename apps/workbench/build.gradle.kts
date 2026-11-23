@@ -77,6 +77,7 @@ dependencies {
     implementation(project(":modules:board"))
     implementation(project(":modules:board-jdbc"))
     implementation(project(":modules:account-jdbc"))        // + account — 클래스패스에 있어 설정 스니펫이 바인딩된다. 자동설정은 application.yml 에서 꺼 둔다 (아래 참고)
+    implementation(project(":modules:account-password"))     // + account-password — account 와 같이 클래스패스에 둔다 (설정 스니펫 · 모듈 목록 시험)
     implementation(project(":modules:auth-session-jdbc"))   // + auth-session
     implementation(project(":modules:auth-magic-link"))
     implementation(project(":modules:auth-web-handoff"))   // 앱 -> 웹 자동 로그인 코드 - 기본 꺼짐

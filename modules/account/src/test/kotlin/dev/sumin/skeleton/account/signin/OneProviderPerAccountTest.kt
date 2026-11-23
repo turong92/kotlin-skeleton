@@ -27,7 +27,7 @@ class OneProviderPerAccountTest {
     fun `the service answers IDENTITY_EXISTS for it`() {
         val h = AccountHarness()
         val a = h.activeAccount()
-        val ids = IdentityService(h.core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google)))
+        val ids = IdentityService(h.core, SignInMethodRegistry(listOf(dev.sumin.skeleton.account.FakePasswordSignInMethod(), Google)))
         ids.link(a.id, "google", "g-1", verified = true, expectEmailVerified = a.emailVerified)
         assertEquals("ACCOUNT.IDENTITY_EXISTS", assertFailsWith<ApplicationException> { ids.link(a.id, "google", "g-2", verified = true, expectEmailVerified = a.emailVerified) }.errorCode.code)
     }

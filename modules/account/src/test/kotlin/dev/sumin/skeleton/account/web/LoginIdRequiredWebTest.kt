@@ -54,6 +54,7 @@ private val claimIps = java.util.concurrent.atomic.AtomicInteger()
 class LoginIdRequiredWebTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var mail: RecordingMailer
+    @Autowired lateinit var fixtures: dev.sumin.skeleton.accounttest.AccountFixtures
     @Autowired lateinit var accounts: dev.sumin.skeleton.account.AccountRepository
 
     private val json = MediaType.APPLICATION_JSON
@@ -69,10 +70,8 @@ class LoginIdRequiredWebTest {
     private fun member(loginId: String = uniq()): String {
         val email = "$loginId@example.com"
         mail.sent.clear()
-        val signUp = mvc.perform(post("/api/v1/account/sign-up").contentType(json).content("""{"email":"$email","password":"tangerine-42-moon","loginId":"$loginId"}""")).andExpect(status().isAccepted).andReturn()
-        val id = JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")
-        val verified = mvc.perform(post("/api/v1/auth/verify-email").contentType(json).content("""{"signUpId":"$id","code":"${mail.of(MailKind.VERIFY_CODE).last().vars.getValue("code")}"}""")).andExpect(status().isOk).andReturn()
-        return bearer(verified)
+        fixtures.create(email, loginId = loginId)
+        return fixtures.bearer(email)
     }
 
     /** 정하기는 IP 별로도 센다(I3) — 시험마다 다른 IP 에서 부르고, 한 IP 를 일부러 쓰는 시험만 [ip] 를 넘긴다 */

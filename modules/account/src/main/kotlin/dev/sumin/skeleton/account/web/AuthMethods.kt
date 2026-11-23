@@ -73,7 +73,8 @@ class AuthMethodsController(
             .sortedBy { if (it == SignInMethods.PASSWORD) 0 else 1 }
         val view = AuthMethodsView(
             methods = codes,
-            signUp = SignUpOptions(props.signUp.enabled, props.signUp.emailVerification, props.social.signUp),
+            // 비밀번호 가입은 비밀번호 수단(`account-password`)이 레지스트리에 있고 가입이 열려 있을 때만
+            signUp = SignUpOptions(SignInMethods.PASSWORD in codes && props.signUp.enabled, props.signUp.emailVerification, props.social.signUp),
             social = socials,
             captchaRequired = props.captcha.required,
             refreshDelivery = refreshDelivery(),

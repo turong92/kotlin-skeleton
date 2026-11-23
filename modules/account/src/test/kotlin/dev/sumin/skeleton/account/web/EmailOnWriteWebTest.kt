@@ -71,6 +71,7 @@ class OnWriteProbeBeans {
 class EmailOnWriteWebTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var mail: RecordingMailer
+    @Autowired lateinit var fixtures: dev.sumin.skeleton.accounttest.AccountFixtures
     @Autowired lateinit var sessions: dev.sumin.skeleton.accounttest.FakeSessionBook
 
     private val json = MediaType.APPLICATION_JSON
@@ -87,10 +88,8 @@ class EmailOnWriteWebTest {
     private fun withAddress(): String {
         val loginId = uniq()
         mail.sent.clear()
-        val signUp = mvc.perform(post("/api/v1/account/sign-up").contentType(json).content("""{"email":"$loginId@example.com","password":"tangerine-42-moon","loginId":"$loginId"}""")).andExpect(status().isAccepted).andReturn()
-        val id = JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")
-        val verified = mvc.perform(post("/api/v1/auth/verify-email").contentType(json).content("""{"signUpId":"$id","code":"${mail.of(MailKind.VERIFY_CODE).last().vars.getValue("code")}"}""")).andExpect(status().isOk).andReturn()
-        return bearer(verified)
+        fixtures.create("$loginId@example.com", loginId = loginId)
+        return fixtures.bearer("$loginId@example.com")
     }
 
     private fun ResultActions.blockedBy(code: String) = andExpect(status().isForbidden).andExpect(jsonPath("$.code").value(code))
@@ -112,7 +111,7 @@ class EmailOnWriteWebTest {
     }
 
     @Test
-    fun `an account without an address links and unlinks social sign-in methods, but still cannot create a password`() {
+    fun `an account without an address links and unlinks social sign-in methods, but other account writes stay blocked`() {
         val auth = noAddress("c-noemail-link1")
         val own = """{"provider":"fakeidp","authorizationCode":"c-noemail-link1"}"""
         mvc.perform(post("/api/v1/account/identities/social/fakeidp2").header("Authorization", auth).contentType(json).content("""{"authorizationCode":"c-noemail-link2"}"""))
@@ -124,7 +123,7 @@ class EmailOnWriteWebTest {
         val linkedId = JsonPath.read<List<String>>(listed.response.contentAsString, "$.values[?(@.method=='fakeidp2')].id").single()
         mvc.perform(delete("/api/v1/account/identities/$linkedId").header("Authorization", auth).contentType(json).content("""{"socialReauth":$own}"""))
             .andExpect(status().isNoContent)
-        mvc.perform(post("/api/v1/account/password/change").header("Authorization", auth).contentType(json).content("{}")).blockedBy(emailRequired)
+        mvc.perform(post("/api/v1/account/reauth/confirmation").header("Authorization", auth)).blockedBy(emailRequired)
     }
 
     @Test
@@ -142,7 +141,6 @@ class EmailOnWriteWebTest {
 
         mvc.perform(get("/api/v1/auth/me").header("Authorization", auth)).andExpect(status().isOk)
         mvc.perform(post("/api/v1/account/delete/confirmation").header("Authorization", auth)).andExpect(status().isAccepted)
-        mvc.perform(post("/api/v1/account/password/change").header("Authorization", auth).contentType(json).content("{}")).blockedBy(emailRequired)   // other account changes: the address comes first
         mvc.perform(post("/api/v1/account/reauth/confirmation").header("Authorization", auth)).blockedBy(emailRequired)
         mvc.perform(post("/api/v1/payments/orders").header("Authorization", auth)).blockedBy(emailRequired)   // payments are not opened
     }
@@ -201,8 +199,6 @@ class EmailOnWriteWebTest {
 
         mvc.perform(post("/api/v1/account/login-id/availability").contentType(json).content("""{"loginId":"$chosen"}""")).andExpect(status().isOk)
             .andExpect(jsonPath("$.value.available").value(false)).andExpect(jsonPath("$.value.reason").value("TAKEN"))
-        mvc.perform(post("/api/v1/account/sign-up").contentType(json).content("""{"email":"again-${uniq()}@example.com","password":"tangerine-42-moon","loginId":"$chosen"}""")).andExpect(status().isConflict)
-            .andExpect(jsonPath("$.code").value("ACCOUNT.LOGIN_ID_TAKEN"))
         val newcomer = bearer(social("c-noemail-ow8"))
         mvc.perform(post("/api/v1/account/login-id").header("Authorization", newcomer).contentType(json).content("""{"loginId":"$chosen"}""")).andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("ACCOUNT.LOGIN_ID_TAKEN"))

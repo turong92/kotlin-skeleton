@@ -13,10 +13,6 @@ import dev.sumin.skeleton.account.events.DefaultAccountEventPublisher
 import dev.sumin.skeleton.account.mail.AccountLinks
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.AccountMailer
-import dev.sumin.skeleton.account.password.BreachedPasswordCheck
-import dev.sumin.skeleton.account.password.DefaultPasswordPolicy
-import dev.sumin.skeleton.account.password.PasswordEncoders
-import dev.sumin.skeleton.account.password.PasswordHasher
 import dev.sumin.skeleton.account.token.InMemoryOneTimeTokenStore
 import dev.sumin.skeleton.account.token.OneTimeTokens
 import dev.sumin.skeleton.auth.session.SessionRevoker
@@ -61,9 +57,10 @@ class AccountHarness(
     tasks: AccountTaskRunner = AccountTaskRunner.DIRECT,
     captcha: AccountCaptcha? = null,
     captchaRequired: Boolean = captcha != null,
-    breached: BreachedPasswordCheck? = null,
     /** 저장소를 바꿔 끼운다 (예: 악센트 · 대소문자를 같게 보는 DB 정렬을 흉내 낸 것) — 호출 기록 프록시가 이것을 감싼다 */
     storage: AccountRepository? = null,
+    /** 비밀번호 포트 — null 이면 `account-password` 가 없는 서비스 */
+    passwordCredentials: PasswordCredentials? = FakePasswordCredentials(),
     socialReauth: SocialReauthVerifier? = null,
     consents: dev.sumin.skeleton.common.consent.SignUpConsentGate? = null,
     atomic: AccountTransaction = AccountTransaction.NONE,
@@ -96,26 +93,24 @@ class AccountHarness(
     val events = RecordingEvents()
     val revoker = RecordingRevoker()
     val sessions = FakeSessions(time)
-    val hasher = PasswordHasher(PasswordEncoders.delegating(props.password))
-    val policy = DefaultPasswordPolicy(props.password, breached)
     val tokens = OneTimeTokens(tokenStore, time)
     val publisher = DefaultAccountEventPublisher({ time.now() }) { listOf(events) }
     private val limitStore = dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore()
     val bootstrap = AdminBootstrap(props.bootstrap, superRole, { repo }, { publisher }, time)
     val core = AccountCore(
-        repo, props, time, publisher, hasher, policy, tokens, mailer, AccountLinks(props.mail), tasks,
+        repo, props, time, publisher, tokens, mailer, AccountLinks(props.mail), tasks,
         AccountRateLimits({ limitStore }, time),
         CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth }, { consents }, atomic,
         AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks }, names = DisplayNames(props.displayName, random), sessionInspector = { sessions }, superRole = superRole,
         roles = { roleSource ?: dev.sumin.skeleton.common.authz.YmlRolePermissionSource(mapOf(superRole to setOf("*")) + rolePermissions) },
-        deletionChecks = { deletionChecks },
+        deletionChecks = { deletionChecks }, passwords = { credentials },
     )
-    val registration = RegistrationService(core)
+    /** [FakePasswordCredentials] — `account-password` 없이 비밀번호 줄을 흉내 낸다 */
+    val credentials: PasswordCredentials? = passwordCredentials
     val availability = LoginIdAvailabilityService(core)
     val loginIds = LoginIdService(core)
     val reminder = LoginIdReminderService(core)
     val authRepository = AccountAuthRepository(core)
-    val passwords = PasswordService(core)
     val emailChange = EmailChangeService(core)
     val contact = ContactEmailService(core)
     val reauth = Reauth(core)
@@ -124,29 +119,39 @@ class AccountHarness(
     val purge = AccountPurgeService(core) { erasers.toList() }
     val admin = AdminService(core)
     val discard = DiscardService(core, purge)
-    val profile = ProfileService(core, dev.sumin.skeleton.account.signin.SignInMethodRegistry(listOf(dev.sumin.skeleton.account.signin.PasswordSignInMethod())))
+    val profile = ProfileService(core, dev.sumin.skeleton.account.signin.SignInMethodRegistry(listOf(FakePasswordSignInMethod())))
 
-    /** 이메일별로 마지막 가입 id — [verify] · [resend] 가 쓴다 */
-    val signUpIds = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    fun signUp(
-        email: String = "ann@example.com", password: String = "tangerine-42-moon", ip: String? = "203.0.113.1", captchaToken: String? = null, locale: String? = null,
-        displayName: String? = "Ann",
-    ): SignUpOutcome =
-        registration.signUp(SignUpCommand(email, password, displayName, locale, "Asia/Seoul", ip, captchaToken)).also { o -> o.signUpId?.let { signUpIds[Emails.normalize(email)] = it } }
+    /**
+     * 비밀번호 가입 없이 계정 하나 — 가입 · 코드 확인은 `account-password` 의 일이다. 기존 시드 장치([AccountSeeder])를 그대로 써서 확인된 ACTIVE 계정과 비밀번호 줄
+     * (해시는 [FakePasswordCredentials])을 저장소에 바로 넣는다. 이름 · 닉네임 · 아이디 규칙은 가입과 같은 [AccountCore.insertNamed] 를 지난다.
+     * [password] 가 null 이면 비밀번호 줄이 없는 계정(메일 코드로 다시 인증)을 — 매직 링크 수단 한 줄만 달고 — 만든다.
+     */
+    fun activeAccount(
+        email: String = "ann@example.com", password: String? = "tangerine-42-moon", displayName: String? = "Ann", loginId: String? = null, locale: String? = null,
+    ): Account {
+        if (password != null) {
+            AccountSeeder(core).seed(listOf(AccountProperties.SeedAccount(email = email, password = password, displayName = displayName, loginId = loginId, locale = locale)))
+        } else {
+            val normalized = Emails.normalize(email)
+            val now = time.now()
+            val base = Account(
+                id = core.newAccountId(), email = normalized, emailVerified = true, status = AccountStatus.ACTIVE, roles = core.props.defaultRoles,
+                displayName = null, locale = ProfileRules.locale(locale), timeZone = null, createdAt = now, updatedAt = now,
+            ).copy(loginId = loginId?.let(core::acceptLoginId))
+            val identity = Identity(core.newIdentityId(), base.id, SignInMethods.MAGIC_LINK, normalized, true, createdAt = now)
+            core.insertNamed(base, listOf(identity), core.names.sanitize(displayName), strict = false) { repo.insert(it, listOf(identity), core.loginIdHashOf(it.loginId)) }
+        }
+        return repo.findByEmail(Emails.normalize(email))!!.also { bootstrap.afterVerified(it) }
+    }
 
-    /** 그 주소로 마지막에 나간 인증 코드 메일의 코드 */
-    fun lastCode(email: String = "ann@example.com"): String =
-        mailer.sent.last { it.kind == dev.sumin.skeleton.account.mail.MailKind.VERIFY_CODE && it.to == Emails.normalize(email) }.vars.getValue("code")
-
-    /** 마지막 가입 시도를 마지막 코드로 확인 — 가입이 끝나 계정이 생긴다 */
-    fun verify(email: String = "ann@example.com", ip: String? = "203.0.113.1", displayName: String? = null) =
-        registration.verifyEmail(signUpIds.getValue(Emails.normalize(email)), lastCode(email), ip, displayName = displayName)
-
-    /** 가입 + 확인까지 끝낸 계정 */
-    fun activeAccount(email: String = "ann@example.com", password: String = "tangerine-42-moon"): Account {
-        signUp(email, password); verify(email)
-        return repo.findByEmail(Emails.normalize(email))!!
+    /** 이메일 확인 없이 가입한 앱이 남기는 계정 — ACTIVE 지만 주소는 증명되지 않았고 비밀번호 줄도 미확인이다 (`account-password` 의 가입 없이 같은 상태를 만든다) */
+    fun unverifiedAccount(email: String = "ann@example.com", password: String = "tangerine-42-moon"): Account {
+        val normalized = Emails.normalize(email)
+        val now = time.now()
+        val base = Account(core.newAccountId(), normalized, false, AccountStatus.ACTIVE, core.props.defaultRoles, null, null, null, now, now)
+        repo.insert(base, listOf(Identity(core.newIdentityId(), base.id, SignInMethods.PASSWORD, normalized, false, secret = credentials!!.hash(password), createdAt = now)))
+        return repo.findById(base.id)!!
     }
 
     fun mailCount() = mailer.sent.size

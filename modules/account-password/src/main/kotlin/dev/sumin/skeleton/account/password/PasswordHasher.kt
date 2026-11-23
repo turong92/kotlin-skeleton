@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.account.password
 
 import dev.sumin.skeleton.account.AccountProperties
+import dev.sumin.skeleton.account.PasswordCredentials
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.DelegatingPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -10,10 +11,10 @@ import org.springframework.security.crypto.password.PasswordEncoder
  * 로그인에 성공했을 때 [needsUpgrade] 가 참이면 새 방식으로 다시 해시해 저장한다 (업그레이드는 사용자 몰래 로그인에 얹힌다).
  * 어떤 입력에도 던지지 않는다 — 형식이 이상한 해시 · 너무 긴 비밀번호는 그냥 "일치하지 않음".
  */
-class PasswordHasher(private val encoder: PasswordEncoder) {
-    fun hash(raw: String): String = requireNotNull(encoder.encode(raw)) { "password encoder returned null" }
+class PasswordHasher(private val encoder: PasswordEncoder) : PasswordCredentials {
+    override fun hash(raw: String): String = requireNotNull(encoder.encode(raw)) { "password encoder returned null" }
 
-    fun matches(raw: String, hash: String): Boolean {
+    override fun matches(raw: String, hash: String): Boolean {
         if (hash.isBlank()) return false
         return try { encoder.matches(raw, hash) } catch (_: IllegalArgumentException) { false }
     }

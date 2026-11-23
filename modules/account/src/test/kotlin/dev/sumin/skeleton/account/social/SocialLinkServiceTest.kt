@@ -7,7 +7,7 @@ import dev.sumin.skeleton.account.ReauthInput
 import dev.sumin.skeleton.account.SocialReauth
 import dev.sumin.skeleton.account.mail.MailKind
 import dev.sumin.skeleton.account.signin.IdentityService
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
+import dev.sumin.skeleton.account.FakePasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
 import dev.sumin.skeleton.auth.social.oauth.OAuthInvalidAuthorizationCodeException
@@ -33,7 +33,7 @@ class SocialLinkServiceTest {
     private val props = AuthSocialProperties(providers = providers.associate { it.providerId to AuthSocialProperties.Provider(enabled = true) })
     private val oauth = OAuthProviderRegistry(providers, props)
     private val h = AccountHarness()
-    private val methods = SignInMethodRegistry(listOf(PasswordSignInMethod(), SocialSignInMethod("alpha"), SocialSignInMethod("beta")))
+    private val methods = SignInMethodRegistry(listOf(FakePasswordSignInMethod(), SocialSignInMethod("alpha"), SocialSignInMethod("beta")))
     private val links = SocialLinkService(oauth, IdentityService(h.core, methods), h.core)
     private val ses = "ses_1"
 

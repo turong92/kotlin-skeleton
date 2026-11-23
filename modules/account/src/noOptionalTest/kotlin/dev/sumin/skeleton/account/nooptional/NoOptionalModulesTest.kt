@@ -53,6 +53,19 @@ class NoOptionalModulesTest {
     }
 
     @Test
+    fun `the module alone has no password path at all - no sign-up, no reset, no password sign-in method, no throttle hooks`() {
+        listOf("dev.sumin.skeleton.account.RegistrationService", "dev.sumin.skeleton.account.PasswordService", "dev.sumin.skeleton.account.password.PasswordHasher")
+            .forEach { name -> assertTrue(runCatching { Class.forName(name) }.isFailure, "$name belongs to modules:account-password") }
+        runner.run { ctx ->
+            assertTrue(ctx.startupFailure == null, ctx.startupFailure?.toString())
+            assertTrue(ctx.getBeansOfType(dev.sumin.skeleton.account.PasswordCredentials::class.java).isEmpty())
+            assertTrue(ctx.getBeansOfType(dev.sumin.skeleton.account.ResetLinkIssuer::class.java).isEmpty())
+            assertTrue(ctx.getBean(dev.sumin.skeleton.account.signin.SignInMethodRegistry::class.java).find("password") == null)
+            assertTrue(ctx.getBeansOfType(dev.sumin.skeleton.auth.login.LoginHooks::class.java).isEmpty())
+        }
+    }
+
+    @Test
     fun `the module starts, serves its controllers and falls back to log-only mail without them`() {
         runner.withPropertyValues("skeleton.account.password.bcrypt-strength=4").run { ctx ->
             assertTrue(ctx.startupFailure == null, ctx.startupFailure?.toString())

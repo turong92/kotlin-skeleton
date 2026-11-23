@@ -19,6 +19,7 @@ import dev.sumin.skeleton.notification.mail.MailSender
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -39,7 +40,22 @@ class AccountAutoConfigurationTest {
             assertTrue(ctx.getBean(AccountRepository::class.java) is InMemoryAccountRepository)
             assertTrue(ctx.getBean(AccountMailTransport::class.java) is LogOnlyMailTransport)
             assertTrue(ctx.getBean(AuthAccountRepository::class.java) is AccountAuthRepository)
-            assertNotNull(ctx.getBean(RegistrationService::class.java))
+            // 비밀번호 수단은 `account-password` 몫 — 이 모듈만으로는 가입 · 재설정 · 비밀번호 로그인 수단이 하나도 없다
+            assertNull(ctx.getBeanProvider(PasswordCredentials::class.java).getIfAvailable())
+            assertNull(ctx.getBeanProvider(ResetLinkIssuer::class.java).getIfAvailable())
+            assertTrue(ctx.getBean(dev.sumin.skeleton.account.signin.SignInMethodRegistry::class.java).find(SignInMethods.PASSWORD) == null)
+            assertNotNull(ctx.getBean(AccountCore::class.java))
+        }
+    }
+
+    @Test
+    fun `seed accounts without a password module stop the start-up and say what to add - they are not skipped quietly`() {
+        runner.withPropertyValues(
+            "skeleton.account.seed.accounts[0].email=mod@example.com", "skeleton.account.seed.accounts[0].password=password-1234",
+        ).run { ctx ->
+            val failure = assertFailsWith<IllegalStateException> { ctx.getBean(AccountSeeder::class.java).run(org.springframework.boot.DefaultApplicationArguments()) }
+            assertTrue("modules:account-password" in failure.message.orEmpty() && "seed.accounts" in failure.message.orEmpty(), failure.message)
+            assertEquals(0, ctx.getBean(AccountRepository::class.java).search(null, null, 0, 10).total)
         }
     }
 
@@ -185,7 +201,7 @@ class AccountAutoConfigurationTest {
 
     @Test
     fun `seed accounts are created once, verified and active, with the roles asked for`() {
-        runner.withPropertyValues(
+        runner.withBean(PasswordCredentials::class.java, java.util.function.Supplier { FakePasswordCredentials() }).withPropertyValues(
             "skeleton.account.seed.accounts[0].id=acc_moderator", "skeleton.account.seed.accounts[0].email=Mod@Example.com", "skeleton.account.seed.accounts[0].password=password-1234",
             "skeleton.account.seed.accounts[0].roles[0]=MODERATOR", "skeleton.account.seed.accounts[0].display-name=Moderator",
         ).run { ctx ->
@@ -199,39 +215,7 @@ class AccountAutoConfigurationTest {
             assertTrue(account.emailVerified)
             assertEquals(setOf("USER", "MODERATOR"), account.roles)
             val auth = ctx.getBean(AuthAccountRepository::class.java).findBy(dev.sumin.skeleton.auth.account.AccountIdentifier(email = "mod@example.com"))!!
-            assertTrue(ctx.getBean(dev.sumin.skeleton.account.password.PasswordHasher::class.java).matches("password-1234", auth.passwordHash))
-        }
-    }
-
-    @Test
-    fun `a sign-up consent gate and an account transaction from another module reach the registration service`() {
-        val checked = java.util.concurrent.CopyOnWriteArrayList<List<dev.sumin.skeleton.common.consent.ConsentClaim>>()
-        val gate = object : dev.sumin.skeleton.common.consent.SignUpConsentGate {
-            override fun check(claims: List<dev.sumin.skeleton.common.consent.ConsentClaim>) { checked += claims }
-            override fun record(accountId: String, claims: List<dev.sumin.skeleton.common.consent.ConsentClaim>, context: dev.sumin.skeleton.common.consent.ConsentContext) = Unit
-        }
-        val ran = java.util.concurrent.atomic.AtomicInteger()
-        val tx = object : AccountTransaction {
-            override fun <T> run(block: () -> T): T { ran.incrementAndGet(); return block() }
-        }
-        runner.withBean(dev.sumin.skeleton.common.consent.SignUpConsentGate::class.java, java.util.function.Supplier { gate })
-            .withBean(AccountTransaction::class.java, java.util.function.Supplier { tx })
-            .run { ctx ->
-                val registration = ctx.getBean(RegistrationService::class.java)
-                val claim = dev.sumin.skeleton.common.consent.ConsentClaim("terms", "v1")
-                val outcome = registration.signUp(SignUpCommand("ann@example.com", "tangerine-42-moon", null, null, null, "203.0.113.1", null, consents = listOf(claim)))
-
-                assertEquals(listOf(listOf(claim)), checked)
-                assertEquals(0, ran.get(), "nothing is created before the code is entered")
-                assertNotNull(outcome.signUpId)
-            }
-    }
-
-    @Test
-    fun `without a gate bean the registration service ignores consents and the default transaction just runs the block`() {
-        runner.run { ctx ->
-            val claim = dev.sumin.skeleton.common.consent.ConsentClaim("terms", "v1")
-            ctx.getBean(RegistrationService::class.java).signUp(SignUpCommand("ann@example.com", "tangerine-42-moon", null, null, null, "203.0.113.1", null, consents = listOf(claim)))
+            assertTrue(FakePasswordCredentials().matches("password-1234", auth.passwordHash))
         }
     }
 

@@ -5,8 +5,6 @@ import dev.sumin.skeleton.account.abuse.AccountRateLimits
 import dev.sumin.skeleton.account.abuse.AccountTaskRunner
 import dev.sumin.skeleton.account.abuse.CaptchaGate
 import dev.sumin.skeleton.account.abuse.ExecutorAccountTaskRunner
-import dev.sumin.skeleton.account.abuse.LoginRecorder
-import dev.sumin.skeleton.account.abuse.LoginThrottle
 import dev.sumin.skeleton.account.challenge.ChallengeStore
 import dev.sumin.skeleton.account.challenge.Challenges
 import dev.sumin.skeleton.account.challenge.CodeHasher
@@ -28,14 +26,8 @@ import dev.sumin.skeleton.account.mail.AccountMailer
 import dev.sumin.skeleton.account.mail.DefaultAccountMailTemplates
 import dev.sumin.skeleton.account.mail.LogOnlyMailTransport
 import dev.sumin.skeleton.account.mail.TemplatedAccountMailer
-import dev.sumin.skeleton.account.password.BreachedPasswordCheck
-import dev.sumin.skeleton.account.password.DefaultPasswordPolicy
-import dev.sumin.skeleton.account.password.PasswordEncoders
-import dev.sumin.skeleton.account.password.PasswordHasher
-import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.account.signin.AccountSignInService
 import dev.sumin.skeleton.account.signin.IdentityService
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.account.signin.SignInMethodSource
@@ -68,14 +60,13 @@ import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
-import org.springframework.core.annotation.Order
 import org.springframework.core.env.Environment
-import org.springframework.security.crypto.password.PasswordEncoder
 
 /**
  * 계정 수명주기의 서비스 · 정책 · 기본 구현. 저장소는 메모리 기본(로컬 · 시험) — 운영은 `account-jdbc` 나 앱이 같은 타입의 빈으로 바꾼다
  * (stage · prod 가드가 요구한다). 모든 빈은 [ConditionalOnMissingBean] 이라 앱이 같은 타입을 두면 이쪽이 물러난다.
- * `auth` 보다 먼저 평가해 `PasswordEncoder` 와 `AuthAccountRepository` 를 이 모듈이 정한다 — `auth` 는 그대로 진짜 계정으로 로그인한다.
+ * `auth` 보다 먼저 평가해 `AuthAccountRepository` 를 이 모듈이 정한다 — `auth` 는 그대로 진짜 계정으로 로그인한다.
+ * 비밀번호(가입 · 재설정 · 해시 · 정책)는 이 모듈에 없다 — `account-password` 가 [PasswordCredentials] · [ResetLinkIssuer] 빈으로 얹힌다.
  */
 @AutoConfiguration(
     before = [AuthAutoConfiguration::class, AuthzAutoConfiguration::class],
@@ -121,19 +112,6 @@ class AccountAutoConfiguration {
     @ConditionalOnMissingBean
     fun challenges(store: ChallengeStore, hasher: CodeHasher, time: ObjectProvider<TimeProvider>): Challenges =
         Challenges(store, hasher, time.getIfAvailable { TimeProvider.systemUtc() })
-
-    @Bean
-    @ConditionalOnMissingBean(PasswordEncoder::class)
-    fun passwordEncoder(properties: AccountProperties): PasswordEncoder = PasswordEncoders.delegating(properties.password)
-
-    @Bean
-    @ConditionalOnMissingBean
-    fun passwordHasher(encoder: PasswordEncoder): PasswordHasher = PasswordHasher(encoder)
-
-    @Bean
-    @ConditionalOnMissingBean(PasswordPolicy::class)
-    fun passwordPolicy(properties: AccountProperties, breached: ObjectProvider<BreachedPasswordCheck>): PasswordPolicy =
-        DefaultPasswordPolicy(properties.password, breached.getIfAvailable())
 
     @Bean
     @ConditionalOnMissingBean
@@ -286,8 +264,6 @@ class AccountAutoConfiguration {
         properties: AccountProperties,
         time: ObjectProvider<TimeProvider>,
         events: AccountEventPublisher,
-        hasher: PasswordHasher,
-        policy: PasswordPolicy,
         tokens: OneTimeTokens,
         mailer: AccountMailer,
         links: AccountLinks,
@@ -308,24 +284,23 @@ class AccountAutoConfiguration {
         authz: ObjectProvider<AuthzProperties>,
         rolePermissions: ObjectProvider<RolePermissionSource>,
         deletionChecks: ObjectProvider<dev.sumin.skeleton.common.account.AccountDeletionCheck>,
+        passwords: ObjectProvider<PasswordCredentials>,
+        resetLinks: ObjectProvider<ResetLinkIssuer>,
     ): AccountCore = AccountCore(
-        accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
+        accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, tokens, mailer, links, tasks, limits, captcha,
         { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
         { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE }, blocks, lease, { magicLinks.getIfAvailable() },
         names = DisplayNames(properties.displayName, rules = displayNameRules), sessionInspector = { sessionInspector.getIfAvailable() },
         superRole = authz.getIfAvailable { AuthzProperties() }.superRole,
         roles = { rolePermissions.getObject() },
         deletionChecks = { deletionChecks.orderedStream().toList() },
+        passwords = { passwords.getIfAvailable() }, resetLinks = { resetLinks.getIfAvailable() },
     )
 
     /** 닉네임 규칙 — 앱이 같은 타입의 빈을 두면 그것이 쓰인다 (가입 · 프로필 수정 · 제공자 이름 · 시드 · 비교용 키 모두) */
     @Bean
     @ConditionalOnMissingBean
     fun displayNameRules(): DisplayNameRules = DefaultDisplayNameRules
-
-    @Bean
-    @ConditionalOnMissingBean
-    fun registrationService(core: AccountCore): RegistrationService = RegistrationService(core)
 
     @Bean
     @ConditionalOnMissingBean
@@ -338,10 +313,6 @@ class AccountAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun loginIdReminderService(core: AccountCore): LoginIdReminderService = LoginIdReminderService(core)
-
-    @Bean
-    @ConditionalOnMissingBean
-    fun passwordService(core: AccountCore): PasswordService = PasswordService(core)
 
     @Bean
     @ConditionalOnMissingBean
@@ -387,10 +358,6 @@ class AccountAutoConfiguration {
     fun discardService(core: AccountCore, purge: AccountPurgeService): DiscardService = DiscardService(core, purge)
 
     @Bean
-    @ConditionalOnMissingBean(name = ["passwordSignInMethod"])
-    fun passwordSignInMethod(): SignInMethod = PasswordSignInMethod()
-
-    @Bean
     @ConditionalOnMissingBean
     fun signInMethodRegistry(methods: ObjectProvider<SignInMethod>, sources: ObjectProvider<SignInMethodSource>): SignInMethodRegistry =
         SignInMethodRegistry(methods.orderedStream().toList() + sources.orderedStream().toList().flatMap { it.methods() })
@@ -433,17 +400,6 @@ class AccountAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(AuthAccountRepository::class)
     fun accountAuthRepository(core: AccountCore): AuthAccountRepository = AccountAuthRepository(core)
-
-    /** 로그인 한도 — `auth` 의 [LoginHooks] 로 모여 비밀번호 검사 앞에서 돈다 (한도 → 기록 순서) */
-    @Bean
-    @Order(10)
-    @ConditionalOnMissingBean
-    fun loginThrottle(core: AccountCore): LoginThrottle = LoginThrottle(core)
-
-    @Bean
-    @Order(20)
-    @ConditionalOnMissingBean
-    fun loginRecorder(core: AccountCore): LoginRecorder = LoginRecorder(core)
 
     /** 로컬 · e2e 시드 계정 (`skeleton.account.seed.accounts`) — 비어 있으면 아무것도 하지 않는다 */
     @Bean

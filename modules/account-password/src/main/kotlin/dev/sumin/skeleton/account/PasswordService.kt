@@ -4,6 +4,8 @@ import dev.sumin.skeleton.account.abuse.RateLimitedException
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.MailKind
+import dev.sumin.skeleton.account.password.PasswordHasher
+import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.account.token.TokenPurposes
 
 /**
@@ -13,7 +15,7 @@ import dev.sumin.skeleton.account.token.TokenPurposes
  * [reset] 은 메일함을 증명한 사람이 링크로 새 비밀번호를 정한다: 정책을 먼저 보고(실패해도 링크가 안 타게) 그다음 링크를 **원자적으로 소비**하고,
  * 모든 세션을 닫고 · 이메일을 확인된 것으로 처리하고 · 주인에게 알린다. [change] 는 현재 비밀번호를 요구하고(없는 계정은 이메일 확인이 요구) 다른 세션만 닫는다.
  */
-class PasswordService(private val core: AccountCore) {
+class PasswordService(private val core: AccountCore, private val hasher: PasswordHasher, private val policy: PasswordPolicy, private val resetLinks: ResetLinkIssuer) {
     fun forgot(email: String, ip: String?, captchaToken: String?, ipKey: String? = ip) {
         ipKey?.let {
             val r = core.props.reset
@@ -27,7 +29,7 @@ class PasswordService(private val core: AccountCore) {
 
     private fun sendResetLink(email: String, ip: String?) {
         val account = core.accountByEmail(email) ?: return
-        val link = core.issueResetLink(account) ?: return   // 상태 · 주소별 한도 · 토큰 — "이미 계정이 있어요" 메일과 같은 길
+        val link = resetLinks.issue(account, onlyIfNoneOpen = false) ?: return   // 상태 · 주소별 한도 · 토큰 — "이미 계정이 있어요" 메일과 같은 길
         core.mailer.send(AccountMail(MailKind.PASSWORD_RESET, email, account.locale, link.url, mapOf("minutes" to link.minutes.toString())))
         core.events.publish(AccountEventType.PASSWORD_RESET_REQUESTED, account.id, ip)
     }
@@ -39,13 +41,13 @@ class PasswordService(private val core: AccountCore) {
         if (account == null || account.email != grant.subject || (account.status != AccountStatus.ACTIVE && account.status != AccountStatus.PENDING_VERIFICATION)) {
             throw AccountException(AccountErrorCode.TOKEN_INVALID)
         }
-        val violations = core.policy.check(newPassword, account.email)
+        val violations = policy.check(newPassword, account.email)
         if (violations.isNotEmpty()) throw PasswordPolicyException(violations)
         core.tokens.consume(TokenPurposes.PASSWORD_RESET, token) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
 
         // 메일함을 증명한 사람이 방금 새 비밀번호를 정했다 — 한 번의 저장소 연산으로: 비밀번호를 바꾸고, 주소가 미확인이었다면 남이 심은 다른 로그인 수단을 지우고, 확인 처리한다
         val existing = core.accounts.findIdentity(SignInMethods.PASSWORD, account.email!!)?.takeIf { it.accountId == account.id }
-        val proof = MailboxProof(keepIdentityIds = setOfNotNull(existing?.id), passwordSecret = core.hasher.hash(newPassword), newPasswordIdentityId = core.newIdentityId())
+        val proof = MailboxProof(keepIdentityIds = setOfNotNull(existing?.id), passwordSecret = hasher.hash(newPassword), newPasswordIdentityId = core.newIdentityId())
         if (!core.proveMailbox(account.id, core.time.now(), proof)) throw AccountException(AccountErrorCode.TOKEN_INVALID)
         core.sessions()?.revokeAll(account.id, null)
         core.closeSensitiveLinks(account)
@@ -68,11 +70,11 @@ class PasswordService(private val core: AccountCore) {
         if (identity?.secret == null && account.status != AccountStatus.ACTIVE) throw AccountException(AccountErrorCode.NOT_ACTIVE)
         // 비밀번호가 있으면 현재 비밀번호, 없으면(첫 비밀번호) 메일함 확인 — 15분짜리 액세스 토큰이 영구 자격이 되지 않게
         val proof = Reauth(core).check(account, ReauthInput(currentPassword, confirmationCode), currentSessionId)
-        val violations = core.policy.check(newPassword, email)
+        val violations = policy.check(newPassword, email)
         if (violations.isNotEmpty()) throw PasswordPolicyException(violations)
         proof.commit()
 
-        storePassword(account, core.hasher.hash(newPassword), replacing = identity?.takeIf { it.secret != null })
+        storePassword(account, hasher.hash(newPassword), replacing = identity?.takeIf { it.secret != null })
         core.clearContactAfterRecovery(account.id, "password_change")   // 현재 비밀번호(또는 메일함)를 아는 사람의 동작 — 탈취된 세션이 심은 연락 주소는 버린다
         core.sessions()?.revokeAll(account.id, currentSessionId)
         core.closeSensitiveLinks(account)

@@ -3,7 +3,7 @@ package dev.sumin.skeleton.account
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.account.mail.MailKind
 import dev.sumin.skeleton.account.signin.IdentityService
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
+import dev.sumin.skeleton.account.FakePasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.common.ApplicationException
@@ -54,7 +54,7 @@ class BlockedAddressBypassTest {
         val h = harness()
         h.blockedAnn()
         val bob = h.activeAccount("bob@example.com")
-        val identities = IdentityService(h.core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google)))
+        val identities = IdentityService(h.core, SignInMethodRegistry(listOf(FakePasswordSignInMethod(), Google)))
         assertEquals("ACCOUNT.REGISTRATION_BLOCKED", code { identities.link(bob.id, "google", "g-ann", verified = true) })
         assertNull(h.repo.findIdentity("google", "g-ann"))
         assertNotNull(identities.link(bob.id, "google", "g-bob", verified = true), "an unblocked provider account links as before")

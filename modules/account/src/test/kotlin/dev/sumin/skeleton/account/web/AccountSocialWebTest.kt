@@ -36,18 +36,17 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 class AccountSocialWebTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var mail: RecordingMailer
+    @Autowired lateinit var fixtures: dev.sumin.skeleton.accounttest.AccountFixtures
 
     private fun json(code: String) = """{"authorizationCode":"$code"}"""
     private fun jsonWithPassword(code: String) = """{"authorizationCode":"$code","currentPassword":"tangerine-42-moon"}"""
     private fun social(code: String) = mvc.perform(post("/api/v1/auth/social/fakeidp/login").contentType(MediaType.APPLICATION_JSON).content(json(code)))
     private fun bearer(r: MvcResult) = "Bearer " + JsonPath.read<String>(r.response.contentAsString, "$.value.accessToken")
 
-    private fun passwordAccount(email: String): MvcResult {
+    private fun passwordAccount(email: String): String {
         mail.sent.clear()
-        val signUp = mvc.perform(post("/api/v1/account/sign-up").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isAccepted).andReturn()
-        val id = JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")
-        mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"signUpId":"$id","code":"${mail.of(MailKind.VERIFY_CODE).last().vars.getValue("code")}"}""")).andExpect(status().isOk)
-        return mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isOk).andReturn()
+        fixtures.create(email)
+        return fixtures.bearer(email)
     }
 
     @Test
@@ -119,14 +118,14 @@ class AccountSocialWebTest {
     @Test
     fun `a signed-in user links a provider, sees it listed, and a second account cannot take it`() {
         val me = passwordAccount("linker@example.com")
-        val auth = bearer(me)
+        val auth = me
         mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-link")))
             .andExpect(status().isCreated).andExpect(jsonPath("$.value.method").value("fakeidp"))
         mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-link")))
             .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.IDENTITY_EXISTS"))
         mvc.perform(get("/api/v1/account/identities").header("Authorization", auth)).andExpect(status().isOk).andExpect(jsonPath("$.values.length()").value(2))
 
-        val other = bearer(passwordAccount("other-user@example.com"))
+        val other = passwordAccount("other-user@example.com")
         mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", other).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-link")))
             .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.IDENTITY_TAKEN"))
 
@@ -140,7 +139,7 @@ class AccountSocialWebTest {
 
     @Test
     fun `linking an unknown provider is the provider-not-found error and linking needs a login`() {
-        val auth = bearer(passwordAccount("nolink@example.com"))
+        val auth = passwordAccount("nolink@example.com")
         mvc.perform(post("/api/v1/account/identities/social/myspace").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-link")))
             .andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("AUTH_SOCIAL.PROVIDER_NOT_FOUND"))
         mvc.perform(post("/api/v1/account/identities/social/fakeidp").contentType(MediaType.APPLICATION_JSON).content(json("c-link"))).andExpect(status().isUnauthorized)
@@ -148,7 +147,7 @@ class AccountSocialWebTest {
 
     @Test
     fun `linking needs the current password - a code obtained by someone else cannot be attached to my account (login CSRF)`() {
-        val auth = bearer(passwordAccount("csrf-victim@example.com"))
+        val auth = passwordAccount("csrf-victim@example.com")
         mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(json("c-link")))
             .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.CURRENT_PASSWORD_INVALID"))
         mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("""{"authorizationCode":"c-link","currentPassword":"not-the-password-1"}"""))
@@ -206,7 +205,7 @@ class AccountSocialWebTest {
 
     @Test
     fun `a link by a password account mails a notice to the account address`() {
-        val auth = bearer(passwordAccount("notice-me@example.com"))
+        val auth = passwordAccount("notice-me@example.com")
         mail.sent.clear()
         mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-other"))).andExpect(status().isCreated)
         assertEquals("notice-me@example.com", mail.of(MailKind.IDENTITY_LINKED_NOTICE).single().to)
@@ -217,10 +216,10 @@ class AccountSocialWebTest {
 
     @Test
     fun `an app id token links a provider account, and another account cannot take it with the same token`() {
-        val me = bearer(passwordAccount("native-linker@example.com"))
+        val me = passwordAccount("native-linker@example.com")
         idLink(me, """{"idToken":"t-noemail-natlink","currentPassword":"tangerine-42-moon"}""")
             .andExpect(status().isCreated).andExpect(jsonPath("$.value.method").value("fakeidp"))
-        val other = bearer(passwordAccount("native-other@example.com"))
+        val other = passwordAccount("native-other@example.com")
         idLink(other, """{"idToken":"t-noemail-natlink","currentPassword":"tangerine-42-moon"}""")
             .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.IDENTITY_TAKEN"))
         idLink(other, """{"idToken":"t-noemail-natlink","currentPassword":"wrong-password-1"}""")
@@ -230,7 +229,7 @@ class AccountSocialWebTest {
 
     @Test
     fun `linking takes exactly one of authorizationCode, idToken and accessToken`() {
-        val auth = bearer(passwordAccount("native-one-of@example.com"))
+        val auth = passwordAccount("native-one-of@example.com")
         idLink(auth, """{"currentPassword":"tangerine-42-moon"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
         idLink(auth, """{"authorizationCode":"c-link","idToken":"t-noemail-natlink","currentPassword":"tangerine-42-moon"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
         idLink(auth, """{"accessToken":"a-1","currentPassword":"tangerine-42-moon"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))

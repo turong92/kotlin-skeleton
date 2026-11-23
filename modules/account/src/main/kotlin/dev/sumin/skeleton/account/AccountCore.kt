@@ -11,8 +11,6 @@ import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.MailKind
 import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.account.mail.AccountMailer
-import dev.sumin.skeleton.account.password.PasswordHasher
-import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.account.token.OneTimeTokens
 import dev.sumin.skeleton.auth.session.SessionRevoker
 import dev.sumin.skeleton.common.FieldValidationException
@@ -27,8 +25,6 @@ class AccountCore(
     val props: AccountProperties,
     val time: TimeProvider,
     val events: AccountEventPublisher,
-    val hasher: PasswordHasher,
-    val policy: PasswordPolicy,
     val tokens: OneTimeTokens,
     val mailer: AccountMailer,
     val links: AccountLinks,
@@ -63,6 +59,10 @@ class AccountCore(
     },
     /** 다른 모듈이 내놓은 「삭제를 막는 이유」 — 삭제 요청이 모은다. 없으면 막는 것이 없다 */
     val deletionChecks: () -> List<dev.sumin.skeleton.common.account.AccountDeletionCheck> = { emptyList() },
+    /** 비밀번호 해시 · 확인 — `account-password` 가 없으면 null (비밀번호 수단이 없는 서비스: 다시 인증은 메일 코드 · 소셜 길로, 시드 계정은 기동 실패) */
+    val passwords: () -> PasswordCredentials? = { null },
+    /** 비밀번호 재설정 링크를 만드는 고리 — `account-password` 가 없으면 null ("이미 계정이 있어요" 메일에서 재설정 · 비밀번호 찾기 줄이 빠진다) */
+    val resetLinks: () -> ResetLinkIssuer? = { null },
 ) {
     /**
      * 운영자의 상태 명령(정지 · 해제 · 복구 · 지우기)이 대상 계정에 닿기 전에 거는 검사 — 대상이 가진 역할들의 권한 합집합이 호출자 권한([actorPermissions])의 부분집합이 아니거나,
@@ -153,19 +153,11 @@ class AccountCore(
         if (!a.allowed) throw dev.sumin.skeleton.account.abuse.RateLimitedException(a.retryAfterSeconds)
     }
 
-    /**
-     * 비밀번호 재설정 링크를 만든다 — 재설정 요청([PasswordService.forgot])과 "이미 계정이 있어요" 메일이 **같은 길**이다: 같은 계정 상태 규칙(ACTIVE · PENDING_VERIFICATION 만),
-     * 같은 주소별 한도(`reset.per-email`), 같은 토큰(새 토큰이 이전 것을 닫는다). 못 만들면(상태 · 한도) null. [onlyIfNoneOpen]: 열린 토큰이 있으면 만들지 않는다(null)
-     */
-    fun issueResetLink(account: Account, onlyIfNoneOpen: Boolean = false): IssuedLink? {
-        if (account.status != AccountStatus.ACTIVE && account.status != AccountStatus.PENDING_VERIFICATION) return null
-        val email = account.email ?: return null
-        // 남의 요청이 낳는 링크(이미 계정이 있어요 메일)는 주인이 연 링크를 닫지도, 한도를 쓰지도 않는다 — 열린 토큰이 있으면 만들지 않는다
-        if (onlyIfNoneOpen && tokens.hasOpen(TokenPurposes.PASSWORD_RESET, email)) return null
-        val r = props.reset
-        if (!limits.acquire("reset:email", email, r.perEmail, r.perEmailWindow).allowed) return null
-        val raw = tokens.issue(TokenPurposes.PASSWORD_RESET, email, account.id, r.ttl)
-        return IssuedLink(links.reset(raw), r.ttl.toMinutes())
+    /** 로그인 성공을 기록한다 — 마지막 로그인 시각 + `LOGIN_SUCCESS` 이벤트. 토큰이 발급된 **뒤에** 부른다 (토큰 발급이 막히면 성공 로그인으로 남지 않게) */
+    fun recordSignIn(accountId: String, ip: String?, method: String) {
+        val now = time.now()
+        accounts.update(accountId, AccountPatch(lastLoginAt = now), now)
+        events.publish(dev.sumin.skeleton.account.events.AccountEventType.LOGIN_SUCCESS, accountId, ip, mapOf("method" to method))
     }
 
     /** 코드를 [ttl] 동안 쓸 수 있게 방금 보낸 응답의 두 시각 ([CodeWindow]) — 메일을 실제로 보냈든 안 보냈든 같은 계산 */

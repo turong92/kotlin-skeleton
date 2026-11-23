@@ -2,7 +2,7 @@ package dev.sumin.skeleton.account
 
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.account.signin.AccountSignInService
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
+import dev.sumin.skeleton.account.FakePasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.account.signin.SignInProof
@@ -129,7 +129,7 @@ class AccountErasureTest {
         val h = harness()
         val a = h.leave()
         h.purge.purgeDue()
-        val service = AccountSignInService(h.core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google)))
+        val service = AccountSignInService(h.core, SignInMethodRegistry(listOf(FakePasswordSignInMethod(), Google)))
         val again = service.signIn(SignInProof("google", "g-${a.id}", null, false, "Ann", "ko", "203.0.113.1", true))
         assertNotNull(again)
         assertNotEquals(a.id, again.accountId)

@@ -33,15 +33,14 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 class ContactEmailWebTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var mail: RecordingMailer
+    @Autowired lateinit var fixtures: dev.sumin.skeleton.accounttest.AccountFixtures
 
     private val json = MediaType.APPLICATION_JSON
 
     private fun signedIn(email: String): String {
         mail.sent.clear()
-        val signUp = mvc.perform(post("/api/v1/account/sign-up").contentType(json).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isAccepted).andReturn()
-        val id = JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")
-        val r = mvc.perform(post("/api/v1/auth/verify-email").contentType(json).content("""{"signUpId":"$id","code":"${mail.of(MailKind.VERIFY_CODE).last().vars.getValue("code")}"}""")).andExpect(status().isOk).andReturn()
-        return "Bearer " + JsonPath.read<String>(r.response.contentAsString, "$.value.accessToken")
+        fixtures.create(email)
+        return fixtures.bearer(email)
     }
 
     @Test

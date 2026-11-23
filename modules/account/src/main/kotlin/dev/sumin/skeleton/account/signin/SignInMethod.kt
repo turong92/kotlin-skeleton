@@ -2,8 +2,6 @@ package dev.sumin.skeleton.account.signin
 
 import dev.sumin.skeleton.account.AccountErrorCode
 import dev.sumin.skeleton.account.AccountException
-import dev.sumin.skeleton.account.Emails
-import dev.sumin.skeleton.account.SignInMethods
 
 /**
  * 로그인 수단 하나의 **성격**. 계정에는 수단이 [dev.sumin.skeleton.account.Identity] 행으로 붙고, 이 SPI 는 그 행을 어떻게 다룰지만 말한다
@@ -31,13 +29,6 @@ interface SignInMethod {
 
     /** 목록에 [dev.sumin.skeleton.account.Identity.subject] 를 보여 줄까 (이메일 계열은 예, 제공자 사용자 id 는 아니오) */
     val exposesSubject: Boolean get() = false
-}
-
-/** 비밀번호 수단 — 주체는 이메일이고, 해시는 [dev.sumin.skeleton.account.Identity.secret] 에 있다 */
-class PasswordSignInMethod : SignInMethod {
-    override val code: String = SignInMethods.PASSWORD
-    override fun normalize(subject: String): String = Emails.normalize(subject)
-    override val exposesSubject: Boolean = true
 }
 
 /** 빈 하나가 여러 수단을 한꺼번에 내놓을 때 (제공자 목록에서 소셜 수단을 만드는 `account` 의 소셜 연동) — 레지스트리가 모아 같은 규칙으로 검사한다 */

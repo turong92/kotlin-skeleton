@@ -74,14 +74,6 @@ class SecondFactorGateWebTest {
     private fun post(url: String, body: String, auth: String? = null) =
         mvc.perform(post(url).contentType(MediaType.APPLICATION_JSON).content(body).also { b -> auth?.let { b.header("Authorization", it) } }.also { b -> if (url.endsWith("/account/delete")) b.header("Idempotency-Key", java.util.UUID.randomUUID().toString()) })
 
-    private fun register(): String {
-        val email = "u${System.nanoTime()}@example.com"
-        val id = JsonPath.read<String>(post("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon"}""").andExpect(status().isAccepted).andReturn().response.contentAsString, "$.value.signUpId")
-        post("/api/v1/auth/verify-email", """{"signUpId":"$id","code":"${mail.of(MailKind.VERIFY_CODE).last().vars.getValue("code")}"}""").andExpect(status().isOk)
-        return email
-    }
-
-    private fun login(email: String): MvcResult = post("/api/v1/auth/login", """{"email":"$email","password":"tangerine-42-moon"}""").andReturn()
     private fun accountIdOf(r: MvcResult) = JsonPath.read<String>(r.response.contentAsString, "$.value.principal.accountId")
 
     private fun assertChallenge(r: MvcResult) {
@@ -95,49 +87,12 @@ class SecondFactorGateWebTest {
     }
 
     @Test
-    fun `password login - with the gate filled it is a 403 challenge without session or token, and the first step is recorded`(log: CapturedOutput) {
-        val email = register()
-        val accountId = accountIdOf(login(email))
-        val sessionsBefore = sessions.sessionsOf(accountId)
-        events.all.clear()
-
-        gate.on = true
-        assertChallenge(login(email))
-        assertEquals(sessionsBefore, sessions.sessionsOf(accountId), "no session was opened")
-        assertEquals(listOf(AccountEventType.LOGIN_SUCCESS), events.types(), "the first step counts as the sign-in")
-        assertEquals(401, post("/api/v1/auth/login", """{"email":"$email","password":"wrong-password-1"}""").andReturn().response.status, "a wrong password never reaches the gate")
-
-        assertFalse(TOKEN in log.all, "the mfaToken is in no log line")
-        assertFalse(events.all.any { TOKEN in it.toString() }, "the mfaToken is in no account event")
-
-        gate.on = false
-        assertEquals(200, login(email).response.status, "the gate empty again: login is as it was")
-    }
-
-    @Test
     fun `social login - a returning social account meets the same challenge`() {
         val accountId = accountIdOf(post("/api/v1/auth/social/fakeidp/login", """{"authorizationCode":"c-new"}""").andExpect(status().isOk).andReturn())
         val sessionsBefore = sessions.sessionsOf(accountId)
         gate.on = true
         assertChallenge(post("/api/v1/auth/social/fakeidp/login", """{"authorizationCode":"c-new"}""").andReturn())
         assertEquals(sessionsBefore, sessions.sessionsOf(accountId), "no session was opened")
-    }
-
-    @Test
-    fun `a pending deletion is not undone by the first step alone - login meets the challenge first, and a restore token minted before the second factor was on cannot cancel`() {
-        val email = register()
-        val auth = "Bearer " + JsonPath.read<String>(login(email).response.contentAsString, "$.value.accessToken")
-        post("/api/v1/account/delete", """{"currentPassword":"tangerine-42-moon"}""", auth).andExpect(status().isAccepted)
-        val oldRestoreToken = JsonPath.read<String>(login(email).response.contentAsString, "$.data.restoreToken")   // 2단계가 아직 꺼져 있을 때 받은 토큰
-
-        gate.on = true
-        assertChallenge(login(email))   // 이제는 취소 토큰이 아니라 2단계 요구가 먼저다
-        post("/api/v1/account/delete/cancel", """{"restoreToken":"$oldRestoreToken"}""").andExpect(status().isGone)
-
-        gate.on = false
-        val still = login(email)
-        assertEquals(403, still.response.status)
-        assertEquals("AUTH.ACCOUNT_DELETION_PENDING", JsonPath.read<String>(still.response.contentAsString, "$.code"), "the deletion was not undone")
     }
 
     private companion object { const val TOKEN = "mfa-token-original-value-never-logged" }

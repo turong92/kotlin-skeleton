@@ -4,7 +4,7 @@ import dev.sumin.skeleton.account.abuse.RateLimitedException
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.account.mail.MailKind
 import dev.sumin.skeleton.account.signin.AccountSignInService
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
+import dev.sumin.skeleton.account.FakePasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.account.signin.SignInProof
@@ -82,7 +82,7 @@ class SelfRestoreTest {
 
         h.deletion.delete(a.id, PW, null)
         h.repo.addIdentity(Identity(h.core.newIdentityId(), a.id, "google", "g-ann", true, createdAt = h.time.now()))
-        val social = assertNotNull(AccountSignInService(h.core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google))).signIn(SignInProof("google", "g-ann", null, false, "Ann", "ko", "203.0.113.1", true)))
+        val social = assertNotNull(AccountSignInService(h.core, SignInMethodRegistry(listOf(FakePasswordSignInMethod(), Google))).signIn(SignInProof("google", "g-ann", null, false, "Ann", "ko", "203.0.113.1", true)))
         val cancelled = h.deletion.cancelWithMethod(social.blockData!!().token(), null)
         assertEquals("google", cancelled.method)
         assertEquals(a.id, cancelled.auth.accountId)
@@ -101,7 +101,7 @@ class SelfRestoreTest {
     @Test
     fun `with email verification switched off the account comes back ACTIVE - it was ACTIVE before, never PENDING_VERIFICATION`() {
         val h = harness(emailVerification = false)
-        h.signUp()
+        h.unverifiedAccount()   // what a sign-up without verification leaves: ACTIVE, address not proven
         val a = h.repo.findByEmail("ann@example.com")!!
         assertEquals(AccountStatus.ACTIVE, a.status)
         assertEquals(false, a.emailVerified, "no verification step exists in this mode")
@@ -186,7 +186,7 @@ class SelfRestoreTest {
         h.deletion.delete(a.id, PW, null)
         val before = h.repo.search(null, null, 0, 50).total
         val loginsBefore = h.events.types().count { it == AccountEventType.LOGIN_SUCCESS }
-        val auth = assertNotNull(AccountSignInService(h.core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google))).signIn(SignInProof("google", "g-ann", null, false, "Ann", "ko", "203.0.113.1", true)))
+        val auth = assertNotNull(AccountSignInService(h.core, SignInMethodRegistry(listOf(FakePasswordSignInMethod(), Google))).signIn(SignInProof("google", "g-ann", null, false, "Ann", "ko", "203.0.113.1", true)))
         assertEquals(LoginBlock.DELETION_PENDING, auth.loginBlock)
         assertEquals(before, h.repo.search(null, null, 0, 50).total)
         assertNull(h.repo.findById(a.id)!!.lastLoginAt)

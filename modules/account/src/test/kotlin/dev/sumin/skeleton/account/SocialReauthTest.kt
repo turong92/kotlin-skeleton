@@ -2,7 +2,7 @@ package dev.sumin.skeleton.account
 
 import dev.sumin.skeleton.account.mail.MailKind
 import dev.sumin.skeleton.account.signin.AccountSignInService
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
+import dev.sumin.skeleton.account.FakePasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.account.social.AccountSocialReauthVerifier
@@ -41,7 +41,7 @@ class SocialReauthTest {
     }
     private val ses = "ses_1"
     private val good = ReauthInput(social = SocialReauth("naver", "good-own", "https://app/cb"))
-    private val registry = SignInMethodRegistry(listOf(PasswordSignInMethod(), Google, Naver))
+    private val registry = SignInMethodRegistry(listOf(FakePasswordSignInMethod(), Google, Naver))
     private fun code(block: () -> Unit) = assertFailsWith<ApplicationException> { block() }.errorCode.code
 
     private fun emailless(): Account {

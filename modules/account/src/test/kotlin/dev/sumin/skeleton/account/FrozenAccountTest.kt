@@ -2,7 +2,7 @@ package dev.sumin.skeleton.account
 
 import dev.sumin.skeleton.account.signin.AccountSignInService
 import dev.sumin.skeleton.account.signin.IdentityService
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
+import dev.sumin.skeleton.account.FakePasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.account.signin.SignInProof
@@ -30,7 +30,7 @@ class FrozenAccountTest {
 
     private fun code(block: () -> Unit) = assertFailsWith<ApplicationException> { block() }.errorCode.code
     private fun AccountHarness.admin(): Account = repo.findByEmail("admin@example.com") ?: activeAccount("admin@example.com").also { repo.grantRole(it.id, "ADMIN", time.now()) }
-    private fun AccountHarness.service() = AccountSignInService(core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google)))
+    private fun AccountHarness.service() = AccountSignInService(core, SignInMethodRegistry(listOf(FakePasswordSignInMethod(), Google)))
     private fun proof(subject: String, email: String? = null) = SignInProof("google", subject, email, email != null, "Ann", "ko", "203.0.113.1", true)
 
     private fun AccountHarness.suspendedWithGoogle(): Account {
@@ -82,19 +82,6 @@ class FrozenAccountTest {
     }
 
     @Test
-    fun `a sign-up code for the address of a suspended unproven account does not take the account over`() {
-        val h = harness()
-        val admin = h.admin()
-        val now = h.time.now()
-        h.repo.insert(Account("acc_u", "unproven@example.com", false, AccountStatus.SUSPENDED, setOf("USER"), null, null, null, now, now), emptyList())
-        assertNotNull(admin)
-        h.signUp("unproven@example.com")   // the same 202 as always
-        assertEquals("ACCOUNT.REGISTRATION_BLOCKED", code { h.verify("unproven@example.com") })
-        assertEquals(AccountStatus.SUSPENDED, h.repo.findById("acc_u")!!.status)
-        assertTrue(h.repo.identitiesOf("acc_u").isEmpty())
-    }
-
-    @Test
     fun `an administrator erases a suspended account at once - personal data goes, a hash-only block remains and the person cannot come back`() {
         val h = harness()
         val admin = h.admin()
@@ -110,9 +97,7 @@ class FrozenAccountTest {
         assertTrue(blocks.items.none { b -> listOf(b.hash, b.reason, b.createdBy, b.accountId).any { f -> f != null && listOf("ann@example.com", "g-ann").any { raw -> raw in f } } })
         assertEquals(setOf(h.core.blocks.emailHash("ann@example.com"), h.core.blocks.identityHash("google", "g-ann")), blocks.items.map { it.hash }.toSet())
 
-        // the sign-up REQUEST still looks like any other (202, same shape); only someone who proves the mailbox / provider identity is refused
-        assertEquals(SignUpStatus.VERIFICATION_SENT, h.signUp("ann@example.com").status)
-        assertEquals("ACCOUNT.REGISTRATION_BLOCKED", code { h.verify("ann@example.com") })
+        // (the sign-up code path for a blocked address is refused the same way - account-password's FrozenAccountPasswordTest)
         assertEquals("ACCOUNT.REGISTRATION_BLOCKED", code { h.service().signIn(proof("g-ann")) })
         assertEquals("ACCOUNT.REGISTRATION_BLOCKED", code { h.service().signIn(proof("g-other", "ann@example.com")) }, "a verified provider email is a proven mailbox")
         assertNull(h.repo.findByEmail("ann@example.com"))
@@ -170,7 +155,7 @@ class FrozenAccountTest {
 
     // ---- 정지 계정이 남은 액세스 토큰으로 로그인 수단을 늘리거나 줄이지 못한다 (정지 우회: 수단을 끊고 같은 제공자 계정으로 새 계정을 만드는 길)
 
-    private fun AccountHarness.identities() = IdentityService(core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google, object : SignInMethod { override val code = "kakao"; override val userRemovable = true })))
+    private fun AccountHarness.identities() = IdentityService(core, SignInMethodRegistry(listOf(FakePasswordSignInMethod(), Google, object : SignInMethod { override val code = "kakao"; override val userRemovable = true })))
 
     @Test
     fun `a suspended account can neither unlink nor link a sign-in method with the token it still holds`() {
@@ -184,19 +169,6 @@ class FrozenAccountTest {
         assertNull(h.repo.findIdentity("kakao", "k-ann"))
         // the loophole itself: the provider account stays tied to the frozen account, so no new account can be made with it
         assertEquals(a.id, assertNotNull(h.service().signIn(proof("g-ann"))).accountId)
-    }
-
-    @Test
-    fun `a suspended account without a password cannot set its first one - that would add a sign-in method`() {
-        val h = harness()
-        val admin = h.admin()
-        val now = h.time.now()
-        h.repo.insert(Account("acc_np", "np@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), listOf(Identity(h.core.newIdentityId(), "acc_np", "google", "g-np", true, createdAt = now)))
-        h.admin.suspend(admin.id, "acc_np", "abuse", setOf("*"))
-        h.reauth.requestConfirmation("acc_np", "ses_1")
-        val mailed = h.mailer.of(dev.sumin.skeleton.account.mail.MailKind.REAUTH_CODE).single().vars.getValue("code")
-        assertEquals("ACCOUNT.NOT_ACTIVE", code { h.passwords.change("acc_np", null, "tangerine-42-moon", "ses_1", mailed) })
-        assertNull(h.repo.findIdentity("password", "np@example.com"))
     }
 
     @Test

@@ -34,7 +34,7 @@ class SignInServiceTest {
         ),
     )
 
-    private val methods = listOf(PasswordSignInMethod(), Google, Kakao, Magic, Locked)
+    private val methods = listOf(dev.sumin.skeleton.account.FakePasswordSignInMethod(), Google, Kakao, Magic, Locked)
     private fun AccountHarness.service() = AccountSignInService(core, SignInMethodRegistry(methods))
     private fun code(block: () -> Unit) = assertFailsWith<ApplicationException> { block() }.errorCode.code
     private fun proof(method: String = "google", subject: String = "g-1", email: String? = "ann@example.com", verified: Boolean = true, signUp: Boolean = true, authoritative: Boolean = verified) =
@@ -53,7 +53,7 @@ class SignInServiceTest {
 
     @Test
     fun `the password method normalizes emails like the rest of the module`() {
-        assertEquals("ann@example.com", PasswordSignInMethod().normalize("  Ann@Example.COM "))
+        assertEquals("ann@example.com", dev.sumin.skeleton.account.FakePasswordSignInMethod().normalize("  Ann@Example.COM "))
     }
 
     // ---- sign in / sign up through any method
@@ -141,7 +141,7 @@ class SignInServiceTest {
     @Test
     fun `merging into an UNVERIFIED account is a mailbox proof - the unproven sign-up password is discarded and sessions closed (C1 rule)`() {
         val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true), emailVerification = false)
-        merge.signUp("ann@example.com", password = "attacker-chosen-42")
+        merge.unverifiedAccount("ann@example.com", "attacker-chosen-42")
         val planted = merge.repo.findByEmail("ann@example.com")!!
         val auth = merge.service().signIn(proof())!!
         assertEquals(planted.id, auth.accountId)
@@ -193,7 +193,7 @@ class SignInServiceTest {
     @Test
     fun `a non-authoritative sign-in does not prove the mailbox of an unverified account that shares its address`() {
         val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true), emailVerification = false)
-        merge.signUp("ann@example.com", password = "attacker-chosen-42")
+        merge.unverifiedAccount("ann@example.com", "attacker-chosen-42")
         val planted = merge.repo.findByEmail("ann@example.com")!!
         assertEquals("ACCOUNT.SOCIAL_EMAIL_CONFLICT", code { merge.service().signIn(proof(authoritative = false)) })
         assertEquals(false, merge.repo.findById(planted.id)!!.emailVerified)
@@ -202,7 +202,7 @@ class SignInServiceTest {
     @Test
     fun `a known non-authoritative identity signing in again does not verify the account address`() {
         val h = harness(emailVerification = false)
-        h.signUp("ann@example.com", password = "attacker-chosen-42")
+        h.unverifiedAccount("ann@example.com", "attacker-chosen-42")
         val planted = h.repo.findByEmail("ann@example.com")!!
         h.service().identities.link(planted.id, "google", "g-1", verified = true)
         assertEquals(planted.id, h.service().signIn(proof(authoritative = false, signUp = false))!!.accountId)
@@ -229,7 +229,7 @@ class SignInServiceTest {
     @Test
     fun `a magic link proves the mailbox so it attaches to the existing account and verifies an unverified one - without a password nobody proved`() {
         val h = harness(emailVerification = false)
-        h.signUp("ann@example.com")
+        h.unverifiedAccount("ann@example.com")
         val auth = h.service().signIn(proof("magic_link", "  Ann@Example.com ", "ann@example.com", true))!!
         val account = h.repo.findById(auth.accountId)!!
         assertEquals(AccountStatus.ACTIVE, account.status)
@@ -242,7 +242,7 @@ class SignInServiceTest {
     @Test
     fun `pre-hijack - a password planted on an unverified sign-up does not work after the victim signs in by magic link`() {
         val h = harness(emailVerification = false)
-        h.signUp("victim@example.com", password = "attacker-chosen-42")   // the attacker, who does not own the mailbox
+        h.unverifiedAccount("victim@example.com", "attacker-chosen-42")   // the attacker, who does not own the mailbox
         val planted = h.repo.findByEmail("victim@example.com")!!
         val auth = h.service().signIn(proof("magic_link", "victim@example.com", "victim@example.com", true))!!   // the victim
         assertEquals(planted.id, auth.accountId)

@@ -28,9 +28,7 @@ class LoginIdReminderTest {
 
     /** 아이디가 있는 가입 완료 계정 */
     private fun AccountHarness.withId(email: String = "ann@example.com", loginId: String = "ann.kim"): Account {
-        registration.signUp(SignUpCommand(email, "tangerine-42-moon", null, "ko", null, ip, null, loginId = loginId)).also { signUpIds[email] = it.signUpId!! }
-        verify(email)
-        return repo.findByEmail(email)!!
+        return activeAccount(email, displayName = null, loginId = loginId, locale = "ko")
     }
 
     /** 아이디를 아직 안 정한 계정 (소셜로 들어온 뒤 이메일을 등록했거나 기능을 켜기 전에 가입했다) */
@@ -101,8 +99,7 @@ class LoginIdReminderTest {
     fun `the request thread never touches the stores - a known and an unknown address do the same`() {
         val queue = LinkedBlockingQueue<Runnable>()
         val d = AccountHarness(props(), tasks = AccountTaskRunner { _, t -> queue.add(t) })
-        d.registration.signUp(SignUpCommand("ann@example.com", "tangerine-42-moon", null, "ko", null, ip, null, loginId = "ann.kim")).also { d.signUpIds["ann@example.com"] = it.signUpId!! }
-        queue.forEach { it.run() }; queue.clear(); d.verify()
+        d.activeAccount("ann@example.com", displayName = null, loginId = "ann.kim", locale = "ko")
         d.callLog.calls.clear()
         val me = Thread.currentThread()
         d.reminder.forgot("ann@example.com", ip, null)
@@ -132,19 +129,6 @@ class LoginIdReminderTest {
         repeat(10) { h.reminder.forgot("x$it@example.com", "198.51.100.1", null) }
         assertFailsWith<RateLimitedException> { h.reminder.forgot("y@example.com", "198.51.100.1", null) }
         h.reminder.forgot("y@example.com", "198.51.100.2", null)
-    }
-
-    @Test
-    fun `its buckets are its own - password reset requests do not spend the reminder allowance, nor the other way round`() {
-        val h = AccountHarness(props())
-        h.withId()
-        repeat(10) { h.passwords.forgot("ann@example.com", "198.51.100.7", null) }
-        assertEquals(3, h.mailer.of(MailKind.PASSWORD_RESET).size)
-        h.reminder.forgot("ann@example.com", "198.51.100.7", null)   // the IP is spent for password/forgot, not for this
-        assertEquals(1, h.reminders().size, "the address was spent for the reset mail, not for this one")
-        repeat(9) { h.reminder.forgot("z$it@example.com", "198.51.100.7", null) }
-        assertFailsWith<RateLimitedException> { h.reminder.forgot("z@example.com", "198.51.100.7", null) }
-        h.passwords.forgot("nobody@example.com", "198.51.100.8", null)   // the other IP is untouched by the reminder buckets
     }
 
     @Test

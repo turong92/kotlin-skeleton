@@ -67,6 +67,7 @@ class EmailRequiredWebTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var mail: RecordingMailer
     @Autowired lateinit var sessions: FakeSessionBook
+    @Autowired lateinit var fixtures: dev.sumin.skeleton.accounttest.AccountFixtures
 
     private val json = MediaType.APPLICATION_JSON
     private fun bearer(r: MvcResult) = "Bearer " + JsonPath.read<String>(r.response.contentAsString, "$.value.accessToken")
@@ -74,10 +75,8 @@ class EmailRequiredWebTest {
 
     private fun passwordAccount(email: String): String {
         mail.sent.clear()
-        val signUp = mvc.perform(post("/api/v1/account/sign-up").contentType(json).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isAccepted).andReturn()
-        val id = JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")
-        val verified = mvc.perform(post("/api/v1/auth/verify-email").contentType(json).content("""{"signUpId":"$id","code":"${mail.of(MailKind.VERIFY_CODE).last().vars.getValue("code")}"}""")).andExpect(status().isOk).andReturn()
-        return bearer(verified)
+        fixtures.create(email)
+        return fixtures.bearer(email)
     }
 
     private fun changeEmail(auth: String, to: String) = mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).header("Idempotency-Key", java.util.UUID.randomUUID().toString()).contentType(json).content("""{"newEmail":"$to"}"""))

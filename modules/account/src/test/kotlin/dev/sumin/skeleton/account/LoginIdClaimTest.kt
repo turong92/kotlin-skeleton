@@ -42,8 +42,7 @@ class LoginIdClaimTest {
     fun `a live id, a reserved id and an erased id are all the same TAKEN`() {
         val h = AccountHarness(props())
         h.shell("acc_live", loginId = "liveone")
-        h.registration.signUp(SignUpCommand("gone@example.com", "tangerine-42-moon", null, null, null, "203.0.113.1", null, loginId = "goneone")).also { h.signUpIds["gone@example.com"] = it.signUpId!! }
-        h.verify("gone@example.com")
+        h.activeAccount("gone@example.com", displayName = null, loginId = "goneone")
         h.deletion.delete(h.repo.findByEmail("gone@example.com")!!.id, ReauthInput("tangerine-42-moon"), null)
         h.time.advance(Duration.ofDays(31))
         assertEquals(1, h.purge.purgeDue())

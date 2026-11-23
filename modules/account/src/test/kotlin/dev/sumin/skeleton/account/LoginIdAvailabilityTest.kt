@@ -15,9 +15,7 @@ class LoginIdAvailabilityTest {
     )
 
     private fun AccountHarness.register(email: String, loginId: String) {
-        val o = registration.signUp(SignUpCommand(email, "tangerine-42-moon", null, null, null, "203.0.113.1", null, loginId = loginId))
-        signUpIds[Emails.normalize(email)] = o.signUpId!!
-        verify(email)
+        activeAccount(email, displayName = null, loginId = loginId)
     }
 
     @Test

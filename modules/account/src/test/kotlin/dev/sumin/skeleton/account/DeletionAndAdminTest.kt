@@ -265,7 +265,6 @@ class DeletionAndAdminTest {
         assertEquals(true, me.emailVerified)
         assertEquals(true, me.hasPassword)
         assertEquals(listOf("password"), me.methods.map { it.method })
-        assertEquals("Asia/Seoul", me.timeZone)
     }
 
     @Test

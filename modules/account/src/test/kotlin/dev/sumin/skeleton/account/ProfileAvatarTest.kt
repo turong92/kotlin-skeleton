@@ -1,6 +1,6 @@
 package dev.sumin.skeleton.account
 
-import dev.sumin.skeleton.account.signin.PasswordSignInMethod
+import dev.sumin.skeleton.account.FakePasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.upload.PublicUploads
@@ -31,7 +31,7 @@ class ProfileAvatarTest {
     }
 
     private fun service(h: AccountHarness, avatars: AccountAvatars) =
-        ProfileService(h.core, SignInMethodRegistry(listOf(PasswordSignInMethod())), avatars)
+        ProfileService(h.core, SignInMethodRegistry(listOf(FakePasswordSignInMethod())), avatars)
 
     private fun enabled(public: PublicUploads? = null) = AccountAvatars({ ownership }, { public })
 
@@ -70,7 +70,7 @@ class ProfileAvatarTest {
     fun `without storage the avatar fields are absent and an avatarKey is refused`() {
         val h = AccountHarness()
         val account = h.activeAccount()
-        val profile = ProfileService(h.core, SignInMethodRegistry(listOf(PasswordSignInMethod())))
+        val profile = ProfileService(h.core, SignInMethodRegistry(listOf(FakePasswordSignInMethod())))
 
         val me = profile.me(account.id)
         assertNull(me.avatarKey)

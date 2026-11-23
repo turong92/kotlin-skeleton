@@ -24,7 +24,6 @@ class CodeLifetimeTest {
         h.emailChange.request(a.id, "new@example.com", ReauthInput("tangerine-42-moon"), "ses_1")
         h.reauth.requestConfirmation(a.id, "ses_1")
         h.deletion.requestConfirmation(a.id, "ses_1")
-        assertEquals("10", h.mailer.of(MailKind.VERIFY_CODE).last().vars["minutes"])
         assertEquals("10", h.mailer.of(MailKind.EMAIL_CHANGE_CODE).last().vars["minutes"])
         assertEquals("10", h.mailer.of(MailKind.REAUTH_CODE).last().vars["minutes"])
         assertEquals("10", h.mailer.of(MailKind.DELETE_CODE).last().vars["minutes"])
