@@ -55,7 +55,7 @@ valid_modules() { # 소스 레포의 모듈 이름들 (정렬)
   local d
   for d in "$SRC"/modules/*/; do
     [ -f "$d/build.gradle.kts" ] && basename "$d"
-  done | sort
+  done | LC_ALL=C sort
 }
 
 # 파이프가 아니라 here-string — pipefail 에서 grep -q 가 먼저 끝나면 앞쪽이 SIGPIPE(141)로 죽어 "없다" 로 오판한다(드물게, 목록이 길 때)
@@ -184,9 +184,9 @@ else
   close "$(printf '%s\n%s' "$STARTER" "$REQUESTED" | grep -v '^$')"; API_SELECTED="$CLOSED"
   close "$(printf '%s\n%s\n%s' "$STARTER" "$REQUESTED" "$SAMPLE_DEPS" | grep -v '^$')"; SELECTED="$CLOSED"
 fi
-SELECTED_SORTED="$(printf '%s\n' "$SELECTED" | sort -u)"
-API_SORTED="$(printf '%s\n' "$API_SELECTED" | sort -u)"
-REMOVED="$(comm -23 <(printf '%s\n' "$ALL_MODULES") <(printf '%s\n' "$SELECTED_SORTED"))"
+SELECTED_SORTED="$(printf '%s\n' "$SELECTED" | LC_ALL=C sort -u)"
+API_SORTED="$(printf '%s\n' "$API_SELECTED" | LC_ALL=C sort -u)"
+REMOVED="$(LC_ALL=C comm -23 <(printf '%s\n' "$ALL_MODULES") <(printf '%s\n' "$SELECTED_SORTED"))"
 
 # board 는 저장소를 모른다 (board-jdbc 가 포트를 구현한다) — 둘 다 적지 않았다면 알려 준다
 if in_list board "$SELECTED_SORTED" && ! in_list board-jdbc "$SELECTED_SORTED"; then
@@ -451,7 +451,7 @@ if [ -f deploy/app.yaml ]; then
     [ -n "$m" ] || continue
     M="$m" perl -ni -e 'print unless /^(#\s+|\s+-\s+\S+\s+#\s+)\[\Q$ENV{M}\E\]/' deploy/app.yaml
   done <<EOF3
-$(grep -o '^#   \[[a-z0-9-]*\]' deploy/app.yaml | sed 's/^#   \[\(.*\)\]$/\1/' | sort -u | while IFS= read -r t; do in_list "$t" "$API_SORTED" || echo "$t"; done)
+$(grep -o '^#   \[[a-z0-9-]*\]' deploy/app.yaml | sed 's/^#   \[\(.*\)\]$/\1/' | LC_ALL=C sort -u | while IFS= read -r t; do in_list "$t" "$API_SORTED" || echo "$t"; done)
 EOF3
   if [ "${#PREFIX}" -lt 2 ] || [ "${#PREFIX}" -gt 20 ]; then
     echo "  note: deploy/app.yaml name '$PREFIX' must be 2-20 characters (^[a-z][a-z0-9-]{1,19}\$) for the platform - shorten it there" >&2
