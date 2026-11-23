@@ -86,6 +86,8 @@ src/main/resources/legal/
 
 ### 앱이 prod 전에 채워야 하는 것 (체크리스트)
 
+켠 기능(로그인 · 광고 · 결제 · 메일)별로 방침에 넣을 값과 업체 문의처는 [launch-checklist](launch-checklist.md).
+
 1. `src/main/resources/legal/` 에 자기 문서와 `manifest.json` — `template: true` 를 지운다 (DeployGuard 가 막는다).
 2. 검토를 받은 판은 `status: REVIEWED` + `effectiveFrom` + 언어별 `sha256`. 시작 실패 메시지가 계산한 해시를 알려 준다.
 3. `skeleton.legal.facts.*` — 문서가 쓰는 모든 `{{키}}` (가드가 빠진 키 이름을 말한다).

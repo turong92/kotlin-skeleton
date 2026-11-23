@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 출시 전 체크리스트 (2026-11-23)
+
+- **`docs/launch-checklist.md`**: 켠 기능(로그인 · 광고 · 결제 · 메일)별로 방침에 넣을 값 · 업체 개인정보 문의처 · 소셜 앱 dev/prod 분리 · 광고 심사 순서 · 결제 사업자 표시 · 클라우드 계정 준비. 빈 값은 기존 legal 사실 가드(`{{키}}`)로 잡는다 — 새 가드 코드는 없다.
+
 ### prod 가 아닌 환경은 검색 색인 금지 (2026-11-22)
 
 - **platform `NoIndexFilter`**: `skeleton.env` 가 `local` · `stage` 면 서버 응답에 `X-Robots-Tag: noindex, nofollow`(오류 응답 포함). 비었거나 `prod` 면 그대로. 늘 등록하고 켤지는 실행 때 정한다(네이티브 AOT). robots.txt `Disallow` 로 막지 않는다 — `docs/deploy.md` §4.

@@ -9,7 +9,7 @@
 | 이 레포 | 계약을 지키는 `Dockerfile` · `deploy/app.yaml`(선언) · 배포 가드 · 계약 증명 스크립트 (GHCR 워크플로는 보류 — §6) |
 | 플랫폼(홈서버 레포 `infra/modules/app-docker`) | 선언을 읽어 컨테이너 · DB · Redis · 비밀 · Caddy · 터널을 만든다 |
 
-GCP Cloud Run(+ Cloudflare)에 올릴 때는 `docs/deploy-cloudrun.md` 를 따른다.
+GCP Cloud Run(+ Cloudflare)에 올릴 때는 `docs/deploy-cloudrun.md` 를 따른다. 첫 prod 전에 켠 기능별로 준비할 것(방침 값 · 소셜 앱 · 광고 심사 · 결제 표시 · 클라우드 계정)은 [launch-checklist](launch-checklist.md).
 
 ## 1. 배포 흐름 — 로컬 빌드, tag 를 올리는 것이 배포다
 
