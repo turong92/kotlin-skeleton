@@ -66,6 +66,14 @@ class ApiKeyTestBeans {
     @Bean fun events(): Events = Events()
     @Bean fun audits(): Audits = Audits()
     @Bean fun accountTaskRunner(): AccountTaskRunner = AccountTaskRunner.DIRECT
+    @Bean fun fakePasswordCredentials(): dev.sumin.skeleton.account.PasswordCredentials = FakePasswordCredentials()
+    @Bean fun fakePasswordSignInMethod(): dev.sumin.skeleton.account.signin.SignInMethod = FakePasswordSignInMethod()
+    @Bean fun accountFixtures(
+        core: dev.sumin.skeleton.account.AccountCore,
+        accounts: dev.sumin.skeleton.account.AccountRepository,
+        authAccounts: dev.sumin.skeleton.auth.account.AuthAccountRepository,
+        tokens: dev.sumin.skeleton.auth.api.AuthTokenResponseFactory,
+    ): AccountFixtures = AccountFixtures(core, accounts, authAccounts, tokens)
     @Bean fun probeController(): ProbeController = ProbeController()
     @Bean fun notesScopes(): ApiKeyScopeDeclaration = ApiKeyScopeDeclaration("notes", listOf("notes.read", "notes.write"))
     @Bean fun billingScopes(): ApiKeyScopeDeclaration = ApiKeyScopeDeclaration("billing", listOf("billing.read"))

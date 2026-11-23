@@ -72,4 +72,16 @@ class MfaTestBeans {
     @Bean fun audits(): Audits = Audits()
     @Bean fun time(): FrozenTime = FrozenTime()
     @Bean fun accountTaskRunner(): AccountTaskRunner = AccountTaskRunner.DIRECT
+    @Bean fun fakePasswordCredentials(): dev.sumin.skeleton.account.PasswordCredentials = FakePasswordCredentials()
+    @Bean fun fakePasswordSignInMethod(): dev.sumin.skeleton.account.signin.SignInMethod = FakePasswordSignInMethod()
+    @Bean fun accountFixtures(
+        core: dev.sumin.skeleton.account.AccountCore,
+        accounts: dev.sumin.skeleton.account.AccountRepository,
+        authAccounts: dev.sumin.skeleton.auth.account.AuthAccountRepository,
+        tokens: dev.sumin.skeleton.auth.api.AuthTokenResponseFactory,
+    ): AccountFixtures = AccountFixtures(core, accounts, authAccounts, tokens)
+    @Bean fun firstStepPassedController(authAccounts: dev.sumin.skeleton.auth.account.AuthAccountRepository, tokens: dev.sumin.skeleton.auth.api.AuthTokenResponseFactory): FirstStepPassedController =
+        FirstStepPassedController(authAccounts, tokens)
+    @Bean fun firstStepPassedPublic(): dev.sumin.skeleton.common.web.PublicEndpointContributor =
+        dev.sumin.skeleton.common.web.PublicEndpointContributor { registry -> registry.add("POST", "/api/v1/auth/test-first-step-passed") }
 }

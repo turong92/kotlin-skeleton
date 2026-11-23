@@ -20,11 +20,12 @@ abstract class SessionWebTestBase {
         store.purge(java.time.Instant.now().plusSeconds(60))
     }
 
-    fun login(email: String = "ann@example.com", password: String = "correct-horse", ua: String = "JUnit-UA", ip: String = "203.0.113.9"): MvcResult =
+    /** 1단계를 통과한 계정의 토큰 발급 — `auth` 의 발급 팩토리가 세션을 연다 (비밀번호 확인은 `auth-password` 의 몫이라 이 모듈 시험에 없다) */
+    fun login(email: String = "ann@example.com", ua: String = "JUnit-UA", ip: String = "203.0.113.9"): MvcResult =
         mvc.perform(
-            post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).header("User-Agent", ua).header("X-Device-Name", "Test phone")
+            post("/api/v1/auth/test-first-step-passed").contentType(MediaType.APPLICATION_JSON).header("User-Agent", ua).header("X-Device-Name", "Test phone")
                 .with { it.remoteAddr = ip; it }
-                .content("""{"email":"$email","password":"$password"}"""),
+                .content("""{"email":"$email"}"""),
         ).andReturn()
 
     fun MvcResult.str(path: String): String? =

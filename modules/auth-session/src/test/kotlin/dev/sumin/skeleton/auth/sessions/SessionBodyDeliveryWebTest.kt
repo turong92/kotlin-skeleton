@@ -123,8 +123,8 @@ class SessionBodyDeliveryWebTest : SessionWebTestBase() {
     }
 
     @Test
-    fun `login still works exactly as before for the wrong password`() {
-        val r = login(password = "nope")
+    fun `a refused sign-in opens no session and sets no cookie`() {
+        val r = login(email = "nobody@example.com")
         assertEquals(401, r.response.status)
         assertNull(r.response.getCookie("skeleton_refresh"))
     }

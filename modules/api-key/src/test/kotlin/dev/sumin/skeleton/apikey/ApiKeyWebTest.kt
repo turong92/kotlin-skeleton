@@ -11,11 +11,10 @@ import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.apikeytest.ApiKeyTestApplication
 import dev.sumin.skeleton.apikeytest.ApiKeyTestBeans
 import dev.sumin.skeleton.apikeytest.Events
-import dev.sumin.skeleton.apikeytest.Mails
+import dev.sumin.skeleton.apikeytest.AccountFixtures
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.erasure.ErasureRequest
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -35,7 +34,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
-private val ips = AtomicInteger()
 private const val PASSWORD = "tangerine-42-moon"
 
 /** 진짜 account · auth 위에서 - 발급(다시 인증) · 내 목록 · 본인 회수 · 키로 닿는 길(표시 · 범위) · 요청 인증의 거절들 · 탈퇴 · 토큰 원문이 어디에도 없음 */
@@ -47,7 +45,7 @@ private const val PASSWORD = "tangerine-42-moon"
 @Import(ApiKeyTestBeans::class)
 class ApiKeyWebTest {
     @Autowired lateinit var mvc: MockMvc
-    @Autowired lateinit var mails: Mails
+    @Autowired lateinit var fixtures: AccountFixtures
     @Autowired lateinit var events: Events
     @Autowired lateinit var store: FakeApiKeyStore
     @Autowired lateinit var accounts: AccountRepository
@@ -59,11 +57,8 @@ class ApiKeyWebTest {
 
     private fun signUp(): User {
         val email = "k${System.nanoTime()}@example.com"
-        val ip = "198.51.100.${100 + ips.getAndIncrement() % 100}"
-        val sign = mvc.perform(post("/api/v1/account/sign-up").with { it.remoteAddr = ip; it }.contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"$PASSWORD"}""")).andExpect(status().isAccepted).andReturn()
-        val signUpId = JsonPath.read<String>(sign.response.contentAsString, "$.value.signUpId")
-        val done = mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"signUpId":"$signUpId","code":"${mails.lastCode()}"}""")).andExpect(status().isOk).andReturn().response.contentAsString
-        return User(JsonPath.read(done, "$.value.principal.accountId"), "Bearer " + JsonPath.read<String>(done, "$.value.accessToken"))
+        val account = fixtures.create(email, PASSWORD)
+        return User(account.id, fixtures.bearer(email))
     }
 
     private fun create(user: User, name: String = "ci", scopes: String = """["notes.read"]""", proof: String = """"currentPassword":"$PASSWORD"""", extra: String = ""): ResultActions =

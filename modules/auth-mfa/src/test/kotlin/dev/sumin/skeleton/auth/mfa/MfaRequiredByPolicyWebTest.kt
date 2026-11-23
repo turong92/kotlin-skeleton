@@ -2,7 +2,7 @@ package dev.sumin.skeleton.auth.mfa
 
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.mfatest.FrozenTime
-import dev.sumin.skeleton.mfatest.Mails
+import dev.sumin.skeleton.mfatest.AccountFixtures
 import dev.sumin.skeleton.mfatest.MfaTestApplication
 import dev.sumin.skeleton.mfatest.MfaTestBeans
 import kotlin.test.Test
@@ -35,16 +35,14 @@ private const val PASSWORD = "tangerine-42-moon"
 @Import(MfaTestBeans::class)
 class MfaRequiredByPolicyWebTest {
     @Autowired lateinit var mvc: MockMvc
-    @Autowired lateinit var mails: Mails
+    @Autowired lateinit var fixtures: AccountFixtures
     @Autowired lateinit var time: FrozenTime
 
     @Test
     fun `a required account sees required in its state and cannot turn it off, but can enrol again`() {
         val email = "r${System.nanoTime()}@example.com"
-        val signUp = mvc.perform(post("/api/v1/account/sign-up").with { it.remoteAddr = "198.51.100.77"; it }.contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"$PASSWORD"}""")).andExpect(status().isAccepted).andReturn()
-        val signUpId = JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")
-        val done = mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"signUpId":"$signUpId","code":"${mails.lastCode()}"}""")).andReturn().response.contentAsString
-        val bearer = "Bearer " + JsonPath.read<String>(done, "$.value.accessToken")
+        fixtures.create(email, PASSWORD)
+        val bearer = fixtures.bearer(email)
         fun call(path: String, body: String): ResultActions =
             mvc.perform(post("/api/v1/auth/mfa$path").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON).content(body))
 

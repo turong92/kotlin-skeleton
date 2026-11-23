@@ -3,10 +3,9 @@ package dev.sumin.skeleton.apikey
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.apikeytest.ApiKeyTestApplication
 import dev.sumin.skeleton.apikeytest.ApiKeyTestBeans
-import dev.sumin.skeleton.apikeytest.Mails
+import dev.sumin.skeleton.apikeytest.AccountFixtures
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
@@ -20,8 +19,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-
-private val ips = AtomicInteger()
 
 /** 앱이 켜는 것들 - 접두사 · 키별 한도 · 만료 상한 (모듈 기본은 `apk` · 한도 끔 · 상한 없음) */
 @SpringBootTest(
@@ -38,15 +35,12 @@ private val ips = AtomicInteger()
 @Import(ApiKeyTestBeans::class)
 class ApiKeyLimitsWebTest {
     @Autowired lateinit var mvc: MockMvc
-    @Autowired lateinit var mails: Mails
+    @Autowired lateinit var fixtures: AccountFixtures
 
     private fun signUp(): String {
         val email = "l${System.nanoTime()}@example.com"
-        val ip = "198.51.101.${100 + ips.getAndIncrement() % 100}"
-        val sign = mvc.perform(post("/api/v1/account/sign-up").with { it.remoteAddr = ip; it }.contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isAccepted).andReturn()
-        val signUpId = JsonPath.read<String>(sign.response.contentAsString, "$.value.signUpId")
-        val done = mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"signUpId":"$signUpId","code":"${mails.lastCode()}"}""")).andExpect(status().isOk).andReturn().response.contentAsString
-        return "Bearer " + JsonPath.read<String>(done, "$.value.accessToken")
+        fixtures.create(email)
+        return fixtures.bearer(email)
     }
 
     private fun create(bearer: String, expiresAt: Instant?) =

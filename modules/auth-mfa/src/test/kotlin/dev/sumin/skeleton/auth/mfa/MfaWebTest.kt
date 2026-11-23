@@ -7,11 +7,11 @@ import dev.sumin.skeleton.common.erasure.ErasureRequest
 import dev.sumin.skeleton.mfatest.Events
 import dev.sumin.skeleton.mfatest.FakeSessions
 import dev.sumin.skeleton.mfatest.FrozenTime
+import dev.sumin.skeleton.mfatest.AccountFixtures
 import dev.sumin.skeleton.mfatest.Mails
 import dev.sumin.skeleton.mfatest.MfaTestApplication
 import dev.sumin.skeleton.mfatest.MfaTestBeans
 import java.time.Duration
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -34,7 +34,6 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
-private val ips = AtomicInteger()
 private const val PASSWORD = "tangerine-42-moon"
 private const val BASE = "/api/v1/auth/mfa"
 
@@ -55,6 +54,7 @@ private const val BASE = "/api/v1/auth/mfa"
 class MfaWebTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var mails: Mails
+    @Autowired lateinit var fixtures: AccountFixtures
     @Autowired lateinit var events: Events
     @Autowired lateinit var store: FakeMfaStore
     @Autowired lateinit var sessions: FakeSessions
@@ -66,11 +66,8 @@ class MfaWebTest {
 
     private fun signUp(): User {
         val email = "m${System.nanoTime()}@example.com"
-        val ip = "198.51.100.${100 + ips.getAndIncrement() % 100}"
-        val sign = mvc.perform(post("/api/v1/account/sign-up").with { it.remoteAddr = ip; it }.contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"$PASSWORD"}""")).andExpect(status().isAccepted).andReturn()
-        val signUpId = JsonPath.read<String>(sign.response.contentAsString, "$.value.signUpId")
-        val done = mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"signUpId":"$signUpId","code":"${mails.lastCode()}"}""")).andExpect(status().isOk).andReturn().response.contentAsString
-        return User(JsonPath.read(done, "$.value.principal.accountId"), email, "Bearer " + JsonPath.read<String>(done, "$.value.accessToken"))
+        val account = fixtures.create(email, PASSWORD)
+        return User(account.id, email, fixtures.bearer(email))
     }
 
     private fun post(user: User?, path: String, body: String): ResultActions =
@@ -99,7 +96,7 @@ class MfaWebTest {
     }
 
     private fun login(user: User): ResultActions =
-        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content("""{"email":"${user.email}","password":"$PASSWORD"}"""))
+        mvc.perform(post("/api/v1/auth/test-first-step-passed").contentType(MediaType.APPLICATION_JSON).content("""{"email":"${user.email}"}"""))
 
     private fun mfaToken(user: User): String =
         JsonPath.read(login(user).andExpect(status().isForbidden).andReturn().response.contentAsString, "$.data.mfaToken")

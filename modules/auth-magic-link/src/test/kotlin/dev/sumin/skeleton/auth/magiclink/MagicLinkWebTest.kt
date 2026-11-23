@@ -7,6 +7,7 @@ import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.magiclinktest.MagicLinkTestApplication
 import dev.sumin.skeleton.magiclinktest.MagicLinkTestBeans
 import dev.sumin.skeleton.magiclinktest.Mails
+import dev.sumin.skeleton.magiclinktest.TestAccounts
 import dev.sumin.skeleton.magiclinktest.MutableTime
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
@@ -46,6 +47,7 @@ class MagicLinkWebTest {
     @Autowired lateinit var mails: Mails
     @Autowired lateinit var time: MutableTime
     @Autowired lateinit var tokens: OneTimeTokens
+    @Autowired lateinit var testAccounts: TestAccounts
 
     @BeforeEach fun clear() { mails.sent.clear() }
 
@@ -108,13 +110,8 @@ class MagicLinkWebTest {
         val open = lastToken()                                // a fresh, still open link of the owner
         mails.sent.clear()
 
-        fun signUp(address: String) = mvc.perform(
-            post("/api/v1/account/sign-up").with { it.remoteAddr = "198.51.100.${100 + nextTestIp.getAndIncrement() % 100}"; it }
-                .contentType(MediaType.APPLICATION_JSON).content("""{"email":"$address","password":"tangerine-42-moon"}"""),
-        ).andExpect(status().isAccepted).andReturn()
-        val known = signUp(email)
-        val unknown = signUp(unique())
-        assertEquals(JsonPath.read<Map<String, Any?>>(known.response.contentAsString, "$.value").keys, JsonPath.read<Map<String, Any?>>(unknown.response.contentAsString, "$.value").keys)
+        // someone else's sign-up on this address (account-password's sign-up calls exactly this); the "same 202 for known and unknown" part is that module's test
+        testAccounts.signUpAttemptOn(email)
 
         val mail = mails.sent.last { it.kind == MailKind.ALREADY_REGISTERED }
         assertEquals("magic_link", mail.vars["methods"])
@@ -183,6 +180,7 @@ class MagicLinkWebTest {
 class MagicLinkSignUpClosedWebTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var mails: Mails
+    @Autowired lateinit var testAccounts: TestAccounts
 
     @Test
     fun `with sign-up closed (the default) an unknown address gets the same 202 and no mail, so no account appears`() {
@@ -203,10 +201,7 @@ class MagicLinkSignUpClosedWebTest {
     fun `with sign-up closed a link still signs an EXISTING account in (the default must not make magic link dead)`() {
         mails.sent.clear()
         val email = "existing${System.nanoTime()}@example.com"
-        val signUp = mvc.perform(post("/api/v1/account/sign-up").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isAccepted).andReturn()
-        val signUpId = com.jayway.jsonpath.JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")
-        val code = mails.sent.last { it.kind == MailKind.VERIFY_CODE }.vars.getValue("code")
-        mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"signUpId":"$signUpId","code":"$code"}""")).andExpect(status().isOk)
+        testAccounts.create(email)   // a password-free account (the sign-up that used to make it is account-password's)
         mails.sent.clear()
         mvc.perform(post("/api/v1/auth/magic-link/request").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email"}""")).andExpect(status().isAccepted)
         val link = mails.tokenOf(mails.sent.last { it.kind == MailKind.MAGIC_LINK })

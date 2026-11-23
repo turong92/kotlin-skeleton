@@ -9,6 +9,7 @@ import dev.sumin.skeleton.mfatest.Audits
 import dev.sumin.skeleton.mfatest.Events
 import dev.sumin.skeleton.mfatest.FakeSessions
 import dev.sumin.skeleton.mfatest.FrozenTime
+import dev.sumin.skeleton.mfatest.AccountFixtures
 import dev.sumin.skeleton.mfatest.Mails
 import dev.sumin.skeleton.mfatest.MfaTestApplication
 import dev.sumin.skeleton.mfatest.MfaTestBeans
@@ -59,6 +60,7 @@ class MfaAdminWebTest {
     @Autowired lateinit var accounts: AccountRepository
     @Autowired lateinit var store: FakeMfaStore
     @Autowired lateinit var mails: Mails
+    @Autowired lateinit var fixtures: AccountFixtures
     @Autowired lateinit var events: Events
     @Autowired lateinit var audits: Audits
     @Autowired lateinit var sessions: FakeSessions
@@ -75,14 +77,13 @@ class MfaAdminWebTest {
     /** 2단계를 켠 계정 - 가입 -> 등록 -> 확인 */
     private fun enrolled(): Target {
         val email = "t${System.nanoTime()}@example.com"
-        val sign = mvc.perform(post("/api/v1/account/sign-up").with { it.remoteAddr = "198.51.100.${10 + seq.incrementAndGet() % 100}"; it }.contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"$PASSWORD"}""")).andReturn()
-        val done = mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"signUpId":"${JsonPath.read<String>(sign.response.contentAsString, "$.value.signUpId")}","code":"${mails.lastCode()}"}""")).andReturn().response.contentAsString
-        val bearer = "Bearer " + JsonPath.read<String>(done, "$.value.accessToken")
+        val account = fixtures.create(email, PASSWORD)
+        val bearer = fixtures.bearer(email)
         val started = mvc.perform(post("/api/v1/auth/mfa/totp/enrollment").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON).content("""{"currentPassword":"$PASSWORD"}""")).andReturn().response.contentAsString
         val secret = Base32.decode(JsonPath.read<String>(started, "$.value.secret"))
         mvc.perform(post("/api/v1/auth/mfa/totp/enrollment/confirm").header("Authorization", bearer).contentType(MediaType.APPLICATION_JSON).content("""{"code":"${Totp.code(secret, Totp.stepOf(time.now()) - 1)}"}"""))
             .andExpect(status().isOk)
-        return Target(JsonPath.read(done, "$.value.principal.accountId"), email)
+        return Target(account.id, email)
     }
 
     private fun reset(id: String, who: TestingAuthenticationToken, body: String = """{"reason":"verified by video call"}"""): ResultActions =
@@ -108,7 +109,7 @@ class MfaAdminWebTest {
     fun `a reset wipes both tables, closes every session, mails the owner, leaves an event and an audit line with the target id only, and the owner signs in without a code`() {
         val target = enrolled()
         val op = operator("MFASUP")
-        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content("""{"email":"${target.email}","password":"$PASSWORD"}""")).andExpect(status().isForbidden)
+        mvc.perform(post("/api/v1/auth/test-first-step-passed").contentType(MediaType.APPLICATION_JSON).content("""{"email":"${target.email}"}""")).andExpect(status().isForbidden)
 
         reset(target.id, op).andExpect(status().isNoContent)
 
@@ -123,7 +124,7 @@ class MfaAdminWebTest {
         assertEquals(emptyMap(), audit.detail)
         assertFalse("video call" in audit.toString() + events.all.toString(), "the reason is not copied into records")
 
-        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content("""{"email":"${target.email}","password":"$PASSWORD"}""")).andExpect(status().isOk)
+        mvc.perform(post("/api/v1/auth/test-first-step-passed").contentType(MediaType.APPLICATION_JSON).content("""{"email":"${target.email}"}""")).andExpect(status().isOk)
     }
 
     @Test

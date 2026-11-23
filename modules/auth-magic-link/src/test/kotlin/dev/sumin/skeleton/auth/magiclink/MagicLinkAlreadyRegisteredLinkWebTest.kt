@@ -6,6 +6,7 @@ import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.magiclinktest.MagicLinkTestApplication
 import dev.sumin.skeleton.magiclinktest.MagicLinkTestBeans
 import dev.sumin.skeleton.magiclinktest.Mails
+import dev.sumin.skeleton.magiclinktest.TestAccounts
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -40,15 +41,13 @@ class MagicLinkAlreadyRegisteredLinkWebTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var mails: Mails
     @Autowired lateinit var tokens: OneTimeTokens
+    @Autowired lateinit var testAccounts: TestAccounts
 
     @BeforeEach fun clear() { mails.sent.clear() }
 
     private fun ip() = "198.51.100.${100 + nextIp.getAndIncrement() % 100}"
     private fun request(email: String) = mvc.perform(post("/api/v1/auth/magic-link/request").with { it.remoteAddr = ip(); it }.contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email"}"""))
     private fun redeem(token: String) = mvc.perform(post("/api/v1/auth/magic-link/redeem").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$token"}"""))
-    private fun signUp(address: String) = mvc.perform(
-        post("/api/v1/account/sign-up").with { it.remoteAddr = ip(); it }.contentType(MediaType.APPLICATION_JSON).content("""{"email":"$address","password":"tangerine-42-moon"}"""),
-    ).andExpect(status().isAccepted)
     private fun unique() = "ml${System.nanoTime()}@example.com"
 
     @Test
@@ -57,7 +56,7 @@ class MagicLinkAlreadyRegisteredLinkWebTest {
         request(email)
         redeem(mails.tokenOf(mails.sent.last { it.kind == MailKind.MAGIC_LINK })).andExpect(status().isOk)
         mails.sent.clear()
-        signUp(email)
+        testAccounts.signUpAttemptOn(email)
         val mail = mails.sent.last { it.kind == MailKind.ALREADY_REGISTERED }
         assertEquals("15", mail.vars["magicMinutes"])
         val link = mail.vars.getValue("magicUrl")
@@ -71,7 +70,7 @@ class MagicLinkAlreadyRegisteredLinkWebTest {
         request(email)
         redeem(mails.tokenOf(mails.sent.last { it.kind == MailKind.MAGIC_LINK })).andExpect(status().isOk)
         mails.sent.clear()
-        repeat(3) { signUp(email) }
+        repeat(3) { testAccounts.signUpAttemptOn(email) }
         val withLink = mails.sent.filter { it.kind == MailKind.ALREADY_REGISTERED }.filter { it.vars["magicUrl"] != null }
         assertEquals(1, withLink.size, "only the first request issued a link")
         val first = withLink.single().vars.getValue("magicUrl").substringAfter("token=")

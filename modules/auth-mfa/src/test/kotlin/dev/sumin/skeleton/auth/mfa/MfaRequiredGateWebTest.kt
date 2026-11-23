@@ -7,7 +7,7 @@ import dev.sumin.skeleton.auth.security.BreakGlassAuthentication
 import dev.sumin.skeleton.auth.security.NonInteractiveAuthentication
 import dev.sumin.skeleton.mfatest.FakeSessionInspector
 import dev.sumin.skeleton.mfatest.FrozenTime
-import dev.sumin.skeleton.mfatest.Mails
+import dev.sumin.skeleton.mfatest.AccountFixtures
 import dev.sumin.skeleton.mfatest.MfaTestApplication
 import dev.sumin.skeleton.mfatest.MfaTestBeans
 import java.time.Duration
@@ -54,19 +54,17 @@ private class ProgramAuthentication(private val accountId: String) : AbstractAut
 @Import(MfaTestBeans::class)
 class MfaRequiredGateWebTest {
     @Autowired lateinit var mvc: MockMvc
-    @Autowired lateinit var mails: Mails
+    @Autowired lateinit var fixtures: AccountFixtures
     @Autowired lateinit var time: FrozenTime
     @Autowired lateinit var inspector: FakeSessionInspector
 
     private class User(val id: String, val bearer: String)
 
-    private var ip = 0
 
     private fun signUp(): User {
         val email = "g${System.nanoTime()}@example.com"
-        val signUp = mvc.perform(post("/api/v1/account/sign-up").with { it.remoteAddr = "198.51.100.${150 + ip++ % 90}"; it }.contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"$PASSWORD"}""")).andReturn()
-        val done = mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"signUpId":"${JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")}","code":"${mails.lastCode()}"}""")).andReturn().response.contentAsString
-        return User(JsonPath.read(done, "$.value.principal.accountId"), "Bearer " + JsonPath.read<String>(done, "$.value.accessToken"))
+        val account = fixtures.create(email, PASSWORD)
+        return User(account.id, fixtures.bearer(email))
     }
 
     private fun patchMe(user: User): ResultActions = mvc.perform(patch(ME).header("Authorization", user.bearer).contentType(MediaType.APPLICATION_JSON).content("{}"))

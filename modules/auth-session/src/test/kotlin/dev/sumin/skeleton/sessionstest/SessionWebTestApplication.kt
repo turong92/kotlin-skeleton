@@ -37,6 +37,9 @@ class MutableAccounts(private val encoder: PasswordEncoder) : AuthAccountReposit
 @TestConfiguration(proxyBeanMethods = false)
 class SessionTestAccounts {
     @Bean fun mutableAccounts(encoder: PasswordEncoder): MutableAccounts = MutableAccounts(encoder)
+    @Bean fun firstStepPassedController(accounts: AuthAccountRepository, tokens: dev.sumin.skeleton.auth.api.AuthTokenResponseFactory): FirstStepPassedController = FirstStepPassedController(accounts, tokens)
+    @Bean fun firstStepPassedPublic(): dev.sumin.skeleton.common.web.PublicEndpointContributor =
+        dev.sumin.skeleton.common.web.PublicEndpointContributor { registry -> registry.add("POST", "/api/v1/auth/test-first-step-passed") }
 }
 
 class RecordingSessionEventListener : dev.sumin.skeleton.auth.session.SessionEventListener {
@@ -47,4 +50,23 @@ class RecordingSessionEventListener : dev.sumin.skeleton.auth.session.SessionEve
 @TestConfiguration(proxyBeanMethods = false)
 class RecordingSessionEvents {
     @Bean fun recordingSessionEventListener(): RecordingSessionEventListener = RecordingSessionEventListener()
+}
+
+/**
+ * 1단계(비밀번호 · 소셜 · 매직 링크)를 통과한 계정에 토큰 발급을 요청하는 시험용 길 — 진짜 발급 팩토리를 그대로 부르므로 세션이 열리고 응답이 본문 · 쿠키로 나간다.
+ * 이 모듈은 `auth` 만 안다: 비밀번호 확인은 `auth-password` 의 몫이라 여기서는 계정이 있느냐만 본다 (없으면 로그인과 같은 401).
+ */
+@org.springframework.web.bind.annotation.RestController
+@org.springframework.web.bind.annotation.RequestMapping("/api/v1/auth")
+class FirstStepPassedController(
+    private val accounts: AuthAccountRepository,
+    private val tokens: dev.sumin.skeleton.auth.api.AuthTokenResponseFactory,
+) {
+    data class Request(val email: String)
+
+    @org.springframework.web.bind.annotation.PostMapping("/test-first-step-passed")
+    fun issue(@org.springframework.web.bind.annotation.RequestBody request: Request): dev.sumin.skeleton.common.DataResponse<dev.sumin.skeleton.auth.api.AuthTokenResponse> {
+        val account = accounts.findBy(AccountIdentifier(email = request.email)) ?: throw dev.sumin.skeleton.auth.api.InvalidCredentialsException()
+        return dev.sumin.skeleton.common.Response.ok(tokens.issue(account))
+    }
 }
