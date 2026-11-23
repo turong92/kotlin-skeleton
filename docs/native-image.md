@@ -179,14 +179,14 @@ Flyway 는 기동 때 `Unable to scan location: /db/migration/postgresql (unsupp
 2. **체크포인트가 환경을 굳힌다.** `onRefresh` 는 빈이 다 만들어진 뒤에 찍히므로 앱은 체크포인트 때 **DB 에 붙고 Flyway 마이그레이션까지 돈다**. 복원 때 환경변수(`SPRING_DATASOURCE_PASSWORD` · `SKELETON_AUTH_JWT_SECRET`)를 바꿔 줘도 이미 읽은 설정은 바뀌지 않았다(틀린 DB 비밀번호를 줘도 옛 값으로 DB 가 쓰였다).
    **비밀(JWT · DB 비밀번호 · S3 키)이 `core.img` 에 문자열로 들어간다**(grep 으로 확인) → 이미지는 환경마다 따로, 접근 통제가 된 레지스트리에만 둔다. 같은 이미지를 환경변수로 바꿔 쓰는 배포 계약(홈서버 `docs/deploy.md`)과 맞지 않는다.
 3. **복원 때 마이그레이션이 다시 돌지 않는다.** 빈 DB 에 복원하면 첫 요청이 `BadSqlGrammarException`. 체크포인트 DB 와 같은 스키마 버전이 이미 적용된 DB 에 붙어야 한다(배포 순서: 마이그레이션 먼저 → 이미지 복원).
-4. 복원한 JVM 은 jar 경로 · 내용이 체크포인트 때와 같아야 한다(`/app/app.jar` 고정), CPU 세대가 다르면 `-XX:CPUFeatures` 로 맞춘다. 체크포인트 프로세스는 SIGKILL 로 끝난다(종료 코드 137 이 정상).
+4. 복원한 JVM 은 jar 경로 · 내용이 체크포인트 때와 같아야 한다(`/app/app.jar` 고정), CPU 세대가 다르면 `-XX:CPUFeatures` 로 맞춘다. **다만 이것만으로는 안 맞는 경우가 있다**(이 스켈레톤으로 만든 다른 앱의 Cloud Run 실측, 2026-11-23). GitHub 러너에서 뜬 체크포인트를 Cloud Run 의 AMD EPYC 7B13(Zen3, AVX-512 없음) 호스트에서 복원하면 `-XX:CPUFeatures=generic` 을 켜도 곧바로 SIGSEGV 로 죽었다. `GLIBC_TUNABLES` 로 AVX-512 를 끄거나 `-XX:UseAVX=2` 를 줘도 살지 않았다. 반대로 **7B13 에서 뜬 체크포인트는 시험한 모든 CPU(7B13 · 9B14 · Intel 여러 기종, 12건)에서 복원됐다**. 그래서 체크포인트는 가장 낮은 세대 CPU 에서 뜬다. Cloud Run 은 CPU 기종을 고를 수 없으니, 진입 스크립트에 「복원이 신호로 죽으면 일반 JVM 으로 다시 띄운다」는 폴백도 둔다. 체크포인트 프로세스는 SIGKILL 로 끝난다(종료 코드 137 이 정상).
 5. **비root 로 돈다**: `Dockerfile.crac` 의 기본은 `useradd` 한 사용자 `app`(uid 10001)이고 체크포인트도 그 사용자로 만든다. WSL2 에서 `--cap-drop ALL` + uid 10001 로 복원해 흐름 29항목이 통과했다(root 가 아니어도 된다).
 6. **설정 안 한 값을 기동 때 난수로 만든 키**(예: 대기실 서명 키)도 체크포인트에 굳어 **모든 인스턴스가 같은 값**을 쓴다 — 인스턴스마다 달라야 하는 키는 CRaC 와 맞지 않는다.
 7. 체크포인트 파일(`.crac/core.img`)에는 비밀이 들어 있다 — `.gitignore` 에 있고 `scripts/crac-build.sh` 가 이미지를 굳힌 뒤 비운다. 체크포인트 때의 환경은 `CRAC_ENV_FILE`(`--env-file` 형식)로 준다(명령줄에 비밀을 적지 않는다). 베이스 이미지(`azul/zulu-openjdk` CRaC, `mwader/static-ffmpeg`)는 다이제스트로 고정했다(2026-11-18).
 8. 이 JDK 이미지는 Ubuntu 22.04 라 apt ffmpeg 가 4.4 다 — `Dockerfile.crac` 는 `FFMPEG=1` 일 때 정적 ffmpeg 7.1 을 넣는다.
 
 **CRaC 는 비교용이다 — 비밀이 이미지에 굳으므로 배포 추천안이 아니다.** 그래서 `Dockerfile.crac` · `scripts/crac-build.sh` 는 새 프로젝트에 복사되지 않는다(스켈레톤 레포에만 남긴다).
-**고르는 기준**: 콜드스타트가 0.8s 급이어야 하고 **무거운 라이브러리를 손대지 않고 쓰고 싶으면** CRaC, 이미지 크기 · 메모리 · 비밀을 이미지에 넣지 않는 계약이 중요하면 네이티브. 둘 다 환경(모듈 조합)마다 이미지를 따로 만든다. Cloud Run 에서의 실제 복원(gVisor 샌드박스에서 Warp 가 도는지)은 **시험하지 않았다**.
+**고르는 기준**: 콜드스타트가 0.8s 급이어야 하고 **무거운 라이브러리를 손대지 않고 쓰고 싶으면** CRaC, 이미지 크기 · 메모리 · 비밀을 이미지에 넣지 않는 계약이 중요하면 네이티브. 둘 다 환경(모듈 조합)마다 이미지를 따로 만든다. Cloud Run 에서의 실제 복원은 스켈레톤에서 직접 시험하지 않았다. 다른 앱의 실측은 위 4번에 적었다(CPU 기종에 따라 복원이 죽는다).
 
 ## 무거운 라이브러리를 쓰는 앱을 위한 안내
 
