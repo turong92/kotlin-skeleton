@@ -233,6 +233,17 @@ class SessionServiceTest {
     }
 
     @Test
+    fun `a session still in use survives the cap — the least recently used one is evicted`() {
+        val s = service(AuthSessionProperties(maxSessionsPerAccount = 2))
+        val phone = s.open(account.accountId, client); time.advance(Duration.ofMinutes(1))
+        val other = s.open(account.accountId, client); time.advance(Duration.ofMinutes(1))
+        s.refresh(phone.refreshToken!!, client); time.advance(Duration.ofMinutes(1))   // 먼저 만들었지만 방금 썼다
+        val newer = s.open(account.accountId, client)
+        assertEquals(setOf(phone.sessionId, newer.sessionId), s.list(account.accountId, null).map { it.id }.toSet())
+        assertFalse(s.list(account.accountId, null).any { it.id == other.sessionId })
+    }
+
+    @Test
     fun `old used tokens are forgotten after the reuse memory so the table does not grow forever`() {
         val s = service(AuthSessionProperties(reuseMemory = Duration.ofHours(1)))
         var token = s.open(account.accountId, client).refreshToken!!

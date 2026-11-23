@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 세션 상한을 넘으면 가장 오래 안 쓴 세션부터 닫는다 — auth-session (2026-11-23)
+
+`max-sessions-per-account` 를 넘을 때 닫는 세션을 「먼저 만든 것」에서 「마지막 사용이 가장 이른 것」(LRU)으로 바꿨다. 같은 계정으로 새 로그인이 여러 번 들어와도(자동 시험 · 여러 브라우저) 매일 쓰는 기기의 세션이 밀려나지 않는다. 설정 · 와이어 · DB 변경 없음.
+
 ### 비밀번호 가입 · 로그인을 모듈로 분리 — account-password · auth-password (2026-11-23)
 
 소셜 · 링크만 쓰는 서비스가 비밀번호 코드를 모듈째 뺄 수 있다. 와이어는 그대로다(경로 · DTO · 에러 코드 · `skeleton.account.*` 설정 · `ReauthInput.currentPassword`, DB 변경 없음). 패키지 이름도 그대로다.

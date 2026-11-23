@@ -27,7 +27,7 @@ data class AuthSessionProperties(
      * 이 유예 안에서 도둑이 옛 토큰을 내밀어도 얻는 것은 주인이 이미 가진 후속 토큰뿐이다. 앱이 정한다 — `apps/api` · `apps/sample` 은 60s(관행의 상한: Okta 최대 60초 · Auth0 reuse interval). 콜드 스타트로 응답을 잃은 클라이언트는 이 안에 같은 토큰으로 재시도해야 한다.
      */
     val reuseGrace: Duration = Duration.ZERO,
-    /** 계정 하나가 가질 수 있는 세션 수 — 넘으면 가장 오래된 세션부터 닫는다 */
+    /** 계정 하나가 가질 수 있는 세션 수 — 넘으면 가장 오래 안 쓴(마지막 사용이 가장 이른) 세션부터 닫는다 */
     val maxSessionsPerAccount: Int = 20,
     val rotation: Rotation = Rotation(),
     val cookie: Cookie = Cookie(),

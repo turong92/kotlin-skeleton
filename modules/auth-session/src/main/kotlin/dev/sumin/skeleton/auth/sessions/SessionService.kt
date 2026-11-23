@@ -130,7 +130,8 @@ class SessionService(
     private fun evictOverflow(accountId: String, now: Instant) {
         val live = store.listActive(accountId, now, now.minus(properties.idleTtl))
         val overflow = live.size - (properties.maxSessionsPerAccount - 1)
-        if (overflow > 0) live.sortedBy { it.createdAt }.take(overflow).forEach { store.revoke(it.id, now, "EVICTED") }
+        // 가장 오래 **안 쓴** 세션부터 닫는다(LRU) — 먼저 만든 순으로 닫으면 매일 쓰는 폰이 새 로그인 몇 번에 밀려난다
+        if (overflow > 0) live.sortedWith(compareBy<SessionRecord> { it.lastUsedAt }.thenBy { it.createdAt }).take(overflow).forEach { store.revoke(it.id, now, "EVICTED") }
     }
 
     /** 옛 토큰 → 후속 토큰 (HMAC, 결정적). 옛 토큰의 해시가 아니라 원문으로 계산하므로 DB 만으로는 만들 수 없다 */
