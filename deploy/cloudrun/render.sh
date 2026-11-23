@@ -29,6 +29,9 @@ for f in dockerfile cpu memory min_instances max_instances concurrency timeout; 
   jq -e --arg f "$f" '.cloudrun | has($f) and .[$f] != null' <<<"$DJ" >/dev/null || die "필수 칸이 없다: cloudrun.$f"
 done
 
+# health — 기동 확인 경로(없으면 /health). 플래그 값이 쉼표로 나뉘므로 경로 글자만
+jq -e '(.health // "/health") | tostring | test("^/[A-Za-z0-9/_.~-]*$")' <<<"$DJ" >/dev/null || die "health 는 / 로 시작하는 경로여야 한다"
+
 # 이름 모양 — env 이름은 build-env 를 source 할 때 셸이 읽는다
 bad="$(jq -r '[((.env // {}) | keys[]), ((.cloudrun.build_args // {}) | keys[])] | map(select(test("^[A-Za-z_][A-Za-z0-9_]*$") | not)) | .[]' <<<"$DJ")"
 [ -z "$bad" ] || die "env · build_args 이름이 잘못됐다: $bad"
@@ -70,11 +73,14 @@ jq -r --argjson penv "$PLATFORM_ENV_JSON" '((.env // {}) + $penv) | to_entries[]
 } > "$OUT/build-args.txt"
 
 # deploy-flags.txt — 줄마다 플래그 하나
+# 기동 확인은 HTTP(선언의 health): 기본 TCP 는 포트가 열리면 기동 끝으로 보고 요청 없는 인스턴스에 CPU 를 거의 주지 않아
+# 미리 띄운 인스턴스의 마무리가 늘어진다. 확인이 도는 동안은 CPU 가 붙는다. 1초 간격 · 최대 240초(Cloud Run 상한 600초)
 jq -r --arg sa "$RUNTIME_SA" '
   .cloudrun as $c
   | "--port=\(.port)", "--cpu=\($c.cpu)", "--memory=\($c.memory)",
     "--min-instances=\($c.min_instances)", "--max-instances=\($c.max_instances)",
     "--concurrency=\($c.concurrency)", "--timeout=\($c.timeout)", "--cpu-boost",
+    "--startup-probe=httpGet.path=\(.health // "/health"),periodSeconds=1,timeoutSeconds=1,failureThreshold=240",
     "--service-account=\($sa)", "--allow-unauthenticated", "--region=asia-northeast3"' <<<"$DJ" > "$OUT/deploy-flags.txt"
 
 jq -r '.cloudrun.dockerfile' <<<"$DJ" > "$OUT/dockerfile"

@@ -119,6 +119,18 @@ class EdgeSecretClientIpTest {
     }
 
     @Test
+    fun `GET and HEAD health pass without secret for platform probes`() {
+        val ips = ips(sha256(secretA))
+        listOf("GET", "HEAD").forEach { m ->
+            val out = run(filter(ips), ips, path = "/health", method = m) { addHeader("CF-Connecting-IP", "198.51.100.20") }
+            assertTrue(out.passed, m)
+            assertEquals("203.0.113.9", out.client?.ip)
+        }
+        assertEquals(403, run(filter(ips), ips, path = "/health", method = "POST") {}.status)
+        assertEquals(403, run(filter(ips), ips, path = "/health/x", method = "GET") {}.status)
+    }
+
+    @Test
     fun `edge-secret without hashes fails startup naming skeleton web client-ip edge-secret-sha256`() {
         val runner = WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(WebPolicyAutoConfiguration::class.java))

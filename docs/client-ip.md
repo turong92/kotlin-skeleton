@@ -41,7 +41,7 @@ The socket peer and `trusted-proxies` are not looked at (a public origin has no 
 
 - `X-Origin-Auth` is hashed with SHA-256 and compared in constant time with the one or two lower-case hex entries of `edge-secret-sha256` (two = both accepted while the secret rotates). It must be present exactly once, non-blank, and at most 8192 characters (longer is rejected without hashing); anything else is `403` with the usual error body. The header value and its hash never reach the response or the logs.
 - A valid secret makes `CF-Connecting-IP` and `CF-IPCountry` believed, by the same rules as `cloudflare`; a missing or garbage `CF-Connecting-IP` falls back to the peer address.
-- Modules may exempt an exact **POST** path with an `EdgeSecretExemptPaths` bean (job-queue-jdbc exempts `skeleton.job-queue.wake.path`: the platform calls it directly, `X-Wake-Secret` authenticates it). An exempt request passes without the secret, but its CF headers are **not** believed.
+- Modules may exempt an exact **POST** path with an `EdgeSecretExemptPaths` bean (job-queue-jdbc exempts `skeleton.job-queue.wake.path`: the platform calls it directly, `X-Wake-Secret` authenticates it). An exempt request passes without the secret, but its CF headers are **not** believed. `GET`/`HEAD /health` is always exempt the same way — the Cloud Run startup probe calls it without headers (the edge Worker already forwards it publicly).
 - The app refuses to start when the mode is `edge-secret` and `edge-secret-sha256` is empty, has more than two entries, or an entry is not 64 lower-case hex characters. The message names the property only.
 
 The rate-limit key (`ClientAddress.limitKey`) is the address, and for IPv6 the `/64` prefix — rotating addresses inside one

@@ -33,7 +33,7 @@ enum class ClientIpMode {
     /**
      * 엣지(Cloudflare Worker 등)가 원점 비밀 헤더 `X-Origin-Auth` 를 싣는다 — 원점은 그 SHA-256 이 `edge-secret-sha256` 목록에 있을 때만 요청을 받고(아니면 403),
      * 그때만 `CF-Connecting-IP` · `CF-IPCountry` 를 읽는다. 소켓 피어 · `trusted-proxies` 는 보지 않는다(공개 주소로 직접 붙는 Cloud Run 같은 곳).
-     * [EdgeSecretExemptPaths] 의 POST 경로만 비밀 없이 통과하되 CF 헤더는 믿지 않는다.
+     * [EdgeSecretExemptPaths] 의 POST 경로와 GET · HEAD `/health`(플랫폼 기동 확인) 만 비밀 없이 통과하되 CF 헤더는 믿지 않는다.
      */
     EDGE_SECRET,
 }
@@ -229,7 +229,7 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
 
 /**
  * `ForwardedHeaderFilter` 가 `remoteAddr` · 전달 헤더를 바꾸기 전에 클라이언트를 풀어 요청 속성([ClientIps.ATTRIBUTE])에 둔다.
- * [ClientIpMode.EDGE_SECRET] 이면 관문도 된다 — 원점 비밀이 맞지 않고 [exemptPaths] 의 POST 경로도 아니면 403(값 · 해시는 응답과 로그에 싣지 않는다).
+ * [ClientIpMode.EDGE_SECRET] 이면 관문도 된다 — 원점 비밀이 맞지 않고 [exemptPaths] 의 POST 경로도, GET · HEAD `/health` 도 아니면 403(값 · 해시는 응답과 로그에 싣지 않는다).
  */
 class ClientIpFilter(
     private val clientIps: ClientIps,
@@ -249,7 +249,14 @@ class ClientIpFilter(
         filterChain.doFilter(request, response)
     }
 
-    private fun exempt(request: HttpServletRequest) = request.method == "POST" && request.requestURI in exemptPaths.paths()
+    private fun exempt(request: HttpServletRequest) =
+        (request.method == "POST" && request.requestURI in exemptPaths.paths()) ||
+            ((request.method == "GET" || request.method == "HEAD") && request.requestURI == HEALTH_PATH)
+
+    private companion object {
+        // 플랫폼(Cloud Run startup probe 등)이 비밀 없이 직접 부른다. 엣지도 이 경로는 열어 둔다(deploy/cloudrun/worker.js) — 숨길 것이 없다
+        const val HEALTH_PATH = "/health"
+    }
 
     private fun reject(response: HttpServletResponse) {
         response.status = PlatformErrorCode.FORBIDDEN.status.value()

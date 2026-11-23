@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Cloud Run 기동 확인을 HTTP `/health` 로 — deploy · platform (2026-11-24)
+
+`deploy/cloudrun/render.sh` 가 `--startup-probe=httpGet.path=<선언 health, 없으면 /health>,periodSeconds=1,timeoutSeconds=1,failureThreshold=240` 을 낸다. 기본 TCP 확인은 포트가 열리면 기동이 끝났다고 보고, 요청 없는 인스턴스(배포 때 미리 뜬 것)에 CPU 를 거의 주지 않아 마무리가 10~30초 늘어졌다. 확인이 도는 동안은 CPU 가 붙는다. `edge-secret` 모드의 원점 관문은 이제 GET · HEAD `/health` 를 비밀 없이 통과시킨다(확인 요청은 헤더를 싣지 않는다 — 엣지도 이 경로는 열어 두므로 새로 드러나는 것은 없다. CF 헤더는 믿지 않는다). 이미 배포한 프로젝트는 두 파일(`render.sh` 의 플래그 한 줄, `ClientIpFilter.exempt`)을 옮기면 된다.
+
 ### 세션 상한을 넘으면 가장 오래 안 쓴 세션부터 닫는다 — auth-session (2026-11-23)
 
 `max-sessions-per-account` 를 넘을 때 닫는 세션을 「먼저 만든 것」에서 「마지막 사용이 가장 이른 것」(LRU)으로 바꿨다. 같은 계정으로 새 로그인이 여러 번 들어와도(자동 시험 · 여러 브라우저) 매일 쓰는 기기의 세션이 밀려나지 않는다. 설정 · 와이어 · DB 변경 없음.

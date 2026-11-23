@@ -6,6 +6,7 @@
 --concurrency=20
 --timeout=300s
 --cpu-boost
+--startup-probe=httpGet.path=/health,periodSeconds=1,timeoutSeconds=1,failureThreshold=240
 --service-account=acme-run@acme-proj.iam.gserviceaccount.com
 --allow-unauthenticated
 --region=asia-northeast3
