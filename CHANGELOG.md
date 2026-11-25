@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 멈춘 WebP 통과 — storage-image (2026-11-25)
+
+`skeleton.storage.image.webp-passthrough=true`(기본 꺼짐)면 `display` 상자 안의 멈춘 WebP 는 `display` 를 다시 인코딩하지 않고 EXIF · XMP 만 걷어낸 사본을 쓴다. 지금까지는 브라우저가 이미 줄여 올린 WebP 도 JPEG 로 다시 만들어 오히려 커질 수 있었다. `thumb` 은 그대로 만든다(그 디코드가 내용 확인). 짝: `@skeleton/storage` 업로더의 브라우저 WebP 변환 옵션.
+
 ### Cloud Run 기동 확인을 HTTP `/health` 로 — deploy · platform (2026-11-24)
 
 `deploy/cloudrun/render.sh` 가 `--startup-probe=httpGet.path=<선언 health, 없으면 /health>,periodSeconds=1,timeoutSeconds=1,failureThreshold=240` 을 낸다. 기본 TCP 확인은 포트가 열리면 기동이 끝났다고 보고, 요청 없는 인스턴스(배포 때 미리 뜬 것)에 CPU 를 거의 주지 않아 마무리가 10~30초 늘어졌다. 확인이 도는 동안은 CPU 가 붙는다. `edge-secret` 모드의 원점 관문은 이제 GET · HEAD `/health` 를 비밀 없이 통과시킨다(확인 요청은 헤더를 싣지 않는다 — 엣지도 이 경로는 열어 두므로 새로 드러나는 것은 없다. CF 헤더는 믿지 않는다). 이미 배포한 프로젝트는 두 파일(`render.sh` 의 플래그 한 줄, `ClientIpFilter.exempt`)을 옮기면 된다.

@@ -20,6 +20,8 @@ data class ImageProperties(
     val maxConcurrent: Int = 1,
     /** 변환본 서명 읽기 주소(`POST /api/v1/storage/images`)의 수명 */
     val accessTtl: Duration = Duration.ofMinutes(10),
+    /** true 면 표시본 상자 안의 멈춘 WebP 는 표시본을 다시 인코딩하지 않고 EXIF · XMP 만 걷어낸 사본으로 쓴다(브라우저가 이미 줄여 올린 그림). 썸네일은 그대로 만든다 */
+    val webpPassthrough: Boolean = false,
     val variants: Variants = Variants(),
     val http: Http = Http(),
 ) {

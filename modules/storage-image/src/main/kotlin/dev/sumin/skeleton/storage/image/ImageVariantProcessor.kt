@@ -65,8 +65,10 @@ class ImageVariantProcessor(
             return reject(keyHash, UploadImageState.REJECTED, ImageReasons.IMAGE_TOO_LARGE, width = info.width, height = info.height)
         }
 
-        // 움직이는 이미지는 썸네일만 첫 장으로 - 표시본은 움직임을 남기고 메타데이터를 걷어낸 사본이다(원본을 남에게 주지 않는다)
-        val specs = properties.sizes().filterKeys { !info.animated || it == UploadImages.THUMB }
+        // 움직이는 이미지는 썸네일만 첫 장으로 - 표시본은 움직임을 남기고 메타데이터를 걷어낸 사본이다(원본을 남에게 주지 않는다).
+        // 통과(webp-passthrough)도 같다: 이미 표시본 상자 안의 멈춘 WebP 는 다시 인코딩하지 않고 사본을 표시본으로 쓴다(썸네일 디코드가 내용 확인이다)
+        val copyDisplay = info.animated || passesThrough(info)
+        val specs = properties.sizes().filterKeys { !copyDisplay || it == UploadImages.THUMB }
             .map { (name, s) -> VariantSpec(name, s.maxWidth, s.maxHeight, s.quality) }
         permits.acquireUninterruptibly()
         val rendered = try {
@@ -79,7 +81,7 @@ class ImageVariantProcessor(
 
         val folder = variantFolder(properties.prefix, keyHash)
         val files = rendered.flatMap { listOf(it) + it.alternates }.toMutableList()
-        if (info.animated) {
+        if (copyDisplay) {
             // 원본 전체를 메모리로 읽는다(최대 max-source-bytes) - 동시에 하나(max-concurrent)
             val clean = try {
                 AnimatedImageCleaner.clean(info.contentType, storage.read(key).use { it.readAllBytes() })
@@ -92,7 +94,7 @@ class ImageVariantProcessor(
             storage.upload(UploadObjectRequest(ObjectKey("$folder${it.name}.${it.extension}"), it.bytes, it.contentType, cacheControl = CACHE_CONTROL))
         }
         val variants = rendered.associate { it.name to StoredVariant(it.width, it.height, it.extension, it.alternates.map { alt -> alt.extension }) } +
-            if (info.animated) mapOf(UploadImages.DISPLAY to StoredVariant(info.width, info.height, extensionOf(info.contentType))) else emptyMap()
+            if (copyDisplay) mapOf(UploadImages.DISPLAY to StoredVariant(info.width, info.height, extensionOf(info.contentType))) else emptyMap()
         val format = info.contentType.substringAfter('/')
         if (!store.markReady(keyHash, info.width, info.height, format, info.animated, variants) && store.find(keyHash) == null) {
             // 그 사이 상태 줄이 지워졌다(원본 회수) - 방금 올린 변환본이 고아가 되지 않게 치운다
@@ -101,6 +103,13 @@ class ImageVariantProcessor(
             // 사본 display 가 이미 쓰이는 중이다 - 변환은 뒤에서 하고, 요청이 실패해도 이미지는 사본으로 남는다
             runCatching { converter.requestConversion(keyHash, row.objectKey) }.onFailure { log.warn("animated display conversion request failed {}: {}", keyHash.take(12), it.message) }
         }
+    }
+
+    /** 켜져 있고(기본 꺼짐) 멈춘 WebP 가 방향 표시 없이 표시본 상자 안에 들어가면 - 메타데이터만 걷어 그대로 쓴다 */
+    private fun passesThrough(info: ImageInfo): Boolean {
+        if (!properties.webpPassthrough || info.animated || info.contentType != "image/webp" || info.orientation != 1) return false
+        val box = properties.variants.display
+        return info.width <= box.maxWidth && info.height <= box.maxHeight
     }
 
     private fun reject(keyHash: String, state: UploadImageState, reason: String, cause: Throwable? = null, width: Int? = null, height: Int? = null) {

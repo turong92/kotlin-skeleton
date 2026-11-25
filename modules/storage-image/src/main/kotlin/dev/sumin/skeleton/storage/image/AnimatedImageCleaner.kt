@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream
 
 /**
  * 움직이는 GIF · WebP 의 **메타데이터를 걷어낸 사본**을 만든다 - 움직임(프레임)은 다시 인코딩하지 않고 그대로 둔다. 남에게 주는 `display` 가 원본 대신 이 사본이다.
+ * 멈춘 WebP 도 같은 길을 쓴다(`webp-passthrough` 로 켠 통과 모드의 표시본).
  * - WebP: RIFF 의 `EXIF` · `XMP ` 마디를 빼고 `VP8X` 의 해당 비트(0x08 · 0x04)를 끈 뒤 RIFF 길이를 다시 쓴다. 나머지 마디(프레임 · `ICCP` · `ANIM` …)는 그대로.
  * - GIF: 주석 · 글자 · 모르는 응용 확장(`XMP DataXMP` 등)을 뺀다. 그림 · 제어 확장 · 반복 횟수(`NETSCAPE2.0` · `ANIMEXTS1.0`)는 남긴다.
  * 구조가 깨졌으면 [ImageRejectedException] (영구 실패).

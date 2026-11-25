@@ -8,6 +8,7 @@ skeleton:
       max-source-bytes: 52428800            # 안전 상한: 원본 바이트 (50 MB)
       max-concurrent: 1                     # 안전 상한: 인스턴스당 동시에 변환하는 작업 수 (기다리는 동안 큐 일꾼 스레드를 잡는다). 변환 메모리 ≈ 한 장 × 이 값
       access-ttl: 10m                       # POST /api/v1/storage/images 가 내는 변환본 서명 주소의 수명
+      webp-passthrough: false               # true 면 display 상자 안의 멈춘 WebP(브라우저가 이미 줄여 올린 그림)는 display 를 다시 인코딩하지 않고 EXIF · XMP 만 걷어낸 사본으로 쓴다. thumb 은 그대로 만든다(디코드 확인)
       variants:                             # 이름 둘(thumb · display)은 board · review · 화면이 아는 계약, 크기 · 품질만 정한다 (긴 변을 상자에 맞추고 키우지 않는다)
         thumb:
           max-width: 400
