@@ -37,6 +37,8 @@ class WebpPassthroughTest {
             "exif" to withChunk(small, "EXIF", "Exif\u0000\u0000GPS-SECRET".toByteArray(), vp8xFlags = 0x08),
             "unknown" to withChunk(small, "ABCD", "payload!".toByteArray()),
             "trailing" to small + "RIFFtail".toByteArray(),
+            "twice" to withChunk(small, "VP8X", ByteArray(10)),
+            "huge icc" to withChunk(small, "ICCP", ByteArray(120 * 80 * 4 + 70_000)),
         )
         cases.forEach { (name, bytes) ->
             val row = h.run("uploads/7/w/$name.webp", bytes, "image/webp")

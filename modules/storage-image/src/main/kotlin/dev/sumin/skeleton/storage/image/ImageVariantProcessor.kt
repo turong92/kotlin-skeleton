@@ -67,8 +67,8 @@ class ImageVariantProcessor(
 
         // 움직이는 이미지는 썸네일만 첫 장으로 - 표시본은 움직임을 남기고 메타데이터를 걷어낸 사본이다(원본을 남에게 주지 않는다).
         // 통과(webp-passthrough): 표시본 상자 안의 멈춘 WebP 가 그림 마디만 가졌으면 원본 바이트를 그대로 표시본으로 쓴다(썸네일 디코드가 내용 확인이다).
-        // 원본 전체를 메모리로 읽는다(최대 max-source-bytes)
-        val passthrough = if (passesThrough(info)) storage.read(key).use { it.readAllBytes() }.takeIf(StillWebpPassthrough::accepts) else null
+        // 원본 전체를 메모리로 읽는다(그림 크기에 비례한 상한 안일 때만 - 상자 안이라 최대 약 10MB)
+        val passthrough = if (passesThrough(info) && size <= StillWebpPassthrough.maxBytes(info.width, info.height)) storage.read(key).use { it.readAllBytes() }.takeIf(StillWebpPassthrough::accepts) else null
         val copyDisplay = info.animated || passthrough != null
         val specs = properties.sizes().filterKeys { !copyDisplay || it == UploadImages.THUMB }
             .map { (name, s) -> VariantSpec(name, s.maxWidth, s.maxHeight, s.quality) }
@@ -84,7 +84,7 @@ class ImageVariantProcessor(
         val folder = variantFolder(properties.prefix, keyHash)
         val files = rendered.flatMap { listOf(it) + it.alternates }.toMutableList()
         if (copyDisplay) {
-            // 원본 전체를 메모리로 읽는다(최대 max-source-bytes) - 동시에 하나(max-concurrent)
+            // 원본 전체를 메모리로 읽는다(최대 max-source-bytes) - 변환 세마포어 밖이다
             val clean = passthrough ?: try {
                 AnimatedImageCleaner.clean(info.contentType, storage.read(key).use { it.readAllBytes() })
             } catch (e: ImageRejectedException) {
