@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 멈춘 WebP 통과 — storage-image (2026-11-25)
 
-`skeleton.storage.image.webp-passthrough=true`(기본 꺼짐)면 `display` 상자 안의 멈춘 WebP 는 `display` 를 다시 인코딩하지 않고 EXIF · XMP 만 걷어낸 사본을 쓴다. 지금까지는 브라우저가 이미 줄여 올린 WebP 도 JPEG 로 다시 만들어 오히려 커질 수 있었다. `thumb` 은 그대로 만든다(그 디코드가 내용 확인). 짝: `@skeleton/storage` 업로더의 브라우저 WebP 변환 옵션.
+`skeleton.storage.image.webp-passthrough=true`(기본 꺼짐)면 `display` 상자 안의 멈춘 WebP 는 `display` 를 다시 인코딩하지 않고 원본 그대로 쓴다(그림 마디만 있을 때 - EXIF · XMP · 다른 마디가 있으면 지금처럼 다시 인코딩). 지금까지는 브라우저가 이미 줄여 올린 WebP 도 JPEG 로 다시 만들어 오히려 커질 수 있었다. `thumb` 은 그대로 만든다(그 디코드가 내용 확인). 짝: `@skeleton/storage` 업로더의 브라우저 WebP 변환 옵션.
 
 ### Cloud Run 기동 확인을 HTTP `/health` 로 — deploy · platform (2026-11-24)
 

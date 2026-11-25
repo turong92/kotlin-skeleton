@@ -66,8 +66,10 @@ class ImageVariantProcessor(
         }
 
         // 움직이는 이미지는 썸네일만 첫 장으로 - 표시본은 움직임을 남기고 메타데이터를 걷어낸 사본이다(원본을 남에게 주지 않는다).
-        // 통과(webp-passthrough)도 같다: 이미 표시본 상자 안의 멈춘 WebP 는 다시 인코딩하지 않고 사본을 표시본으로 쓴다(썸네일 디코드가 내용 확인이다)
-        val copyDisplay = info.animated || passesThrough(info)
+        // 통과(webp-passthrough): 표시본 상자 안의 멈춘 WebP 가 그림 마디만 가졌으면 원본 바이트를 그대로 표시본으로 쓴다(썸네일 디코드가 내용 확인이다).
+        // 원본 전체를 메모리로 읽는다(최대 max-source-bytes)
+        val passthrough = if (passesThrough(info)) storage.read(key).use { it.readAllBytes() }.takeIf(StillWebpPassthrough::accepts) else null
+        val copyDisplay = info.animated || passthrough != null
         val specs = properties.sizes().filterKeys { !copyDisplay || it == UploadImages.THUMB }
             .map { (name, s) -> VariantSpec(name, s.maxWidth, s.maxHeight, s.quality) }
         permits.acquireUninterruptibly()
@@ -83,7 +85,7 @@ class ImageVariantProcessor(
         val files = rendered.flatMap { listOf(it) + it.alternates }.toMutableList()
         if (copyDisplay) {
             // 원본 전체를 메모리로 읽는다(최대 max-source-bytes) - 동시에 하나(max-concurrent)
-            val clean = try {
+            val clean = passthrough ?: try {
                 AnimatedImageCleaner.clean(info.contentType, storage.read(key).use { it.readAllBytes() })
             } catch (e: ImageRejectedException) {
                 return reject(keyHash, UploadImageState.REJECTED, e.code, e, info.width, info.height)
@@ -105,9 +107,9 @@ class ImageVariantProcessor(
         }
     }
 
-    /** 켜져 있고(기본 꺼짐) 멈춘 WebP 가 방향 표시 없이 표시본 상자 안에 들어가면 - 메타데이터만 걷어 그대로 쓴다 */
+    /** 켜져 있고(기본 꺼짐) 멈춘 WebP 가 표시본 상자 안에 들어가면 - 내용 조건([StillWebpPassthrough])은 원본을 읽어 따로 본다 */
     private fun passesThrough(info: ImageInfo): Boolean {
-        if (!properties.webpPassthrough || info.animated || info.contentType != "image/webp" || info.orientation != 1) return false
+        if (!properties.webpPassthrough || info.animated || info.contentType != "image/webp") return false
         val box = properties.variants.display
         return info.width <= box.maxWidth && info.height <= box.maxHeight
     }
